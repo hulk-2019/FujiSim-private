@@ -79,14 +79,6 @@ export async function renderWatermarkLayer(
   // 文字颜色预乘 opacity
   octx.fillStyle = colorWithAlpha(wm.color, wm.opacity);
 
-  if (wm.shadowEnabled) {
-    // 阴影颜色同样预乘 opacity，WebKit canvas shadowBlur ≈ CSS blur × 2，/2 对齐视觉
-    octx.shadowColor = colorWithAlpha(wm.shadowColor, wm.opacity);
-    octx.shadowBlur = (wm.shadowBlur / 2) * scale;
-    octx.shadowOffsetX = wm.shadowOffsetX * scale;
-    octx.shadowOffsetY = wm.shadowOffsetY * scale;
-  }
-
   const metrics = octx.measureText(wm.text);
   const tw = metrics.width;
   const th =
@@ -117,6 +109,28 @@ export async function renderWatermarkLayer(
     metrics.actualBoundingBoxAscent !== undefined
       ? metrics.actualBoundingBoxAscent
       : wm.fontSize * scale * 0.8;
+
+  if (wm.strokeEnabled) {
+    octx.strokeStyle = colorWithAlpha(wm.strokeColor, wm.opacity);
+    octx.lineWidth = wm.strokeWidth * scale;
+    octx.lineJoin = "round";
+    if (wm.shadowEnabled) {
+      octx.shadowColor = colorWithAlpha(wm.shadowColor, wm.opacity);
+      octx.shadowBlur = (wm.shadowBlur / 2) * scale;
+      octx.shadowOffsetX = wm.shadowOffsetX * scale;
+      octx.shadowOffsetY = wm.shadowOffsetY * scale;
+    }
+    octx.strokeText(wm.text, ax, ay + baseline);
+    octx.shadowColor = "transparent";
+    octx.shadowBlur = 0;
+    octx.shadowOffsetX = 0;
+    octx.shadowOffsetY = 0;
+  } else if (wm.shadowEnabled) {
+    octx.shadowColor = colorWithAlpha(wm.shadowColor, wm.opacity);
+    octx.shadowBlur = (wm.shadowBlur / 2) * scale;
+    octx.shadowOffsetX = wm.shadowOffsetX * scale;
+    octx.shadowOffsetY = wm.shadowOffsetY * scale;
+  }
   octx.fillText(wm.text, ax, ay + baseline);
   octx.restore();
 
