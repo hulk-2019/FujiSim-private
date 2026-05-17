@@ -114,18 +114,9 @@ export async function renderWatermarkLayer(
     octx.strokeStyle = colorWithAlpha(wm.strokeColor, wm.opacity);
     octx.lineWidth = wm.strokeWidth * scale;
     octx.lineJoin = "round";
-    if (wm.shadowEnabled) {
-      octx.shadowColor = colorWithAlpha(wm.shadowColor, wm.opacity);
-      octx.shadowBlur = (wm.shadowBlur / 2) * scale;
-      octx.shadowOffsetX = wm.shadowOffsetX * scale;
-      octx.shadowOffsetY = wm.shadowOffsetY * scale;
-    }
     octx.strokeText(wm.text, ax, ay + baseline);
-    octx.shadowColor = "transparent";
-    octx.shadowBlur = 0;
-    octx.shadowOffsetX = 0;
-    octx.shadowOffsetY = 0;
-  } else if (wm.shadowEnabled) {
+  }
+  if (wm.shadowEnabled) {
     octx.shadowColor = colorWithAlpha(wm.shadowColor, wm.opacity);
     octx.shadowBlur = (wm.shadowBlur / 2) * scale;
     octx.shadowOffsetX = wm.shadowOffsetX * scale;
