@@ -134,6 +134,9 @@ pub fn export_one(
 ) -> Result<PathBuf> {
     let src = processing::load_image_rgb16(src_path)?;
     let processed = processing::process_image(&src, filter, lut)?;
+    // src 已不再需要，立即释放（6000×4000 RAW 约 144MB）
+    drop(src);
+
     let final_image = match &export.resize {
         Some(ResizeSpec::LongEdge(le)) => {
             let (w, h) = processed.dimensions();
@@ -143,7 +146,10 @@ pub fn export_one(
             } else {
                 let nw = (w as f32 * scale).round() as u32;
                 let nh = (h as f32 * scale).round() as u32;
-                image::imageops::resize(&processed, nw, nh, image::imageops::FilterType::Lanczos3)
+                let resized = image::imageops::resize(&processed, nw, nh, image::imageops::FilterType::Lanczos3);
+                // processed 已不再需要，立即释放（约 144MB）
+                drop(processed);
+                resized
             }
         }
         Some(ResizeSpec::Percent(p)) => {
@@ -151,7 +157,9 @@ pub fn export_one(
             let s = (*p as f32) / 100.0;
             let nw = (w as f32 * s).round().max(1.0) as u32;
             let nh = (h as f32 * s).round().max(1.0) as u32;
-            image::imageops::resize(&processed, nw, nh, image::imageops::FilterType::Lanczos3)
+            let resized = image::imageops::resize(&processed, nw, nh, image::imageops::FilterType::Lanczos3);
+            drop(processed);
+            resized
         }
         None => processed,
     };

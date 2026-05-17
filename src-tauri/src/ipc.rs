@@ -560,11 +560,15 @@ fn run_export_task(
         };
         let src_path = PathBuf::from(&asset.file_path);
 
-        let result: Result<PathBuf> = export::resolve_destination_dir(&src_path, &export_settings.destination)
-            .and_then(|dest| export::export_one(
-                &src_path, &dest, &filter, &export_settings,
-                lut.as_deref(), watermark_path.as_deref(),
-            ));
+        // 在 export_pool 内执行，确保 process_image 的 rayon 并行使用受控线程池
+        // 而非全局线程池，避免导出任务占满所有 CPU 核心
+        let result: Result<PathBuf> = state.export_pool.install(|| {
+            export::resolve_destination_dir(&src_path, &export_settings.destination)
+                .and_then(|dest| export::export_one(
+                    &src_path, &dest, &filter, &export_settings,
+                    lut.as_deref(), watermark_path.as_deref(),
+                ))
+        });
 
         match &result {
             Ok(out) => {

@@ -194,18 +194,17 @@ pub fn process_image(
     let size = GrainSize::parse(settings.grain_size.as_deref());
     grain::apply_grain(&mut buf, w, h, strength, size, 0xC0FFEEu64);
 
-    // 浮点缓冲区写回 16-bit RGB
+    // 浮点缓冲区写回 16-bit RGB（按行并行）
     let mut out: ImageBuffer<Rgb<u16>, Vec<u16>> = ImageBuffer::new(w, h);
-    for y in 0..h {
-        for x in 0..w {
-            let i = ((y * w + x) * 3) as usize;
-            out.put_pixel(
-                x,
-                y,
-                Rgb([f_to_u16(buf[i]), f_to_u16(buf[i + 1]), f_to_u16(buf[i + 2])]),
-            );
-        }
-    }
+    out.rows_mut()
+        .enumerate()
+        .par_bridge()
+        .for_each(|(y, row)| {
+            for (x, px) in row.enumerate() {
+                let i = ((y as u32 * w + x as u32) * 3) as usize;
+                *px = Rgb([f_to_u16(buf[i]), f_to_u16(buf[i + 1]), f_to_u16(buf[i + 2])]);
+            }
+        });
     Ok(out)
 }
 
@@ -240,47 +239,52 @@ fn apply_unsharp(buf: &mut [f32], w: u32, h: u32, amount: f32) {
 
 /// 对 RGB 缓冲区先抽取亮度通道，再做两遍可分离的盒式模糊（先横向、再纵向）。
 /// 比一次 2D 卷积快得多，对 Clarity/Sharpness 的视觉效果足够好。
+///
+/// 优化：横向 pass 在计算时直接内联亮度提取，省去独立的 lum 缓冲区（节省 w×h×4B）；
+/// 两个 pass 均通过 rayon 按行并行，充分利用多核。
 fn box_blur_lum(buf: &[f32], w: u32, h: u32, radius: i32) -> Vec<f32> {
     let len = (w * h) as usize;
-    let mut lum = vec![0f32; len];
-    // Rec.709 亮度系数
-    for (i, slot) in lum.iter_mut().enumerate() {
-        let base = i * 3;
-        *slot = 0.2126 * buf[base] + 0.7152 * buf[base + 1] + 0.0722 * buf[base + 2];
-    }
-    let mut tmp = vec![0f32; len];
-    let mut out = vec![0f32; len];
     let w_i = w as i32;
     let h_i = h as i32;
-    // 横向 box blur，越靠边参与求平均的样本数越少（自动边界处理）
-    for y in 0..h_i {
-        for x in 0..w_i {
-            let mut sum = 0.0;
-            let mut count = 0.0;
-            for dx in -radius..=radius {
-                let nx = x + dx;
-                if nx >= 0 && nx < w_i {
-                    sum += lum[(y * w_i + nx) as usize];
-                    count += 1.0;
+
+    // 横向 pass：内联亮度提取 + 按行并行
+    let mut tmp = vec![0f32; len];
+    tmp.par_chunks_mut(w as usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            for x in 0..w_i {
+                let mut sum = 0.0f32;
+                let mut count = 0.0f32;
+                for dx in -radius..=radius {
+                    let nx = x + dx;
+                    if nx >= 0 && nx < w_i {
+                        let base = (y as i32 * w_i + nx) as usize * 3;
+                        sum += 0.2126 * buf[base] + 0.7152 * buf[base + 1] + 0.0722 * buf[base + 2];
+                        count += 1.0;
+                    }
                 }
+                row[x as usize] = sum / count;
             }
-            tmp[(y * w_i + x) as usize] = sum / count;
-        }
-    }
-    // 纵向 box blur
-    for y in 0..h_i {
-        for x in 0..w_i {
-            let mut sum = 0.0;
-            let mut count = 0.0;
-            for dy in -radius..=radius {
-                let ny = y + dy;
-                if ny >= 0 && ny < h_i {
-                    sum += tmp[(ny * w_i + x) as usize];
-                    count += 1.0;
+        });
+
+    // 纵向 pass：按行并行（每行读取 tmp 的多行，tmp 已完全写入，无数据竞争）
+    let mut out = vec![0f32; len];
+    out.par_chunks_mut(w as usize)
+        .enumerate()
+        .for_each(|(y, row)| {
+            let y = y as i32;
+            for x in 0..w_i {
+                let mut sum = 0.0f32;
+                let mut count = 0.0f32;
+                for dy in -radius..=radius {
+                    let ny = y + dy;
+                    if ny >= 0 && ny < h_i {
+                        sum += tmp[(ny * w_i + x) as usize];
+                        count += 1.0;
+                    }
                 }
+                row[x as usize] = sum / count;
             }
-            out[(y * w_i + x) as usize] = sum / count;
-        }
-    }
+        });
     out
 }
