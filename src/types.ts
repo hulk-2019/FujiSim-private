@@ -234,6 +234,9 @@ export type WatermarkSettings = {
   flipH: boolean;
   flipV: boolean;
   bold: boolean;
+  strokeEnabled: boolean;
+  strokeColor: string;
+  strokeWidth: number;
 };
 
 export const DEFAULT_WATERMARK: WatermarkSettings = {
@@ -258,4 +261,7 @@ export const DEFAULT_WATERMARK: WatermarkSettings = {
   flipH: false,
   flipV: false,
   bold: false,
+  strokeEnabled: false,
+  strokeColor: "#000000",
+  strokeWidth: 2,
 };
