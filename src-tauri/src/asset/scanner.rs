@@ -86,28 +86,27 @@ fn extract_meta(path: &Path, kind: FileKind) -> (ExifData, Option<i64>, Option<i
                 .map(|e| e.eq_ignore_ascii_case("dng"))
                 .unwrap_or(false);
 
+            // 读一次文件，供后续所有操作复用，避免重复 IO
+            let file_data = std::fs::read(path).ok();
+
             if is_dng {
                 let exif = crate::asset::exif::read(path).unwrap_or_default();
                 let (raw_w, raw_h) = if exif.width.is_some() && exif.height.is_some() {
                     (exif.width, exif.height)
                 } else {
-                    read_dng_dimensions(path)
+                    file_data.as_deref().map(read_dng_dimensions_from_bytes).unwrap_or((None, None))
                 };
                 let orientation = exif.orientation
-                    .or_else(|| {
-                        let data = std::fs::read(path).ok()?;
-                        read_tiff_file_orientation(&data)
-                    })
+                    .or_else(|| file_data.as_deref().and_then(read_tiff_file_orientation))
                     .unwrap_or(1);
                 let (dw, dh) = display_dims(raw_w, raw_h, orientation);
                 (exif, dw, dh)
             } else {
-                let exif = read_raw_meta(path);
+                let exif = file_data.as_deref().map(read_raw_meta_from_bytes).unwrap_or_default();
                 let raw_w = exif.width;
                 let raw_h = exif.height;
-                let orientation = std::fs::read(path)
-                    .ok()
-                    .and_then(|d| read_tiff_file_orientation(&d))
+                let orientation = file_data.as_deref()
+                    .and_then(read_tiff_file_orientation)
                     .unwrap_or(1);
                 let (dw, dh) = display_dims(raw_w, raw_h, orientation);
                 (exif, dw, dh)
@@ -119,11 +118,7 @@ fn extract_meta(path: &Path, kind: FileKind) -> (ExifData, Option<i64>, Option<i
 
 /// 从 DNG/TIFF 文件的 IFD 中读取最大图层的像素尺寸（tag 256=ImageWidth, 257=ImageLength）。
 /// 遍历 IFD0 + 所有 SubIFD，取面积最大的那个。
-fn read_dng_dimensions(path: &Path) -> (Option<i64>, Option<i64>) {
-    let data = match std::fs::read(path) {
-        Ok(d) => d,
-        Err(_) => return (None, None),
-    };
+fn read_dng_dimensions_from_bytes(data: &[u8]) -> (Option<i64>, Option<i64>) {
     if data.len() < 8 {
         return (None, None);
     }
@@ -198,12 +193,8 @@ fn read_dng_dimensions(path: &Path) -> (Option<i64>, Option<i64>) {
 }
 
 /// 用 rsraw（LibRaw）读取 RAW 文件的相机元数据和真实尺寸。
-fn read_raw_meta(path: &Path) -> ExifData {
-    let data = match std::fs::read(path) {
-        Ok(d) => d,
-        Err(_) => return ExifData::default(),
-    };
-    let raw = match rsraw::RawImage::open(&data) {
+fn read_raw_meta_from_bytes(data: &[u8]) -> ExifData {
+    let raw = match rsraw::RawImage::open(data) {
         Ok(r) => r,
         Err(_) => return ExifData::default(),
     };

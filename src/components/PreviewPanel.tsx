@@ -110,7 +110,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           setLoading(false);
         }
       }
-    }, 300);
+    }, 150);
     return () => clearTimeout(handle);
   }, [focused?.id, filter]);
 
