@@ -335,6 +335,23 @@ export function WatermarkTab() {
         )}
       </div>
 
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-300">{t("watermark.stroke")}</span>
+          <ToggleSwitch checked={wm.strokeEnabled} onChange={(v) => setWatermark({ strokeEnabled: v })} />
+        </div>
+        {wm.strokeEnabled && (
+          <div className="space-y-2 pl-2 border-l border-zinc-800">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-400 w-12 shrink-0">{t("watermark.strokeColor")}</span>
+              <input type="color" value={wm.strokeColor} onChange={(e) => setWatermark({ strokeColor: e.target.value })} className="h-6 w-8 rounded border border-zinc-700 bg-transparent cursor-pointer" />
+              <Input value={wm.strokeColor} onChange={(e) => setWatermark({ strokeColor: e.target.value })} className="h-6 text-xs flex-1 font-mono" maxLength={7} />
+            </div>
+            <SliderRow label={t("watermark.strokeWidth")} value={wm.strokeWidth} min={1} max={10} step={0.5} onChange={(v) => setWatermark({ strokeWidth: v })} display={(v) => `${v}px`} />
+          </div>
+        )}
+      </div>
+
       <div>
         <Label>{t("watermark.position")}</Label>
         <div className="grid grid-cols-3 gap-1 mb-2">
