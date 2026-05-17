@@ -19,7 +19,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const previewContainerSize = useStore((s) => s.previewContainerSize);
   const focused = assets.find((a) => a.id === focusedId) ?? null;
 
-  const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [preview, setPreview] = useState<{ blobUrl: string; width: number; height: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -30,8 +30,14 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const rawThumbnailReady = useStore((s) => s.rawThumbnailReady);
   const thumbnailDir = useStore((s) => s.thumbnailDir);
   const reqId = useRef(0);
-  const lastFetchedRef = useRef<{ assetId: number; filterKey: string } | null>(null);
+  const previewCache = useRef<Map<string, { blobUrl: string; width: number; height: number }>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 组件卸载时释放所有 Blob URL，避免浏览器侧内存泄漏
+  useEffect(() => {
+    const cache = previewCache.current;
+    return () => { cache.forEach((v) => URL.revokeObjectURL(v.blobUrl)); };
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -79,15 +85,16 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     if (!focused) {
       setPreview(null);
       setLoading(false);
-      lastFetchedRef.current = null;
       return;
     }
     const filterKey = JSON.stringify(filter);
-    // Already have the result for this exact asset+filter — skip
-    if (
-      lastFetchedRef.current?.assetId === focused.id &&
-      lastFetchedRef.current?.filterKey === filterKey
-    ) {
+    const cacheKey = `${focused.id}:${filterKey}`;
+    // 命中前端缓存：直接恢复结果，零后端调用
+    const cached = previewCache.current.get(cacheKey);
+    if (cached) {
+      setPreview(cached);
+      setPreviewSize({ width: cached.width, height: cached.height }, focused.id);
+      setLoading(false);
       return;
     }
     // Clear stale full preview immediately so we fall back to thumbSrc
@@ -99,8 +106,14 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
       try {
         const r = await api.getPreview(focused.id, filter, 1280);
         if (reqId.current === myId) {
-          lastFetchedRef.current = { assetId: focused.id, filterKey };
-          setPreview(r);
+          const blob = new Blob(
+            [Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0))],
+            { type: r.mime },
+          );
+          const blobUrl = URL.createObjectURL(blob);
+          const entry = { blobUrl, width: r.width, height: r.height };
+          previewCache.current.set(cacheKey, entry);
+          setPreview(entry);
           setPreviewSize({ width: r.width, height: r.height }, focused.id);
           setLoading(false);
         }
@@ -141,7 +154,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     );
   }
 
-  const previewSrc = preview ? `data:${preview.mime};base64,${preview.data}` : null;
+  const previewSrc = preview?.blobUrl ?? null;
   const originalSrc = focused.is_raw
     ? (originalPreview ? `data:${originalPreview.mime};base64,${originalPreview.data}` : null)
     : convertFileSrc(focused.file_path);

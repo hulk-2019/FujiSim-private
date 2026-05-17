@@ -47,12 +47,37 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 
 const BUILTIN_FONTS = [
-  { value: "sans-serif",            labelKey: "watermark.builtinFonts.sansSerif" },
-  { value: "serif",                 labelKey: "watermark.builtinFonts.serif" },
-  { value: "monospace",             labelKey: "watermark.builtinFonts.monospace" },
-  { value: "Georgia, serif",        label: "Georgia" },
-  { value: "Arial, sans-serif",     label: "Arial" },
-  { value: "Times New Roman, serif",label: "Times New Roman" },
+  { value: "sans-serif",                                                    labelKey: "watermark.builtinFonts.sansSerif" },
+  { value: "serif",                                                         labelKey: "watermark.builtinFonts.serif" },
+  { value: "monospace",                                                     labelKey: "watermark.builtinFonts.monospace" },
+  // 无衬线 — macOS / Windows 均有
+  { value: "Arial, sans-serif",                                             label: "Arial" },
+  { value: "'Helvetica Neue', Helvetica, Arial, sans-serif",                label: "Helvetica Neue" },
+  { value: "'Gill Sans', 'Gill Sans MT', Calibri, sans-serif",              label: "Gill Sans / Calibri" },
+  { value: "Futura, 'Century Gothic', Tahoma, sans-serif",                  label: "Futura / Century Gothic" },
+  { value: "Optima, Candara, 'Segoe UI', sans-serif",                       label: "Optima / Candara" },
+  { value: "Verdana, Geneva, sans-serif",                                   label: "Verdana" },
+  { value: "'Trebuchet MS', sans-serif",                                    label: "Trebuchet MS" },
+  { value: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",               label: "Segoe UI" },
+  { value: "Tahoma, Geneva, sans-serif",                                    label: "Tahoma" },
+  // 衬线 — macOS / Windows 均有
+  { value: "Georgia, 'Times New Roman', serif",                             label: "Georgia" },
+  { value: "'Times New Roman', Times, Georgia, serif",                      label: "Times New Roman" },
+  { value: "Palatino, 'Palatino Linotype', 'Book Antiqua', serif",          label: "Palatino" },
+  { value: "Garamond, 'EB Garamond', 'Cormorant Garamond', serif",          label: "Garamond" },
+  { value: "Baskerville, 'Baskerville Old Face', 'Book Antiqua', serif",    label: "Baskerville" },
+  { value: "Didot, 'Bodoni MT', 'Bodoni 72', serif",                        label: "Didot / Bodoni" },
+  { value: "'Book Antiqua', Palatino, serif",                               label: "Book Antiqua" },
+  // 等宽 — macOS / Windows 均有
+  { value: "'Courier New', Courier, monospace",                             label: "Courier New" },
+  { value: "Menlo, Consolas, 'Courier New', monospace",                     label: "Menlo / Consolas" },
+  { value: "'Lucida Console', 'Lucida Sans Typewriter', monospace",         label: "Lucida Console" },
+  // 手写 / 装饰 — fallback 到跨平台等效
+  { value: "'Brush Script MT', 'Comic Sans MS', cursive",                   label: "Brush Script MT" },
+  { value: "Zapfino, 'Segoe Script', 'Comic Sans MS', cursive",             label: "Zapfino / Segoe Script" },
+  { value: "'Apple Chancery', 'Palatino Linotype', cursive",                label: "Apple Chancery" },
+  { value: "Papyrus, fantasy",                                              label: "Papyrus" },
+  { value: "'Comic Sans MS', cursive",                                      label: "Comic Sans MS" },
 ];
 
 const PRESET_STYLE_KEYS = ["whiteBottom", "blackBottom", "italicCenter", "smallBottomRight"] as const;
