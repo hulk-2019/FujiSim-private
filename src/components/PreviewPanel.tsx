@@ -26,6 +26,9 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const [originalPreview, setOriginalPreview] = useState<PreviewResult | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const [originalError, setOriginalError] = useState<string | null>(null);
+  const [thumbSrc, setThumbSrc] = useState<string | null>(null);
+  const rawThumbnailReady = useStore((s) => s.rawThumbnailReady);
+  const thumbnailDir = useStore((s) => s.thumbnailDir);
   const reqId = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -46,11 +49,39 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     setOriginalError(null);
   }, [focused?.id]);
 
+  // Phase 1: show thumbnail immediately, no backend call
+  useEffect(() => {
+    if (!focused) {
+      setThumbSrc(null);
+      return;
+    }
+    if (focused.is_raw) {
+      if (rawThumbnailReady.has(focused.id) && thumbnailDir) {
+        try {
+          setThumbSrc(convertFileSrc(`${thumbnailDir}/${focused.id}.jpg`));
+        } catch {
+          setThumbSrc(null);
+        }
+      } else {
+        setThumbSrc(null);
+      }
+    } else {
+      try {
+        setThumbSrc(convertFileSrc(focused.file_path));
+      } catch {
+        setThumbSrc(null);
+      }
+    }
+  }, [focused?.id, focused?.file_path, focused?.is_raw, rawThumbnailReady, thumbnailDir]);
+
   useEffect(() => {
     if (!focused) {
       setPreview(null);
+      setLoading(false);
       return;
     }
+    // Clear stale full preview immediately so we fall back to thumbSrc
+    setPreview(null);
     setError(null);
     const myId = ++reqId.current;
     setLoading(true);
@@ -68,7 +99,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           setLoading(false);
         }
       }
-    }, 150);
+    }, 300);
     return () => clearTimeout(handle);
   }, [focused?.id, filter]);
 
@@ -149,14 +180,20 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 </div>
               </div>
             )}
-            {!showOriginal && previewSrc && (
+            {!showOriginal && (previewSrc ?? thumbSrc) && (
               <div
                 ref={containerRef}
                 className="relative max-w-full max-h-full shadow-2xl"
-                style={preview ? { aspectRatio: `${preview.width} / ${preview.height}` } : undefined}
+                style={
+                  preview
+                    ? { aspectRatio: `${preview.width} / ${preview.height}` }
+                    : focused?.width && focused?.height
+                    ? { aspectRatio: `${focused.width} / ${focused.height}` }
+                    : undefined
+                }
               >
                 <img
-                  src={previewSrc}
+                  src={(previewSrc ?? thumbSrc)!}
                   alt="preview"
                   className="w-full h-full object-contain no-drag"
                 />
