@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(grep -n \"dng\\\\|DNG\\\\|\\\\\"dng\\\\\"\\\\|\\\\.dng\" /Users/ry2019/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rawloader-0.37.1/src/decoders/mod.rs | head -20)",
+      "Read(//Users/ry2019/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rawloader-0.37.1/src/decoders/**)",
+      "Bash(cargo search *)",
+      "Bash(curl -s \"https://crates.io/api/v1/crates/libraw_rs_vendor\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('crate',{}\\).get\\('description',''\\)\\)\")",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:lib.rs)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo metadata *)",
+      "Bash(python3 -c ' *)",
+      "Bash(find /Users/ry2019/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rsraw-0.1.1/src -name \"*.rs\" | head -20)",
+      "Read(//Users/ry2019/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rsraw-0.1.1/src/**)",
+      "Bash(brew list *)",
+      "Bash(pkg-config --modversion libraw)",
+      "Bash(pkg-config --modversion libraw_r)",
+      "Read(//usr/local/**)",
+      "Read(//Users/ry2019/.cargo/registry/src/**)",
+      "Bash(xargs cat)",
+      "Bash(npx tsc *)",
+      "Bash(npx shadcn@latest add sonner)",
+      "Bash(pnpm add *)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Skill(superpowers:subagent-driven-development:*)",
+      "Bash(cat /Users/ry2019/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/requesting-code-review/code-reviewer.md 2>/dev/null | head -60)",
+      "Read(//Users/ry2019/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/requesting-code-review/**)"
+    ]
+  }
+}
