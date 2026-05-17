@@ -1,11 +1,15 @@
 use crate::error::Result;
 use crate::processing::lut::Lut3D;
 use crate::queue::TaskQueue;
+use image::{ImageBuffer, Rgb};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
+
+/// 预览底图缓存 key：(资产 id, 下采样长边像素数)
+type PreviewCacheKey = (i64, u32);
 
 pub struct AppState {
     pub pool: SqlitePool,
@@ -22,6 +26,10 @@ pub struct AppState {
     pub task_queue: TaskQueue,
     /// 限制同时处理的缩略图数量，避免启动时大量 RAW 解码占满 CPU
     pub thumbnail_sem: Arc<Semaphore>,
+    /// 下采样后的预览底图缓存（16-bit RGB，约 6.5MB/张）。
+    /// 调整滤镜参数时命中缓存可完全跳过磁盘 IO 和 RAW 解码，仅跑色彩流水线。
+    /// LRU 简化为最多保留 4 张，key = (asset_id, max_edge)。
+    pub preview_cache: Arc<Mutex<HashMap<PreviewCacheKey, Arc<ImageBuffer<Rgb<u16>, Vec<u16>>>>>>,
 }
 
 /// 共享状态别名。用 `Arc` 包裹以便在 spawn_blocking / rayon 之间廉价克隆。
@@ -80,6 +88,7 @@ impl AppState {
             preview_pool,
             task_queue: TaskQueue::new(2),
             thumbnail_sem: Arc::new(Semaphore::new(2)),
+            preview_cache: Arc::new(Mutex::new(HashMap::new())),
         });
         seed_builtin_presets(&state.pool).await?;
         Ok(state)

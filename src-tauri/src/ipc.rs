@@ -291,6 +291,7 @@ pub struct PreviewResult {
 /// 把一张 6000×4000 像素图的处理压缩到 1280×853，速度提升约 20×，
 /// 视觉效果对 UI 预览足够。
 /// 使用独立的 preview_pool，与导出任务的 export_pool 隔离，避免导出阻塞预览响应。
+/// 下采样结果缓存在 state.preview_cache，调整滤镜时命中缓存可跳过磁盘 IO 和 RAW 解码。
 #[tauri::command]
 pub async fn get_preview(
     state: State<'_, SharedState>,
@@ -302,38 +303,69 @@ pub async fn get_preview(
     let path = PathBuf::from(&asset.file_path);
     let max_edge = max_edge.unwrap_or(1280);
     let settings = settings.unwrap_or_default();
-    // 在阻塞任务前先把 LUT 准备好，复用 state 上的内存缓存
     let lut = cached_lut(&state, settings.lut_file_path.as_deref())?;
     let preview_pool = state.preview_pool.clone();
+
+    // 尝试从缓存取下采样底图，命中时跳过磁盘 IO + RAW 解码
+    let cached = state
+        .preview_cache
+        .lock()
+        .ok()
+        .and_then(|c| c.get(&(asset_id, max_edge)).cloned());
+
+    if let Some(resized) = cached {
+        return tokio::task::spawn_blocking(move || {
+            preview_pool.install(|| render_preview_from_cache(&resized, &settings, lut.as_deref()))
+        })
+        .await
+        .map_err(|e| AppError::other(e.to_string()))?;
+    }
+
+    // 未命中：完整解码 + 下采样，结果存入缓存
+    let cache = state.preview_cache.clone();
     tokio::task::spawn_blocking(move || {
-        preview_pool.install(|| render_preview(&path, &settings, max_edge, lut.as_deref()))
+        preview_pool.install(|| {
+            let resized = load_and_downsample(&path, max_edge)?;
+            let resized = Arc::new(resized);
+
+            // 写入缓存，超过 4 张时随机淘汰一张（简化 LRU）
+            if let Ok(mut c) = cache.lock() {
+                if c.len() >= 4 {
+                    let evict = c.keys().next().cloned();
+                    if let Some(k) = evict { c.remove(&k); }
+                }
+                c.insert((asset_id, max_edge), resized.clone());
+            }
+
+            render_preview_from_cache(&resized, &settings, lut.as_deref())
+        })
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
 }
 
-fn render_preview(
-    path: &Path,
+/// 从磁盘加载图片并下采样到 `max_edge`，返回 16-bit RGB 缓冲区。
+/// 结果会被缓存在 preview_cache，调整滤镜时无需重复执行。
+fn load_and_downsample(path: &Path, max_edge: u32) -> Result<image::ImageBuffer<image::Rgb<u16>, Vec<u16>>> {
+    let src = processing::load_image_rgb16(path)?;
+    let (w, h) = src.dimensions();
+    let scale = (max_edge as f32 / w.max(h) as f32).min(1.0);
+    if scale < 1.0 {
+        let nw = (w as f32 * scale).round().max(1.0) as u32;
+        let nh = (h as f32 * scale).round().max(1.0) as u32;
+        Ok(image::imageops::resize(&src, nw, nh, image::imageops::FilterType::Triangle))
+    } else {
+        Ok(src)
+    }
+}
+
+/// 从已下采样的底图应用色彩流水线，编码为 JPEG base64 返回前端。
+fn render_preview_from_cache(
+    resized: &image::ImageBuffer<image::Rgb<u16>, Vec<u16>>,
     settings: &FilterSettings,
-    max_edge: u32,
     lut: Option<&Lut3D>,
 ) -> Result<PreviewResult> {
-    // 先下采样，源图缓冲尽快释放
-    let resized = {
-        let src = processing::load_image_rgb16(path)?;
-        let (w, h) = src.dimensions();
-        let scale = (max_edge as f32 / w.max(h) as f32).min(1.0);
-        if scale < 1.0 {
-            let nw = (w as f32 * scale).round().max(1.0) as u32;
-            let nh = (h as f32 * scale).round().max(1.0) as u32;
-            image::imageops::resize(&src, nw, nh, image::imageops::FilterType::Triangle)
-        } else {
-            src
-        }
-    };
-
-    let processed = processing::process_image(&resized, settings, lut)?;
-    drop(resized);
+    let processed = processing::process_image(resized, settings, lut)?;
 
     let (pw, ph) = (processed.width(), processed.height());
     let mut rgb8 = image::RgbImage::new(pw, ph);
@@ -1031,6 +1063,9 @@ pub async fn delete_all_export_tasks(
 pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
     tasks::clear_all(&state.pool).await?;
     if let Ok(mut cache) = state.lut_cache.lock() {
+        cache.clear();
+    }
+    if let Ok(mut cache) = state.preview_cache.lock() {
         cache.clear();
     }
     // watermarks 目录整体清空
