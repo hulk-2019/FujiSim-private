@@ -59,8 +59,11 @@ impl AppState {
         let db_path = data_dir.join("library.db");
         let pool = crate::db::init_pool(&db_path).await?;
 
-        // 限制导出并发为 2，防止多张大图同时处理导致内存溢出。
-        // 2 个线程在 8 核机器上仍能充分利用 rayon 内部的像素级并行。
+        let logical_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+
+        // 导出并发固定为 2：防止多张大图同时处理导致内存溢出
         let export_pool = Arc::new(
             rayon::ThreadPoolBuilder::new()
                 .num_threads(2)
@@ -68,10 +71,11 @@ impl AppState {
                 .map_err(|e| crate::error::AppError::other(e.to_string()))?,
         );
 
-        // 预览渲染专用线程池，与导出线程池隔离
+        // 预览线程池：取逻辑核心数的一半（最少 2），与导出池隔离
+        let preview_threads = (logical_cpus / 2).max(2);
         let preview_pool = Arc::new(
             rayon::ThreadPoolBuilder::new()
-                .num_threads(2)
+                .num_threads(preview_threads)
                 .build()
                 .map_err(|e| crate::error::AppError::other(e.to_string()))?,
         );

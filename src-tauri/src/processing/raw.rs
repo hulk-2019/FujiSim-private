@@ -192,17 +192,27 @@ fn extract_thumb_tiff(data: &[u8]) -> Result<Vec<u8>> {
 ///   3. 线性 DNG：本质是 TIFF，需手动应用 orientation
 pub fn decode_raw_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     let data = std::fs::read(path)?;
+    decode_raw_rgb16_from_bytes(&data, None)
+}
 
-    if let Ok(img) = decode_with_libraw(&data) {
+/// 预览专用解码：根据目标长边 `max_edge` 动态决定是否启用 LibRaw half_size 模式。
+/// 当原始尺寸 / 2 仍大于 `max_edge` 时启用，约快 4x；否则全分辨率解码避免降质。
+pub fn decode_raw_rgb16_for_preview(path: &Path, max_edge: u32) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    let data = std::fs::read(path)?;
+    decode_raw_rgb16_from_bytes(&data, Some(max_edge))
+}
+
+fn decode_raw_rgb16_from_bytes(data: &[u8], max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    if let Ok(img) = decode_with_libraw(data, max_edge) {
         return Ok(img);
     }
 
-    let orientation = read_tiff_file_orientation(&data).unwrap_or(1);
+    let orientation = read_tiff_file_orientation(data).unwrap_or(1);
 
-    let img = if let Ok(img) = decode_lossy_dng(&data) {
+    let img = if let Ok(img) = decode_lossy_dng(data) {
         img
     } else {
-        decode_linear_dng(&data)?
+        decode_linear_dng(data)?
     };
 
     Ok(apply_orientation_rgb16(img, orientation))
@@ -224,13 +234,20 @@ fn apply_orientation_rgb16(
     }
 }
 
-fn decode_with_libraw(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+fn decode_with_libraw(data: &[u8], max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     let mut raw = rsraw::RawImage::open(data)
         .map_err(|e| AppError::other(format!("LibRaw open: {e}")))?;
 
     // 使用相机白平衡和色彩矩阵，保留原始色彩意图
     raw.set_use_camera_wb(true);
     raw.set_use_camera_matrix(true);
+    // 预览模式：原始长边 / 2 仍大于目标时启用 half_size，约快 4x；否则全分辨率避免降质
+    if let Some(target) = max_edge {
+        let native_max = raw.width().max(raw.height());
+        if native_max / 2 > target {
+            raw.set_half_size(true);
+        }
+    }
 
     raw.unpack()
         .map_err(|e| AppError::other(format!("LibRaw unpack: {e}")))?;

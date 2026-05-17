@@ -328,9 +328,9 @@ pub async fn get_preview(
             let resized = load_and_downsample(&path, max_edge)?;
             let resized = Arc::new(resized);
 
-            // 写入缓存，超过 4 张时随机淘汰一张（简化 LRU）
+            // 写入缓存，超过 16 张时淘汰最早的一条
             if let Ok(mut c) = cache.lock() {
-                if c.len() >= 4 {
+                if c.len() >= 16 {
                     let evict = c.keys().next().cloned();
                     if let Some(k) = evict { c.remove(&k); }
                 }
@@ -347,7 +347,11 @@ pub async fn get_preview(
 /// 从磁盘加载图片并下采样到 `max_edge`，返回 16-bit RGB 缓冲区。
 /// 结果会被缓存在 preview_cache，调整滤镜时无需重复执行。
 fn load_and_downsample(path: &Path, max_edge: u32) -> Result<image::ImageBuffer<image::Rgb<u16>, Vec<u16>>> {
-    let src = processing::load_image_rgb16(path)?;
+    use crate::asset::format::{classify, FileKind};
+    let src = match classify(path) {
+        FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(path, max_edge)?,
+        _ => processing::load_image_rgb16(path)?,
+    };
     let (w, h) = src.dimensions();
     let scale = (max_edge as f32 / w.max(h) as f32).min(1.0);
     if scale < 1.0 {
