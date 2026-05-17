@@ -303,7 +303,7 @@ function WatermarkOverlay({
 
   return (
     <div style={{ position: "absolute", top: 0, left: 0, width: previewW, height: previewH, transformOrigin: "top left", transform: `scale(${scale})`, pointerEvents: "none" }}>
-      <div style={{ position: "absolute", ...posStyle, fontFamily: wm.fontFamily, fontSize: wm.fontSize, fontWeight: wm.bold ? "bold" : "normal", color: hexToRgba(wm.color, wm.opacity), textShadow: shadow, whiteSpace: "nowrap", lineHeight: 1, userSelect: "none", WebkitTextStroke: wm.strokeEnabled ? `${wm.strokeWidth}px ${hexToRgba(wm.strokeColor, wm.opacity)}` : undefined, paintOrder: wm.strokeEnabled ? "stroke fill" : undefined }}>
+      <div style={{ position: "absolute", ...posStyle, fontFamily: wm.fontFamily, fontSize: wm.fontSize, fontWeight: wm.bold ? "bold" : "normal", color: hexToRgba(wm.color, wm.opacity), textShadow: shadow, whiteSpace: "nowrap", lineHeight: 1, userSelect: "none", WebkitTextStroke: wm.strokeEnabled ? `${wm.strokeWidth}px ${hexToRgba(wm.strokeColor, wm.opacity)}` : undefined, paintOrder: wm.strokeEnabled ? "fill stroke" : undefined }}>
         {wm.text}
       </div>
     </div>

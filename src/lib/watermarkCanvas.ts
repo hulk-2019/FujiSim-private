@@ -110,12 +110,6 @@ export async function renderWatermarkLayer(
       ? metrics.actualBoundingBoxAscent
       : wm.fontSize * scale * 0.8;
 
-  if (wm.strokeEnabled) {
-    octx.strokeStyle = colorWithAlpha(wm.strokeColor, wm.opacity);
-    octx.lineWidth = wm.strokeWidth * scale;
-    octx.lineJoin = "round";
-    octx.strokeText(wm.text, ax, ay + baseline);
-  }
   if (wm.shadowEnabled) {
     octx.shadowColor = colorWithAlpha(wm.shadowColor, wm.opacity);
     octx.shadowBlur = (wm.shadowBlur / 2) * scale;
@@ -123,6 +117,17 @@ export async function renderWatermarkLayer(
     octx.shadowOffsetY = wm.shadowOffsetY * scale;
   }
   octx.fillText(wm.text, ax, ay + baseline);
+
+  if (wm.strokeEnabled) {
+    octx.shadowColor = "transparent";
+    octx.shadowBlur = 0;
+    octx.shadowOffsetX = 0;
+    octx.shadowOffsetY = 0;
+    octx.strokeStyle = colorWithAlpha(wm.strokeColor, wm.opacity);
+    octx.lineWidth = wm.strokeWidth * scale;
+    octx.lineJoin = "round";
+    octx.strokeText(wm.text, ax, ay + baseline);
+  }
   octx.restore();
 
   // 主 canvas：直接 drawImage，不再需要 globalAlpha（opacity 已预乘进颜色）
