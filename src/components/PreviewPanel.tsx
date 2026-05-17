@@ -30,6 +30,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const rawThumbnailReady = useStore((s) => s.rawThumbnailReady);
   const thumbnailDir = useStore((s) => s.thumbnailDir);
   const reqId = useRef(0);
+  const lastFetchedRef = useRef<{ assetId: number; filterKey: string } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,6 +79,15 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     if (!focused) {
       setPreview(null);
       setLoading(false);
+      lastFetchedRef.current = null;
+      return;
+    }
+    const filterKey = JSON.stringify(filter);
+    // Already have the result for this exact asset+filter — skip
+    if (
+      lastFetchedRef.current?.assetId === focused.id &&
+      lastFetchedRef.current?.filterKey === filterKey
+    ) {
       return;
     }
     // Clear stale full preview immediately so we fall back to thumbSrc
@@ -89,6 +99,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
       try {
         const r = await api.getPreview(focused.id, filter, 1280);
         if (reqId.current === myId) {
+          lastFetchedRef.current = { assetId: focused.id, filterKey };
           setPreview(r);
           setPreviewSize({ width: r.width, height: r.height }, focused.id);
           setLoading(false);
