@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
+use std::sync::atomic::AtomicU64;
 
 /// 预览底图缓存 key：(资产 id, 下采样长边像素数)
 type PreviewCacheKey = (i64, u32);
@@ -34,6 +35,9 @@ pub struct AppState {
     /// 调整滤镜参数时命中缓存可完全跳过磁盘 IO 和 RAW 解码，仅跑色彩流水线。
     /// LRU 简化为最多保留 4 张，key = (asset_id, max_edge)。
     pub preview_cache: Arc<Mutex<HashMap<PreviewCacheKey, Arc<ImageBuffer<Rgb<u16>, Vec<u16>>>>>>,
+    /// 导出内存预算（MB）：每个导出任务按 file_size×7 估算内存占用，
+    /// 先 CAS 扣减预算再开始处理，完成后归还，防止多张大图同时处理导致 OOM。
+    pub export_memory_budget: Arc<AtomicU64>,
 }
 
 /// 共享状态别名。用 `Arc` 包裹以便在 spawn_blocking / rayon 之间廉价克隆。
@@ -71,10 +75,11 @@ impl AppState {
             .map(|n| n.get())
             .unwrap_or(4);
 
-        // 导出并发固定为 2：防止多张大图同时处理导致内存溢出
+        // 导出并发：逻辑核心数 - 1（最少 2），配合内存预算系统动态控制实际并发
+        let export_threads = (logical_cpus.saturating_sub(1)).max(2);
         let export_pool = Arc::new(
             rayon::ThreadPoolBuilder::new()
-                .num_threads(2)
+                .num_threads(export_threads)
                 .build()
                 .map_err(|e| crate::error::AppError::other(e.to_string()))?,
         );
@@ -87,6 +92,8 @@ impl AppState {
                 .build()
                 .map_err(|e| crate::error::AppError::other(e.to_string()))?,
         );
+
+        let budget_mb: u64 = 1600;
 
         let state = Arc::new(AppState {
             pool,
@@ -105,6 +112,7 @@ impl AppState {
             thumbnail_sem: Arc::new(Semaphore::new((logical_cpus / 2).max(2))),
             exif_sem: Arc::new(tokio::sync::Semaphore::new(4)),
             preview_cache: Arc::new(Mutex::new(HashMap::new())),
+            export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
         });
         seed_builtin_presets(&state.pool).await?;
         Ok(state)

@@ -627,6 +627,13 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
     }
 }
 
+/// 估算单次导出任务的内存占用（MB）。
+/// RAW 解码后约为文件大小的 7 倍（16-bit RGB 展开），最低 50MB。
+fn estimate_export_memory_mb(file_size_bytes: i64) -> u64 {
+    let raw_mb = (file_size_bytes / 1024 / 1024) as u64;
+    (raw_mb * 7).max(50)
+}
+
 /// 在 spawn_blocking 线程中执行单个资产的导出任务，完成后调度下一个 pending 任务。
 fn run_export_task(
     state: SharedState,
@@ -667,7 +674,28 @@ fn run_export_task(
                 return;
             }
         };
-        let src_path = PathBuf::from(&asset.file_path);
+
+        let needed_mb = estimate_export_memory_mb(asset.file_size.unwrap_or(30 * 1024 * 1024));
+
+        // 等待内存预算（最多 30s），CAS 扣减
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let current = state.export_memory_budget.load(std::sync::atomic::Ordering::SeqCst);
+            if current >= needed_mb {
+                if state.export_memory_budget
+                    .compare_exchange(current, current - needed_mb,
+                        std::sync::atomic::Ordering::SeqCst,
+                        std::sync::atomic::Ordering::SeqCst)
+                    .is_ok()
+                {
+                    break;
+                }
+            }
+            if std::time::Instant::now() > deadline { break; }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+
+        let src_path = std::path::PathBuf::from(&asset.file_path);
 
         // 在 export_pool 内执行，确保 process_image 的 rayon 并行使用受控线程池
         // 而非全局线程池，避免导出任务占满所有 CPU 核心
@@ -678,6 +706,9 @@ fn run_export_task(
                     lut.as_deref(), watermark_path.as_deref(),
                 ))
         });
+
+        // 归还内存预算
+        state.export_memory_budget.fetch_add(needed_mb, std::sync::atomic::Ordering::SeqCst);
 
         match &result {
             Ok(out) => {
