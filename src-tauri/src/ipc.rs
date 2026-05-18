@@ -1021,7 +1021,7 @@ pub async fn get_raw_thumbnail(
     }
 
     let file_path = std::path::PathBuf::from(&asset.file_path);
-    let sem = state.thumbnail_sem.clone();
+    let sem = state.io_sem.clone();
     tokio::task::spawn_blocking(move || {
         let _permit = sem.try_acquire_owned().ok();
         let bytes = processing::raw::extract_raw_thumbnail(&file_path)?;
@@ -1311,7 +1311,8 @@ fn cleanup_watermark_file(watermark_dir: &Path, task_id: i64) {
 }
 
 /// 后台 EXIF 提取 worker：循环取出 exif_extracted=0 的资产，
-/// 以 exif_sem 控制并发（最多 4），提取完写回数据库并推送事件。
+/// 通过 io_sem（共享，permits=4）串行控制并发，每次 acquire 后 await 完成再继续，
+/// 保证同时运行的 blocking 线程数不超过 4。
 fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
     tokio::task::spawn(async move {
         loop {
@@ -1321,13 +1322,13 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
             };
             if batch.is_empty() { break; }
 
-            let mut handles = Vec::new();
             for asset in batch {
-                let permit = state.exif_sem.clone().acquire_owned().await;
+                let permit = state.io_sem.clone().acquire_owned().await;
                 let Ok(permit) = permit else { break };
                 let pool = state.pool.clone();
                 let app2 = app.clone();
-                handles.push(tokio::task::spawn_blocking(move || {
+                // await 每个任务完成后再 acquire 下一个 permit，真正串行限流
+                let _ = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
                     let path = std::path::Path::new(&asset.file_path);
                     let kind = crate::asset::format::classify(path);
@@ -1337,9 +1338,8 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
                         &pool, asset.id, &exif, width, height,
                     ));
                     let _ = app2.emit("exif:item_done", asset.id);
-                }));
+                }).await;
             }
-            for h in handles { let _ = h.await; }
             let _ = app.emit("exif:batch_done", ());
         }
     });
@@ -1372,16 +1372,16 @@ pub async fn generate_thumbnails(
     }
 
     let cover_dir = state.cover_dir.clone();
-    let sem = state.thumbnail_sem.clone();
+    let sem = state.io_sem.clone();
 
     tokio::task::spawn(async move {
-        let mut handles = Vec::new();
         for asset in raw_assets {
             let permit = sem.clone().acquire_owned().await;
             let Ok(permit) = permit else { break };
             let cover_dir = cover_dir.clone();
             let app = app.clone();
-            handles.push(tokio::task::spawn_blocking(move || {
+            // await 每个任务完成后再继续，真正串行限流，不会同时 spawn 大量 blocking 线程
+            let _ = tokio::task::spawn_blocking(move || {
                 let _permit = permit;
                 let mtime = std::path::Path::new(&asset.file_path)
                     .metadata()
@@ -1413,10 +1413,7 @@ pub async fn generate_thumbnails(
                 }
 
                 let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
-            }));
-        }
-        for h in handles {
-            let _ = h.await;
+            }).await;
         }
         let _ = app.emit("thumbnail:all_done", ());
     });
