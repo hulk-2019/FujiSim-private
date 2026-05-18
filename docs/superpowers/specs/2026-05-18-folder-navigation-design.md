@@ -33,6 +33,12 @@ pub async fn name_exists(pool: &SqlitePool, name: &str, exclude_id: Option<i64>)
 
 // 重命名文件夹
 pub async fn rename(pool: &SqlitePool, id: i64, name: &str) -> Result<Album>
+
+// 查询文件夹内资产数量（用于删除确认弹框）
+pub async fn asset_count(pool: &SqlitePool, id: i64) -> Result<i64>
+
+// 事务内删除文件夹：物理删除所有关联文件 → 删除资产记录 → 删除文件夹行
+pub async fn delete_with_assets(pool: &SqlitePool, id: i64) -> Result<()>
 ```
 
 ### 3.2 新增 IPC 命令（`src-tauri/src/ipc.rs`）
@@ -51,6 +57,19 @@ pub async fn rename_album(
     id: i64,
     name: String,
 ) -> Result<Album>
+
+#[tauri::command]
+pub async fn get_folder_asset_count(
+    state: State<'_, SharedState>,
+    id: i64,
+) -> Result<i64>
+
+// 替代原 delete_album，内部事务删除文件 + 记录 + 文件夹行
+#[tauri::command]
+pub async fn delete_folder(
+    state: State<'_, SharedState>,
+    id: i64,
+) -> Result<()>
 ```
 
 两个命令均需注册到 `lib.rs` 的 `invoke_handler`。
@@ -131,7 +150,12 @@ exitFolder: () => void
 - 提交前调用 `api.checkAlbumNameExists(name, id)` 校验（排除自身）
 - 重名逻辑同上
 
-**删除**：直接调用现有 `api.deleteAlbum(id)`，删除后刷新列表。
+**删除**：
+1. 点击删除 → 调用 `api.getFolderAssetCount(id)` 查询文件夹内资产数量
+2. 弹出确认框，提示"将同时删除文件夹内 N 个文件，此操作不可恢复"
+3. 确认后调用新命令 `api.deleteFolder(id)`
+4. 后端 `delete_folder` 在事务内：查出所有关联资产 → 逐一物理删除文件（不走回收站）→ 删除资产数据库记录 → 删除文件夹行；任一步失败则回滚
+5. 前端删除成功后刷新文件夹列表
 
 ### 4.5 AssetGrid 改造
 
