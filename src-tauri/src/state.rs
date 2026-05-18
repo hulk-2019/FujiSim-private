@@ -27,6 +27,8 @@ pub struct AppState {
     pub task_queue: TaskQueue,
     /// 限制同时处理的缩略图数量，避免启动时大量 RAW 解码占满 CPU
     pub thumbnail_sem: Arc<Semaphore>,
+    /// 限制后台 EXIF 提取的并发数，避免与导出/预览争抢 CPU
+    pub exif_sem: Arc<tokio::sync::Semaphore>,
     /// 下采样后的预览底图缓存（16-bit RGB，约 6.5MB/张）。
     /// 调整滤镜参数时命中缓存可完全跳过磁盘 IO 和 RAW 解码，仅跑色彩流水线。
     /// LRU 简化为最多保留 4 张，key = (asset_id, max_edge)。
@@ -97,6 +99,7 @@ impl AppState {
             task_queue: TaskQueue::new(2),
             // 封面图生成并发：逻辑核心数的一半（最少 2），与预览线程池策略一致
             thumbnail_sem: Arc::new(Semaphore::new((logical_cpus / 2).max(2))),
+            exif_sem: Arc::new(tokio::sync::Semaphore::new(4)),
             preview_cache: Arc::new(Mutex::new(HashMap::new())),
         });
         seed_builtin_presets(&state.pool).await?;

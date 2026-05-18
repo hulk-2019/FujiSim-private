@@ -92,6 +92,7 @@ pub async fn import_directory(
         skipped: scan.skipped,
     };
     let _ = app.emit("import:done", &report);
+    start_exif_worker(state.inner().clone(), app);
     Ok(report)
 }
 
@@ -739,6 +740,7 @@ pub async fn import_files(
         skipped: scan.skipped,
     };
     let _ = app.emit("import:done", &report);
+    start_exif_worker(state.inner().clone(), app);
     Ok(report)
 }
 
@@ -1233,6 +1235,41 @@ fn cleanup_watermark_file(watermark_dir: &Path, task_id: i64) {
     if path.exists() {
         let _ = std::fs::remove_file(&path);
     }
+}
+
+/// 后台 EXIF 提取 worker：循环取出 exif_extracted=0 的资产，
+/// 以 exif_sem 控制并发（最多 4），提取完写回数据库并推送事件。
+fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
+    tokio::task::spawn(async move {
+        loop {
+            let batch = match crate::db::assets::list_exif_pending(&state.pool, 20).await {
+                Ok(b) => b,
+                Err(_) => break,
+            };
+            if batch.is_empty() { break; }
+
+            let mut handles = Vec::new();
+            for asset in batch {
+                let permit = state.exif_sem.clone().acquire_owned().await;
+                let Ok(permit) = permit else { break };
+                let pool = state.pool.clone();
+                let app2 = app.clone();
+                handles.push(tokio::task::spawn_blocking(move || {
+                    let _permit = permit;
+                    let path = std::path::Path::new(&asset.file_path);
+                    let kind = crate::asset::format::classify(path);
+                    let (exif, width, height) = crate::asset::scanner::extract_exif_only(path, kind);
+                    let rt = tokio::runtime::Handle::current();
+                    let _ = rt.block_on(crate::db::assets::update_exif(
+                        &pool, asset.id, &exif, width, height,
+                    ));
+                    let _ = app2.emit("exif:item_done", asset.id);
+                }));
+            }
+            for h in handles { let _ = h.await; }
+            let _ = app.emit("exif:batch_done", ());
+        }
+    });
 }
 
 /// `thumbnail:done` 事件载荷：单张缩略图写盘完成。

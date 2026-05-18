@@ -379,6 +379,47 @@ pub async fn stats(pool: &SqlitePool) -> Result<LibraryStats> {
 }
 
 
+/// 取出 exif_extracted=0 的资产，最多 limit 条
+pub async fn list_exif_pending(pool: &SqlitePool, limit: i64) -> Result<Vec<Asset>> {
+    Ok(sqlx::query_as::<_, Asset>(
+        "SELECT * FROM assets WHERE exif_extracted = 0 LIMIT ?"
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// 把 EXIF 数据写回资产，标记 exif_extracted=1
+pub async fn update_exif(
+    pool: &SqlitePool,
+    id: i64,
+    exif: &crate::asset::exif::ExifData,
+    width: Option<i64>,
+    height: Option<i64>,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE assets SET
+           date_taken=?, camera_make=?, camera_model=?, lens_model=?,
+           iso=?, f_number=?, shutter_speed=?, focal_length=?,
+           width=?, height=?, exif_extracted=1
+         WHERE id=?"
+    )
+    .bind(&exif.date_taken)
+    .bind(&exif.camera_make)
+    .bind(&exif.camera_model)
+    .bind(&exif.lens_model)
+    .bind(exif.iso)
+    .bind(exif.f_number)
+    .bind(&exif.shutter_speed)
+    .bind(exif.focal_length)
+    .bind(width)
+    .bind(height)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 #[allow(dead_code)]
 pub fn _placeholder_time() -> DateTime<Utc> {
     Utc::now()
