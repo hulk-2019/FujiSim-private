@@ -31,9 +31,29 @@ pub fn scan_dir(root: &Path) -> Result<ScanResult> {
         let file_type = format::ext_upper(path);
         let metadata = entry.metadata().ok();
         let file_size = metadata.as_ref().map(|m| m.len() as i64);
+        let file_mtime = metadata.as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
 
-        let (exif, width, height) = extract_meta(path, kind);
-        items.push(build_asset(path, file_name, file_type, file_size, exif, width, height, kind));
+        items.push(NewAsset {
+            file_path: path.to_string_lossy().to_string(),
+            file_name,
+            file_type,
+            file_size,
+            file_mtime,
+            date_taken: None,
+            camera_make: None,
+            camera_model: None,
+            lens_model: None,
+            iso: None,
+            f_number: None,
+            shutter_speed: None,
+            focal_length: None,
+            width: None,
+            height: None,
+            is_raw: kind == FileKind::Raw,
+        });
     }
     Ok(ScanResult { items, skipped })
 }
@@ -54,10 +74,31 @@ pub fn scan_files(paths: &[std::path::PathBuf]) -> Result<ScanResult> {
         }
         let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let file_type = format::ext_upper(path);
-        let file_size = path.metadata().ok().map(|m| m.len() as i64);
+        let metadata = path.metadata().ok();
+        let file_size = metadata.as_ref().map(|m| m.len() as i64);
+        let file_mtime = metadata.as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
 
-        let (exif, width, height) = extract_meta(path, kind);
-        items.push(build_asset(path, file_name, file_type, file_size, exif, width, height, kind));
+        items.push(NewAsset {
+            file_path: path.to_string_lossy().to_string(),
+            file_name,
+            file_type,
+            file_size,
+            file_mtime,
+            date_taken: None,
+            camera_make: None,
+            camera_model: None,
+            lens_model: None,
+            iso: None,
+            f_number: None,
+            shutter_speed: None,
+            focal_length: None,
+            width: None,
+            height: None,
+            is_raw: kind == FileKind::Raw,
+        });
     }
     Ok(ScanResult { items, skipped })
 }
@@ -261,11 +302,13 @@ fn display_dims(w: Option<i64>, h: Option<i64>, orientation: u32) -> (Option<i64
     }
 }
 
+#[allow(dead_code)]
 fn build_asset(
     path: &Path,
     file_name: String,
     file_type: Option<String>,
     file_size: Option<i64>,
+    file_mtime: Option<i64>,
     exif: ExifData,
     width: Option<i64>,
     height: Option<i64>,
@@ -276,6 +319,7 @@ fn build_asset(
         file_name,
         file_type,
         file_size,
+        file_mtime,
         date_taken: exif.date_taken,
         camera_make: exif.camera_make,
         camera_model: exif.camera_model,
@@ -288,5 +332,14 @@ fn build_asset(
         height,
         is_raw: matches!(kind, FileKind::Raw),
     }
+}
+
+/// 公开的 EXIF 提取入口，供阶段二后台 worker 调用。
+/// 薄包装 `extract_meta`，不做任何额外处理。
+pub fn extract_exif_only(
+    path: &Path,
+    kind: FileKind,
+) -> (crate::asset::exif::ExifData, Option<i64>, Option<i64>) {
+    extract_meta(path, kind)
 }
 

@@ -26,6 +26,7 @@ pub struct Asset {
     pub color_label: Option<String>,
     pub width: Option<i64>,
     pub height: Option<i64>,
+    pub file_mtime: Option<i64>,
     /// SQLite 没有布尔类型，用 0/1 整数代替。前端类型 `is_raw: number`。
     pub is_raw: i64,
     pub created_at: String,
@@ -48,6 +49,7 @@ pub struct NewAsset {
     pub focal_length: Option<f64>,
     pub width: Option<i64>,
     pub height: Option<i64>,
+    pub file_mtime: Option<i64>,
     /// 写模型里允许使用真正的 `bool`，写入时再转 0/1。
     pub is_raw: bool,
 }
@@ -109,12 +111,13 @@ pub async fn insert_many(pool: &SqlitePool, items: &[NewAsset]) -> Result<usize>
     let mut inserted = 0usize;
     for a in items {
         let res = sqlx::query(
-            r#"INSERT INTO assets (file_path,file_name,file_type,file_size,date_taken,camera_make,camera_model,lens_model,iso,f_number,shutter_speed,focal_length,width,height,is_raw)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            r#"INSERT INTO assets (file_path,file_name,file_type,file_size,file_mtime,date_taken,camera_make,camera_model,lens_model,iso,f_number,shutter_speed,focal_length,width,height,is_raw)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(file_path) DO UPDATE SET
                  file_name = excluded.file_name,
                  file_type = excluded.file_type,
                  file_size = excluded.file_size,
+                 file_mtime = excluded.file_mtime,
                  date_taken = excluded.date_taken,
                  camera_make = excluded.camera_make,
                  camera_model = excluded.camera_model,
@@ -131,6 +134,7 @@ pub async fn insert_many(pool: &SqlitePool, items: &[NewAsset]) -> Result<usize>
         .bind(&a.file_name)
         .bind(&a.file_type)
         .bind(a.file_size)
+        .bind(a.file_mtime)
         .bind(&a.date_taken)
         .bind(&a.camera_make)
         .bind(&a.camera_model)
