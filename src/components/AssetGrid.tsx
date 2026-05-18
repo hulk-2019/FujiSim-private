@@ -427,7 +427,7 @@ function Thumb({
       try { return convertFileSrc(asset.file_path); } catch { return null; }
     }
     if (isThumbReady && coverDir) {
-      try { return convertFileSrc(`${coverDir}/${asset.id}.jpg`); } catch { return null; }
+      try { return convertFileSrc(`${coverDir}/${asset.id}_${asset.file_mtime ?? 0}.jpg`); } catch { return null; }
     }
     return null;
   }, [asset.file_path, asset.is_raw, asset.id, isThumbReady, coverDir]);

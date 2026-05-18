@@ -945,7 +945,14 @@ pub async fn get_raw_thumbnail(
     asset_id: i64,
 ) -> Result<String> {
     let asset = assets::get(&state.pool, asset_id).await?;
-    let cache_path = state.thumbnail_dir.join(format!("{asset_id}.jpg"));
+    let mtime = std::path::Path::new(&asset.file_path)
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let cache_path = state.thumbnail_dir.join(format!("{asset_id}_{mtime}.jpg"));
 
     // 磁盘缓存命中：直接返回
     if cache_path.exists() {
@@ -1310,7 +1317,14 @@ pub async fn generate_thumbnails(
             let app = app.clone();
             handles.push(tokio::task::spawn_blocking(move || {
                 let _permit = permit;
-                let cover_path = cover_dir.join(format!("{}.jpg", asset.id));
+                let mtime = std::path::Path::new(&asset.file_path)
+                    .metadata()
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let cover_path = cover_dir.join(format!("{}_{}.jpg", asset.id, mtime));
 
                 // 幂等：cover 文件已存在则跳过
                 if cover_path.exists() {
