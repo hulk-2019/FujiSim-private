@@ -52,7 +52,7 @@ export function Sidebar() {
 
   return (
     <aside className="w-full px-4 py-2 bg-transparent flex items-center flex-wrap gap-3 text-sm relative z-10">
-      <div className="relative w-40 flex-shrink-0">
+      <div className="relative w-64 flex-shrink-0">
         <Search size={14} className="absolute left-2.5 top-2 text-zinc-500" />
         <Input
           placeholder={t("sidebar.searchPlaceholder")}
@@ -72,7 +72,7 @@ export function Sidebar() {
           value={query.camera_model ?? "_all"}
           onValueChange={(v) => setQuery({ camera_model: v === "_all" ? null : v })}
         >
-          <SelectTrigger className="h-8 w-28 text-xs whitespace-nowrap overflow-hidden [&>span]:truncate">
+          <SelectTrigger className="h-8 w-32 text-xs whitespace-nowrap overflow-hidden [&>span]:truncate">
             <SelectValue placeholder={t("sidebar.cameraPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
@@ -86,7 +86,7 @@ export function Sidebar() {
           value={String(query.min_rating ?? 0)}
           onValueChange={(v) => setQuery({ min_rating: Number(v) || null })}
         >
-          <SelectTrigger className="h-8 w-24 text-xs whitespace-nowrap overflow-hidden [&>span]:truncate">
+          <SelectTrigger className="h-8 w-32 text-xs whitespace-nowrap overflow-hidden [&>span]:truncate">
             <SelectValue placeholder={t("sidebar.ratingPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
@@ -105,7 +105,7 @@ export function Sidebar() {
             setQuery({ sort_by: sb as any, sort_dir: sd as any });
           }}
         >
-          <SelectTrigger className="h-8 w-28 text-xs whitespace-nowrap overflow-hidden [&>span]:truncate">
+          <SelectTrigger className="h-8 w-32 text-xs whitespace-nowrap overflow-hidden [&>span]:truncate">
             <SelectValue placeholder={t("sidebar.sortPlaceholder")} />
           </SelectTrigger>
           <SelectContent>

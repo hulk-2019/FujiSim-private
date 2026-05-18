@@ -258,7 +258,7 @@ export const useStore = create<AppState>((set, get) => ({
         nextFocused =
           nextSelected.size > 0
             ? (nextSelected.values().next().value ?? null)
-            : (items[0]?.id ?? null);
+            : (get().currentFolderId !== null ? (items[0]?.id ?? null) : null);
       }
 
       set({

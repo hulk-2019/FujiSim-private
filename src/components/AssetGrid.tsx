@@ -108,22 +108,6 @@ export function AssetGrid() {
     }
   }
 
-  if (loading && totalCount === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-        {t("assetGrid.loading")}
-      </div>
-    );
-  }
-  if (!loading && totalCount === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 text-sm gap-3 p-8">
-        <ImageIcon size={48} className="text-zinc-700" />
-        <div>{t("assetGrid.empty")}</div>
-      </div>
-    );
-  }
-
   const loadedCount = assets.filter((a) => a !== undefined).length;
   const allSelected = selectedIds.size > 0 && selectedIds.size === loadedCount;
   const partiallySelected = selectedIds.size > 0 && !allSelected;
@@ -204,7 +188,19 @@ export function AssetGrid() {
           </Button>
         </div>
       </div>
-      <Grid
+      {loading && totalCount === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-[#4A4F5A] text-xs">
+          <div className="w-5 h-5 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin" />
+          <span>{t("assetGrid.loading")}</span>
+        </div>
+      )}
+      {!loading && totalCount === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center text-[#4A4F5A] text-xs gap-3 p-8">
+          <ImageIcon size={40} className="text-[#1a1a24]" />
+          <div>{t("assetGrid.empty")}</div>
+        </div>
+      )}
+      {totalCount > 0 && <Grid
         assets={assets}
         totalCount={totalCount}
         loadPage={loadPage}
@@ -221,7 +217,7 @@ export function AssetGrid() {
           await refreshAssets();
         }}
         onRenamed={refreshAssets}
-      />
+      />}
 
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
         <DialogContent>
