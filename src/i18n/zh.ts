@@ -39,6 +39,7 @@ const zh = {
     toggleLanguage: "切换语言",
     clearCache: "清除缓存",
     albumNamePlaceholder: "相册名称",
+    resetFilters: "重置筛选",
   },
   filterPanel: {
     tabs: {
@@ -239,6 +240,18 @@ const zh = {
     done:       "已完成",
     error:      "导出失败",
     cancelled:  "已取消",
+  },
+  folder: {
+    title: "文件夹",
+    searchPlaceholder: "搜索文件夹",
+    newFolder: "新建文件夹",
+    rename: "重命名",
+    delete: "删除",
+    namePlaceholder: "文件夹名称",
+    nameExists: "文件夹名称已存在",
+    confirmDelete: "将同时物理删除文件夹内 {{count}} 个文件，此操作不可恢复。",
+    confirmDeleteEmpty: "确认删除此空文件夹？",
+    noFolders: "还没有文件夹，点击右上角 + 新建",
   },
 } as const;
 

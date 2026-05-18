@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "@/components/Sidebar";
 import { AssetGrid } from "@/components/AssetGrid";
+import { FolderList } from "@/components/FolderList";
 import { PreviewPanel } from "@/components/PreviewPanel";
 import { FilterPanel } from "@/components/FilterPanel";
 import { ExportDialog } from "@/components/ExportDialog";
@@ -11,14 +12,16 @@ import { api } from "@/api";
 
 export default function App() {
   const markThumbnailReady = useStore((s) => s.markThumbnailReady);
+  const currentFolderId = useStore((s) => s.currentFolderId);
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
-    const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, setThumbnailDir, setCoverDir } = useStore.getState();
+    const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, refreshAlbums, setThumbnailDir, setCoverDir } = useStore.getState();
     refreshAssets();
     refreshFacets();
     refreshPresets();
     refreshUserLuts();
+    refreshAlbums();
     api.getThumbnailDir().then(setThumbnailDir).catch(() => {});
     api.getCoverDir().then(setCoverDir).catch(() => {});
   }, []);
@@ -46,7 +49,7 @@ export default function App() {
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div className="w-[360px] flex-shrink-0 flex flex-col bg-zinc-950 border-r border-zinc-800/60 overflow-hidden">
-          <AssetGrid />
+          {currentFolderId === null ? <FolderList /> : <AssetGrid />}
         </div>
 
         <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">

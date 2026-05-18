@@ -103,6 +103,10 @@ type AppState = {
   cameras: string[];
   fujiSimulations: string[];
   albums: Album[];
+  currentFolderId: number | null;
+  currentFolderName: string | null;
+  enterFolder: (id: number, name: string) => Promise<void>;
+  exitFolder: () => Promise<void>;
 
   // ===== 异步态：导入 / 导出进度 =====
   importing: boolean;
@@ -213,6 +217,8 @@ export const useStore = create<AppState>((set, get) => ({
   cameras: [],
   fujiSimulations: [],
   albums: [],
+  currentFolderId: null,
+  currentFolderName: null,
   importing: false,
   lastImport: null,
   exportTasks: new Map(),
@@ -327,6 +333,18 @@ export const useStore = create<AppState>((set, get) => ({
   refreshAlbums: async () => {
     const list = await api.listAlbums().catch(() => []);
     set({ albums: list });
+  },
+
+  enterFolder: async (id, name) => {
+    set({ currentFolderId: id, currentFolderName: name });
+    await get().setQuery({ album_id: id });
+  },
+
+  exitFolder: async () => {
+    set({ currentFolderId: null, currentFolderName: null });
+    get().clearSelection();
+    get().focusAsset(null);
+    await get().setQuery({ album_id: null });
   },
 
   toggleSelect: (id, additive) => {

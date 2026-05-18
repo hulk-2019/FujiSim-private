@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Check, FileImage, ImageIcon, Pencil, FolderPlus, Trash2 } from "lucide-react";
+import { Check, FileImage, ImageIcon, Pencil, FolderPlus, Trash2, ChevronLeft, FolderOpen, Files, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/store";
 import { StarRating } from "./StarRating";
@@ -17,6 +17,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const PAGE_SIZE = 60;
 const COLS = 2;
@@ -38,6 +45,11 @@ export function AssetGrid() {
   const clearSelection = useStore((s) => s.clearSelection);
   const query = useStore((s) => s.query);
   const albums = useStore((s) => s.albums);
+  const currentFolderName = useStore((s) => s.currentFolderName);
+  const exitFolder = useStore((s) => s.exitFolder);
+  const importing = useStore((s) => s.importing);
+  const setImporting = useStore((s) => s.setImporting);
+  const refreshFacets = useStore((s) => s.refreshFacets);
 
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveTargetAlbum, setMoveTargetAlbum] = useState<string>("");
@@ -65,6 +77,37 @@ export function AssetGrid() {
     await refreshAssets();
   }
 
+  async function pickAndImport() {
+    const selected = await openDialog({ directory: true, multiple: false });
+    if (!selected || typeof selected !== "string") return;
+    setImporting(true);
+    try {
+      const report = await api.importDirectory(selected, query.album_id ?? null);
+      setImporting(false, { inserted: report.inserted, scanned: report.scanned });
+      await Promise.all([refreshAssets(), refreshFacets()]);
+    } catch {
+      setImporting(false);
+    }
+  }
+
+  async function pickFilesAndImport() {
+    const selected = await openDialog({
+      multiple: true,
+      filters: [{ name: "Images", extensions: ["jpg","jpeg","png","tif","tiff","webp","heic","heif","arw","cr2","cr3","nef","nrw","raf","rw2","dng","orf","pef","srw","rwl","sr2"] }],
+    });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    if (paths.length === 0) return;
+    setImporting(true);
+    try {
+      const report = await api.importFiles(paths, query.album_id ?? null);
+      setImporting(false, { inserted: report.inserted, scanned: report.scanned });
+      await Promise.all([refreshAssets(), refreshFacets()]);
+    } catch {
+      setImporting(false);
+    }
+  }
+
   if (loading && totalCount === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
@@ -87,6 +130,37 @@ export function AssetGrid() {
 
   return (
     <div className="flex-1 flex flex-col bg-transparent min-h-0">
+      {/* 文件夹 header：返回箭头 + 文件夹名 + 导入按钮 */}
+      <div className="border-b border-zinc-800/60 px-3 py-2 flex items-center gap-2">
+        <button
+          onClick={() => exitFolder()}
+          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+        >
+          <ChevronLeft size={14} />
+          <span className="truncate max-w-[160px]">{currentFolderName}</span>
+        </button>
+        <div className="ml-auto">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button disabled={importing} size="sm" variant="default" className="h-7 text-xs pr-2">
+                <FolderOpen size={13} className="mr-1" />
+                {importing ? t("sidebar.importing") : t("sidebar.import")}
+                <ChevronDown size={11} className="ml-1 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={pickAndImport}>
+                <FolderOpen size={13} />
+                {t("sidebar.importDir")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={pickFilesAndImport}>
+                <Files size={13} />
+                {t("sidebar.importFiles")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
       <div className="border-b border-zinc-800/60 px-4 py-2 flex items-center gap-2 text-xs text-zinc-400 bg-zinc-950/40">
         <button
           onClick={() => (allSelected ? clearSelection() : selectAll())}

@@ -73,6 +73,10 @@ pub fn run() {
             ipc::list_albums,
             ipc::create_album,
             ipc::delete_album,
+            ipc::check_album_name_exists,
+            ipc::rename_album,
+            ipc::get_folder_asset_count,
+            ipc::delete_folder,
             ipc::album_add,
             ipc::album_remove,
             // ===== 滤镜预设 =====

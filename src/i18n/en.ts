@@ -39,6 +39,7 @@ const en = {
     toggleLanguage: "Toggle language",
     clearCache: "Clear cache",
     albumNamePlaceholder: "Album name",
+    resetFilters: "Reset filters",
   },
   filterPanel: {
     tabs: {
@@ -239,6 +240,18 @@ const en = {
     done:       "Completed",
     error:      "Failed",
     cancelled:  "Cancelled",
+  },
+  folder: {
+    title: "Folders",
+    searchPlaceholder: "Search folders",
+    newFolder: "New folder",
+    rename: "Rename",
+    delete: "Delete",
+    namePlaceholder: "Folder name",
+    nameExists: "Folder name already exists",
+    confirmDelete: "This will permanently delete {{count}} file(s) inside. This cannot be undone.",
+    confirmDeleteEmpty: "Delete this empty folder?",
+    noFolders: "No folders yet. Click + to create one.",
   },
 } as const;
 

@@ -63,6 +63,16 @@ export const api = {
   listAlbums: () => invoke<Album[]>("list_albums"),
   createAlbum: (name: string) => invoke<Album>("create_album", { name }),
   deleteAlbum: (id: number) => invoke<void>("delete_album", { id }),
+  checkAlbumNameExists: (name: string, excludeId?: number | null) =>
+    invoke<boolean>("check_album_name_exists", {
+      name,
+      excludeId: excludeId ?? null,
+    }),
+  renameAlbum: (id: number, name: string) =>
+    invoke<Album>("rename_album", { id, name }),
+  getFolderAssetCount: (id: number) =>
+    invoke<number>("get_folder_asset_count", { id }),
+  deleteFolder: (id: number) => invoke<void>("delete_folder", { id }),
   albumAdd: (albumId: number, assetIds: number[]) =>
     invoke<void>("album_add", { albumId, assetIds }),
   albumRemove: (albumId: number, assetIds: number[]) =>

@@ -240,6 +240,47 @@ pub async fn delete_album(state: State<'_, SharedState>, id: i64) -> Result<()> 
 }
 
 #[tauri::command]
+pub async fn check_album_name_exists(
+    state: State<'_, SharedState>,
+    name: String,
+    exclude_id: Option<i64>,
+) -> Result<bool> {
+    albums::name_exists(&state.pool, &name, exclude_id).await
+}
+
+#[tauri::command]
+pub async fn rename_album(
+    state: State<'_, SharedState>,
+    id: i64,
+    name: String,
+) -> Result<albums::Album> {
+    albums::rename(&state.pool, id, &name).await
+}
+
+#[tauri::command]
+pub async fn get_folder_asset_count(
+    state: State<'_, SharedState>,
+    id: i64,
+) -> Result<i64> {
+    albums::asset_count(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn delete_folder(
+    state: State<'_, SharedState>,
+    id: i64,
+) -> Result<()> {
+    let paths = albums::delete_with_assets(&state.pool, id).await?;
+    for p in paths {
+        let path = std::path::PathBuf::from(&p);
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn album_add(
     state: State<'_, SharedState>,
     album_id: i64,

@@ -72,3 +72,85 @@ pub async fn remove_assets(pool: &SqlitePool, album_id: i64, asset_ids: &[i64]) 
     tx.commit().await?;
     Ok(())
 }
+
+/// 检查名称是否已存在。`exclude_id` 用于重命名时排除自身。
+pub async fn name_exists(
+    pool: &SqlitePool,
+    name: &str,
+    exclude_id: Option<i64>,
+) -> Result<bool> {
+    let count: (i64,) = match exclude_id {
+        Some(eid) => sqlx::query_as(
+            "SELECT COUNT(*) FROM albums WHERE name = ? AND id != ?",
+        )
+        .bind(name)
+        .bind(eid)
+        .fetch_one(pool)
+        .await?,
+        None => sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = ?")
+            .bind(name)
+            .fetch_one(pool)
+            .await?,
+    };
+    Ok(count.0 > 0)
+}
+
+pub async fn rename(pool: &SqlitePool, id: i64, name: &str) -> Result<Album> {
+    let result = sqlx::query("UPDATE albums SET name = ? WHERE id = ?")
+        .bind(name)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(sqlx::Error::RowNotFound.into());
+    }
+    sqlx::query_as::<_, Album>("SELECT * FROM albums WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(Into::into)
+}
+
+/// 查询文件夹内资产数量（用于删除确认弹框）。
+pub async fn asset_count(pool: &SqlitePool, id: i64) -> Result<i64> {
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM album_assets WHERE album_id = ?")
+            .bind(id)
+            .fetch_one(pool)
+            .await?;
+    Ok(count)
+}
+
+/// 事务内物理删除文件夹：删除所有关联资产文件 → 删除资产记录 → 删除文件夹行。
+/// 任一步失败则回滚。
+pub async fn delete_with_assets(
+    pool: &SqlitePool,
+    id: i64,
+) -> Result<Vec<String>> {
+    let mut tx = pool.begin().await?;
+
+    let paths: Vec<(String,)> = sqlx::query_as(
+        "SELECT a.file_path FROM assets a \
+         INNER JOIN album_assets aa ON aa.asset_id = a.id \
+         WHERE aa.album_id = ?",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM assets WHERE id IN \
+         (SELECT asset_id FROM album_assets WHERE album_id = ?)",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query("DELETE FROM albums WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(paths.into_iter().map(|(p,)| p).collect())
+}
