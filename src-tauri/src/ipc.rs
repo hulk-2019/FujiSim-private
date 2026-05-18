@@ -15,7 +15,6 @@ use crate::export::{self, ExportSettings};
 use crate::processing::lut::Lut3D;
 use crate::processing::{self, FilterSettings};
 use crate::state::SharedState;
-use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -317,12 +316,10 @@ pub async fn delete_preset(state: State<'_, SharedState>, id: i64) -> Result<()>
     presets::delete(&state.pool, id).await
 }
 
-/// 预览结果。前端拿到 `data:` URL 即可直接显示。
-#[derive(Debug, Serialize)]
+/// 预览结果。前端用 convertFileSrc(path) 加载本地文件，零 IPC 传输开销。
+#[derive(Debug, Serialize, Clone)]
 pub struct PreviewResult {
-    pub mime: String,
-    /// JPEG 字节的 base64 编码
-    pub data: String,
+    pub path: String,
     pub width: u32,
     pub height: u32,
 }
@@ -347,6 +344,7 @@ pub async fn get_preview(
     let settings = settings.unwrap_or_default();
     let lut = cached_lut(&state, settings.lut_file_path.as_deref())?;
     let preview_pool = state.preview_pool.clone();
+    let preview_cache_dir = state.preview_cache_dir.clone();
 
     // 尝试从缓存取下采样底图，命中时跳过磁盘 IO + RAW 解码
     let cached = state
@@ -356,8 +354,9 @@ pub async fn get_preview(
         .and_then(|c| c.get(&(asset_id, max_edge)).cloned());
 
     if let Some(resized) = cached {
+        let pcd = preview_cache_dir.clone();
         return tokio::task::spawn_blocking(move || {
-            preview_pool.install(|| render_preview_from_cache(&resized, &settings, lut.as_deref()))
+            preview_pool.install(|| render_preview_from_cache(&resized, &settings, lut.as_deref(), &pcd, asset_id))
         })
         .await
         .map_err(|e| AppError::other(e.to_string()))?;
@@ -379,7 +378,7 @@ pub async fn get_preview(
                 c.insert((asset_id, max_edge), resized.clone());
             }
 
-            render_preview_from_cache(&resized, &settings, lut.as_deref())
+            render_preview_from_cache(&resized, &settings, lut.as_deref(), &preview_cache_dir, asset_id)
         })
     })
     .await
@@ -405,40 +404,72 @@ fn load_and_downsample(path: &Path, max_edge: u32) -> Result<image::ImageBuffer<
     }
 }
 
-/// 从已下采样的底图应用色彩流水线，编码为 JPEG base64 返回前端。
+/// 从已下采样的底图应用色彩流水线，将结果写入 preview_cache_dir 下的 JPEG 文件，
+/// 返回文件路径供前端用 convertFileSrc 加载。相同参数命中磁盘缓存时直接返回路径。
 fn render_preview_from_cache(
     resized: &image::ImageBuffer<image::Rgb<u16>, Vec<u16>>,
     settings: &FilterSettings,
     lut: Option<&Lut3D>,
+    preview_cache_dir: &std::path::Path,
+    asset_id: i64,
 ) -> Result<PreviewResult> {
-    let processed = processing::process_image(resized, settings, lut)?;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    settings.base_simulation.hash(&mut hasher);
+    settings.grain_effect.hash(&mut hasher);
+    settings.highlight_tone.to_bits().hash(&mut hasher);
+    settings.shadow_tone.to_bits().hash(&mut hasher);
+    settings.color_saturation.to_bits().hash(&mut hasher);
+    settings.clarity.to_bits().hash(&mut hasher);
+    settings.sharpness.to_bits().hash(&mut hasher);
+    settings.wb_shift_r.hash(&mut hasher);
+    settings.wb_shift_b.hash(&mut hasher);
+    settings.lut_file_path.hash(&mut hasher);
+    let h = hasher.finish();
 
-    let (pw, ph) = (processed.width(), processed.height());
-    let mut rgb8 = image::RgbImage::new(pw, ph);
-    for (x, y, px) in processed.enumerate_pixels() {
-        rgb8.put_pixel(
-            x,
-            y,
-            image::Rgb([
+    let file_name = format!("{}_{:016x}.jpg", asset_id, h);
+    let out_path = preview_cache_dir.join(&file_name);
+
+    if !out_path.exists() {
+        let processed = crate::processing::process_image(resized, settings, lut)?;
+        let (pw, ph) = processed.dimensions();
+        let mut rgb8 = image::RgbImage::new(pw, ph);
+        for (x, y, px) in processed.enumerate_pixels() {
+            rgb8.put_pixel(x, y, image::Rgb([
                 (px.0[0] >> 8) as u8,
                 (px.0[1] >> 8) as u8,
                 (px.0[2] >> 8) as u8,
-            ]),
-        );
-    }
-    drop(processed);
+            ]));
+        }
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 88);
+        rgb8.write_with_encoder(encoder)
+            .map_err(|e| crate::error::AppError::other(format!("jpeg encode: {e}")))?;
+        std::fs::write(&out_path, buf.into_inner())
+            .map_err(|e| crate::error::AppError::other(format!("preview write: {e}")))?;
 
-    let mut buf = std::io::Cursor::new(Vec::new());
-    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 88);
-    rgb8.write_with_encoder(encoder)?;
-    drop(rgb8);
-    let data = general_purpose::STANDARD.encode(buf.get_ref());
+        evict_preview_cache(preview_cache_dir, 40);
+    }
+
+    let (w, h_px) = resized.dimensions();
     Ok(PreviewResult {
-        mime: "image/jpeg".into(),
-        data,
-        width: pw,
-        height: ph,
+        path: out_path.to_string_lossy().to_string(),
+        width: w,
+        height: h_px,
     })
+}
+
+fn evict_preview_cache(dir: &std::path::Path, max_files: usize) {
+    let Ok(mut entries) = std::fs::read_dir(dir).map(|rd| {
+        rd.filter_map(|e| e.ok())
+          .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jpg"))
+          .collect::<Vec<_>>()
+    }) else { return };
+    if entries.len() <= max_files { return }
+    entries.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+    for e in entries.iter().take(entries.len() - max_files) {
+        let _ = std::fs::remove_file(e.path());
+    }
 }
 
 /// 每个资产对应的水印层。
@@ -1109,6 +1140,11 @@ pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
     if state.cover_dir.exists() {
         let _ = std::fs::remove_dir_all(&state.cover_dir);
         let _ = std::fs::create_dir_all(&state.cover_dir);
+    }
+    // preview_cache 目录整体清空
+    if state.preview_cache_dir.exists() {
+        let _ = std::fs::remove_dir_all(&state.preview_cache_dir);
+        let _ = std::fs::create_dir_all(&state.preview_cache_dir);
     }
     // 软删除所有字体记录，清空 fonts 目录
     user_fonts::delete_all(&state.pool).await?;

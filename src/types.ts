@@ -111,10 +111,9 @@ export type ImportReport = {
   skipped: number;
 };
 
-/** 预览渲染结果。`data` 是 base64 编码的 JPEG，前端直接拼成 `data:` URL 显示 */
+/** 预览渲染结果。`path` 是本地文件路径，前端用 convertFileSrc(path) 加载 */
 export type PreviewResult = {
-  mime: string;
-  data: string;
+  path: string;
   width: number;
   height: number;
 };

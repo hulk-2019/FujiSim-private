@@ -20,6 +20,7 @@ pub struct AppState {
     pub watermark_dir: PathBuf,
     pub cover_dir: PathBuf,
     pub font_dir: PathBuf,
+    pub preview_cache_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
     pub export_pool: Arc<rayon::ThreadPool>,
     /// 预览渲染专用线程池，与导出线程池隔离，避免导出任务阻塞 UI 预览响应
@@ -61,6 +62,8 @@ impl AppState {
         std::fs::create_dir_all(&cover_dir)?;
         let font_dir = data_dir.join("fonts");
         std::fs::create_dir_all(&font_dir)?;
+        let preview_cache_dir = data_dir.join("preview_cache");
+        std::fs::create_dir_all(&preview_cache_dir)?;
         let db_path = data_dir.join("library.db");
         let pool = crate::db::init_pool(&db_path).await?;
 
@@ -93,6 +96,7 @@ impl AppState {
             watermark_dir,
             cover_dir,
             font_dir,
+            preview_cache_dir,
             lut_cache: Mutex::new(HashMap::new()),
             export_pool,
             preview_pool,

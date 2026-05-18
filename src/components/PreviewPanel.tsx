@@ -47,11 +47,9 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     roRef.current = ro;
   }, []);
 
-  // 组件卸载时释放所有 Blob URL，避免浏览器侧内存泄漏
+  // 组件卸载时断开 ResizeObserver（本地文件路径无需 revokeObjectURL）
   useEffect(() => {
-    const cache = previewCache.current;
     return () => {
-      cache.forEach((v) => URL.revokeObjectURL(v.blobUrl));
       roRef.current?.disconnect();
     };
   }, []);
@@ -116,12 +114,8 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
       try {
         const r = await api.getPreview(focused.id, filter, 1280);
         if (reqId.current === myId) {
-          const blob = new Blob(
-            [Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0))],
-            { type: r.mime },
-          );
-          const blobUrl = URL.createObjectURL(blob);
-          const entry = { blobUrl, width: r.width, height: r.height };
+          const src = convertFileSrc(r.path);
+          const entry = { blobUrl: src, width: r.width, height: r.height };
           previewCache.current.set(cacheKey, entry);
           setPreview(entry);
           setPreviewSize({ width: r.width, height: r.height }, focused.id);
