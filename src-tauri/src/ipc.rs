@@ -369,11 +369,10 @@ pub async fn get_preview(
             let resized = load_and_downsample(&path, max_edge)?;
             let resized = Arc::new(resized);
 
-            // 写入缓存，超过 16 张时淘汰最早的一条
+            // 写入缓存，超过 20 张时淘汰最早的一条（FIFO/LRU）
             if let Ok(mut c) = cache.lock() {
-                if c.len() >= 16 {
-                    let evict = c.keys().next().cloned();
-                    if let Some(k) = evict { c.remove(&k); }
+                while c.len() >= 20 {
+                    c.shift_remove_index(0);
                 }
                 c.insert((asset_id, max_edge), resized.clone());
             }

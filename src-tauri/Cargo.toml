@@ -43,6 +43,7 @@ dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 rand = "0.8"
 trash = "5"
+indexmap = "2"
 
 [features]
 default = ["custom-protocol"]

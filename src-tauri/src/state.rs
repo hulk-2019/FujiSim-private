@@ -4,6 +4,7 @@ use crate::queue::TaskQueue;
 use image::{ImageBuffer, Rgb};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
@@ -34,7 +35,7 @@ pub struct AppState {
     /// 下采样后的预览底图缓存（16-bit RGB，约 6.5MB/张）。
     /// 调整滤镜参数时命中缓存可完全跳过磁盘 IO 和 RAW 解码，仅跑色彩流水线。
     /// LRU 简化为最多保留 4 张，key = (asset_id, max_edge)。
-    pub preview_cache: Arc<Mutex<HashMap<PreviewCacheKey, Arc<ImageBuffer<Rgb<u16>, Vec<u16>>>>>>,
+    pub preview_cache: Arc<Mutex<IndexMap<PreviewCacheKey, Arc<ImageBuffer<Rgb<u16>, Vec<u16>>>>>>,
     /// 导出内存预算（MB）：每个导出任务按 file_size×7 估算内存占用，
     /// 先 CAS 扣减预算再开始处理，完成后归还，防止多张大图同时处理导致 OOM。
     pub export_memory_budget: Arc<AtomicU64>,
@@ -111,7 +112,7 @@ impl AppState {
             // 封面图生成并发：逻辑核心数的一半（最少 2），与预览线程池策略一致
             thumbnail_sem: Arc::new(Semaphore::new((logical_cpus / 2).max(2))),
             exif_sem: Arc::new(tokio::sync::Semaphore::new(4)),
-            preview_cache: Arc::new(Mutex::new(HashMap::new())),
+            preview_cache: Arc::new(Mutex::new(IndexMap::new())),
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
         });
         seed_builtin_presets(&state.pool).await?;
