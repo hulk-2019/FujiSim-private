@@ -10,21 +10,18 @@ import { useStore } from "@/store";
 import { api } from "@/api";
 
 export default function App() {
-  const refreshAssets = useStore((s) => s.refreshAssets);
-  const refreshFacets = useStore((s) => s.refreshFacets);
-  const refreshPresets = useStore((s) => s.refreshPresets);
-  const refreshUserLuts = useStore((s) => s.refreshUserLuts);
-  const setThumbnailDir = useStore((s) => s.setThumbnailDir);
   const markThumbnailReady = useStore((s) => s.markThumbnailReady);
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
+    const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, setThumbnailDir, setCoverDir } = useStore.getState();
     refreshAssets();
     refreshFacets();
     refreshPresets();
     refreshUserLuts();
     api.getThumbnailDir().then(setThumbnailDir).catch(() => {});
-  }, [refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, setThumbnailDir]);
+    api.getCoverDir().then(setCoverDir).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

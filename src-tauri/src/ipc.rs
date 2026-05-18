@@ -99,7 +99,7 @@ pub async fn import_directory(
 pub async fn list_assets(
     state: State<'_, SharedState>,
     query: assets::AssetQuery,
-) -> Result<Vec<assets::Asset>> {
+) -> Result<assets::ListAssetsResult> {
     assets::list(&state.pool, &query).await
 }
 
@@ -893,66 +893,39 @@ pub async fn reset_app_data(state: State<'_, SharedState>) -> Result<()> {
     Ok(())
 }
 
-/// 提取 RAW 文件中嵌入的最大 JPEG 缩略图，直接返回 base64 编码的 JPEG。
-/// 优先读磁盘缓存（thumbnails/{id}.jpg），缓存命中时跳过解码，几乎零延迟。
-/// 缓存不存在时提取并写盘，下次直接命中。
+/// 懒加载 RAW 预览图：优先读磁盘缓存，命中时直接返回路径。
+/// 未命中时提取嵌入 JPEG（含 orientation 校正）写盘，返回路径。
+/// 前端用 convertFileSrc(path) 加载，无 base64 开销。
 #[tauri::command]
 pub async fn get_raw_thumbnail(
     state: State<'_, SharedState>,
     asset_id: i64,
-) -> Result<PreviewResult> {
+) -> Result<String> {
     let asset = assets::get(&state.pool, asset_id).await?;
-    let path = std::path::PathBuf::from(&asset.file_path);
     let cache_path = state.thumbnail_dir.join(format!("{asset_id}.jpg"));
 
-    tokio::task::spawn_blocking(move || {
-        // 磁盘缓存命中：直接读文件
-        let jpeg = if cache_path.exists() {
-            std::fs::read(&cache_path)
-                .map_err(|e| AppError::other(format!("thumbnail cache read: {e}")))?
-        } else {
-            // 提取并写盘，供下次命中
-            let bytes = processing::raw::extract_raw_thumbnail(&path)?;
-            if let Err(e) = std::fs::write(&cache_path, &bytes) {
-                tracing::warn!(asset_id, error = %e, "get_raw_thumbnail: write cache failed");
-            }
-            bytes
-        };
+    // 磁盘缓存命中：直接返回
+    if cache_path.exists() {
+        return Ok(cache_path.to_string_lossy().to_string());
+    }
 
-        let (width, height) = jpeg_dimensions(&jpeg).unwrap_or((0, 0));
-        Ok(PreviewResult {
-            mime: "image/jpeg".into(),
-            data: general_purpose::STANDARD.encode(&jpeg),
-            width,
-            height,
-        })
+    let file_path = std::path::PathBuf::from(&asset.file_path);
+    let sem = state.thumbnail_sem.clone();
+    tokio::task::spawn_blocking(move || {
+        let _permit = sem.try_acquire_owned().ok();
+        let bytes = processing::raw::extract_raw_thumbnail(&file_path)?;
+        std::fs::write(&cache_path, &bytes)
+            .map_err(|e| AppError::other(format!("thumbnail write: {e}")))?;
+        Ok(cache_path.to_string_lossy().to_string())
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
 }
 
-fn jpeg_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-    let mut i = 0usize;
-    while i + 3 < data.len() {
-        if data[i] != 0xFF {
-            break;
-        }
-        let marker = data[i + 1];
-        // SOF markers: 0xC0..=0xC3, 0xC5..=0xC7, 0xC9..=0xCB, 0xCD..=0xCF
-        if matches!(marker, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF) {
-            if i + 8 < data.len() {
-                let h = u16::from_be_bytes([data[i + 5], data[i + 6]]) as u32;
-                let w = u16::from_be_bytes([data[i + 7], data[i + 8]]) as u32;
-                return Some((w, h));
-            }
-        }
-        if i + 3 >= data.len() {
-            break;
-        }
-        let len = u16::from_be_bytes([data[i + 2], data[i + 3]]) as usize;
-        i += 2 + len;
-    }
-    None
+/// 返回所有 RAW 资产的 id 列表，供前端触发全量缩略图生成（不受分页限制）。
+#[tauri::command]
+pub async fn list_raw_asset_ids(state: State<'_, SharedState>) -> Result<Vec<i64>> {
+    assets::all_raw_ids(&state.pool).await
 }
 
 #[tauri::command]
@@ -1081,6 +1054,11 @@ pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
     if state.thumbnail_dir.exists() {
         let _ = std::fs::remove_dir_all(&state.thumbnail_dir);
         let _ = std::fs::create_dir_all(&state.thumbnail_dir);
+    }
+    // covers 目录整体清空
+    if state.cover_dir.exists() {
+        let _ = std::fs::remove_dir_all(&state.cover_dir);
+        let _ = std::fs::create_dir_all(&state.cover_dir);
     }
     // 软删除所有字体记录，清空 fonts 目录
     user_fonts::delete_all(&state.pool).await?;
@@ -1242,7 +1220,7 @@ pub async fn generate_thumbnails(
         }
     }
 
-    let thumbnail_dir = state.thumbnail_dir.clone();
+    let cover_dir = state.cover_dir.clone();
     let sem = state.thumbnail_sem.clone();
 
     tokio::task::spawn(async move {
@@ -1250,28 +1228,33 @@ pub async fn generate_thumbnails(
         for asset in raw_assets {
             let permit = sem.clone().acquire_owned().await;
             let Ok(permit) = permit else { break };
-            let thumbnail_dir = thumbnail_dir.clone();
+            let cover_dir = cover_dir.clone();
             let app = app.clone();
             handles.push(tokio::task::spawn_blocking(move || {
                 let _permit = permit;
-                let cache_path = thumbnail_dir.join(format!("{}.jpg", asset.id));
-                if cache_path.exists() {
+                let cover_path = cover_dir.join(format!("{}.jpg", asset.id));
+
+                // 幂等：cover 文件已存在则跳过
+                if cover_path.exists() {
                     let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
                     return;
                 }
+
                 let src = std::path::PathBuf::from(&asset.file_path);
-                match processing::raw::extract_raw_thumbnail(&src) {
-                    Ok(jpeg) => {
-                        if let Err(e) = std::fs::write(&cache_path, &jpeg) {
-                            tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: write failed");
-                            return;
-                        }
-                        let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
-                    }
+                let cover_jpeg = match processing::raw::extract_cover_fast(&src, 400) {
+                    Ok(c) => c,
                     Err(e) => {
-                        tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: extract failed");
+                        tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: cover extract failed");
+                        return;
                     }
+                };
+
+                if let Err(e) = std::fs::write(&cover_path, &cover_jpeg) {
+                    tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: write cover failed");
+                    return;
                 }
+
+                let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
             }));
         }
         for h in handles {
@@ -1287,4 +1270,10 @@ pub async fn generate_thumbnails(
 #[tauri::command]
 pub async fn get_thumbnail_dir(state: State<'_, SharedState>) -> Result<String> {
     Ok(state.thumbnail_dir.to_string_lossy().to_string())
+}
+
+/// 返回封面图缓存目录的绝对路径，供前端拼接 convertFileSrc 使用。
+#[tauri::command]
+pub async fn get_cover_dir(state: State<'_, SharedState>) -> Result<String> {
+    Ok(state.cover_dir.to_string_lossy().to_string())
 }

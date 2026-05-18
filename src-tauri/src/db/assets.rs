@@ -152,6 +152,12 @@ pub async fn insert_many(pool: &SqlitePool, items: &[NewAsset]) -> Result<usize>
     Ok(inserted)
 }
 
+#[derive(Debug, Serialize)]
+pub struct ListAssetsResult {
+    pub items: Vec<Asset>,
+    pub total: i64,
+}
+
 /// 按 [`AssetQuery`] 动态拼 SQL 查询资产列表。
 ///
 /// 之所以手动拼 SQL 而不是用 `sqlx::query!` 宏：
@@ -160,7 +166,7 @@ pub async fn insert_many(pool: &SqlitePool, items: &[NewAsset]) -> Result<usize>
 ///
 /// 用户输入只通过 `?` 占位符 + `bind` 进入语句，不会拼接到 SQL 文本里，
 /// 所以即使 `search` 含 `'` 或 `;` 也不会造成 SQL 注入。
-pub async fn list(pool: &SqlitePool, q: &AssetQuery) -> Result<Vec<Asset>> {
+pub async fn list(pool: &SqlitePool, q: &AssetQuery) -> Result<ListAssetsResult> {
     let mut sql = String::from("SELECT a.* FROM assets a");
     let mut where_clauses: Vec<String> = Vec::new();
     let mut binds: Vec<Bind> = Vec::new();
@@ -220,20 +226,34 @@ pub async fn list(pool: &SqlitePool, q: &AssetQuery) -> Result<Vec<Asset>> {
         SortDir::Asc => "ASC",
         SortDir::Desc => "DESC",
     };
+    // count query：从已构建的 sql 派生，截取 FROM 之后的部分（含 JOIN + WHERE）
+    // 此时 sql = "SELECT a.* FROM assets a [JOIN] [WHERE]"，ORDER BY 尚未追加
+    let from_pos = sql.find(" FROM ").expect("sql always contains FROM");
+    let count_sql = format!("SELECT COUNT(*){}", &sql[from_pos..]);
+    let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+
     sql.push_str(&format!(" ORDER BY {} {} NULLS LAST", sort_col, sort_dir));
+    for b in &binds {
+        count_query = match b {
+            Bind::I64(v) => count_query.bind(*v),
+            Bind::Str(v) => count_query.bind(v.clone()),
+        };
+    }
+    let (total,) = count_query.fetch_one(pool).await?;
 
     let limit = q.limit.unwrap_or(500);
     let offset = q.offset.unwrap_or(0);
     sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
 
-    let mut query = sqlx::query_as::<_, Asset>(&sql);
+    let mut items_query = sqlx::query_as::<_, Asset>(&sql);
     for b in binds {
-        query = match b {
-            Bind::I64(v) => query.bind(v),
-            Bind::Str(v) => query.bind(v),
+        items_query = match b {
+            Bind::I64(v) => items_query.bind(v),
+            Bind::Str(v) => items_query.bind(v),
         };
     }
-    Ok(query.fetch_all(pool).await?)
+    let items = items_query.fetch_all(pool).await?;
+    Ok(ListAssetsResult { items, total })
 }
 
 /// 一个 trait object 替身，把 i64/字符串两种 bind 值塞进同一个 `Vec`。
@@ -337,6 +357,13 @@ pub struct LibraryStats {
     pub by_camera: Vec<(String, i64)>,
 }
 
+pub async fn all_raw_ids(pool: &SqlitePool) -> Result<Vec<i64>> {
+    let rows: Vec<(i64,)> = sqlx::query_as("SELECT id FROM assets WHERE is_raw = 1")
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
 pub async fn stats(pool: &SqlitePool) -> Result<LibraryStats> {
     let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM assets").fetch_one(pool).await?;
     let by_camera: Vec<(String, i64)> = sqlx::query_as(
@@ -346,6 +373,7 @@ pub async fn stats(pool: &SqlitePool) -> Result<LibraryStats> {
     .await?;
     Ok(LibraryStats { total, by_camera })
 }
+
 
 #[allow(dead_code)]
 pub fn _placeholder_time() -> DateTime<Utc> {

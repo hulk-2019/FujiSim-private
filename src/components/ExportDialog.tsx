@@ -40,7 +40,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const focusedId = useStore((s) => s.focusedId);
   const assets = useStore((s) => s.assets);
   const watermark = useStore((s) => s.watermark);
-  const focusedAsset = assets.find((a) => a.id === focusedId) ?? null;
+  const focusedAsset = assets.find((a) => a?.id === focusedId) ?? null;
   const [format, setFormat] = useState<ExportFormat>("jpeg");
   const [quality, setQuality] = useState(92);
   const [destKind, setDestKind] = useState<"subfolder" | "path">("subfolder");
@@ -92,7 +92,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
     if (watermark.enabled && watermark.text.trim()) {
       perAssetWatermark = [];
       for (const id of targetIds) {
-        const asset = assets.find((a) => a.id === id);
+        const asset = assets.find((a) => a?.id === id);
         let previewW: number;
         let previewH: number;
         const { previewSize, previewSizeAssetId } = useStore.getState();

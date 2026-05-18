@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { ImageIcon, Eye, EyeOff } from "lucide-react";
 import { api } from "@/api";
-import type { PreviewResult, WatermarkSettings } from "@/types";
+import type { WatermarkSettings } from "@/types";
 import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/utils";
@@ -17,52 +17,52 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const setPreviewSize = useStore((s) => s.setPreviewSize);
   const setPreviewContainerSize = useStore((s) => s.setPreviewContainerSize);
   const previewContainerSize = useStore((s) => s.previewContainerSize);
-  const focused = assets.find((a) => a.id === focusedId) ?? null;
+  const focused = assets.find((a) => a?.id === focusedId) ?? null;
+  const rawThumbnailReady = useStore((s) => s.rawThumbnailReady);
+  const thumbnailDir = useStore((s) => s.thumbnailDir);
 
   const [preview, setPreview] = useState<{ blobUrl: string; width: number; height: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [originalPreview, setOriginalPreview] = useState<PreviewResult | null>(null);
-  const [originalLoading, setOriginalLoading] = useState(false);
-  const [originalError, setOriginalError] = useState<string | null>(null);
   const [thumbSrc, setThumbSrc] = useState<string | null>(null);
-  const rawThumbnailReady = useStore((s) => s.rawThumbnailReady);
-  const thumbnailDir = useStore((s) => s.thumbnailDir);
   const reqId = useRef(0);
   const previewCache = useRef<Map<string, { blobUrl: string; width: number; height: number }>>(new Map());
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
+
+  const containerCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    roRef.current?.disconnect();
+    roRef.current = null;
+    containerRef.current = el;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      requestAnimationFrame(() => {
+        const { width, height } = entries[0].contentRect;
+        if (width > 0 && height > 0)
+          setPreviewContainerSize({ width: Math.round(width), height: Math.round(height) });
+      });
+    });
+    ro.observe(el);
+    roRef.current = ro;
+  }, []);
 
   // 组件卸载时释放所有 Blob URL，避免浏览器侧内存泄漏
   useEffect(() => {
     const cache = previewCache.current;
-    return () => { cache.forEach((v) => URL.revokeObjectURL(v.blobUrl)); };
+    return () => {
+      cache.forEach((v) => URL.revokeObjectURL(v.blobUrl));
+      roRef.current?.disconnect();
+    };
   }, []);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0)
-        setPreviewContainerSize({ width: Math.round(width), height: Math.round(height) });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [preview, setPreviewContainerSize]);
-
-  useEffect(() => {
-    setOriginalPreview(null);
-    setOriginalError(null);
-  }, [focused?.id]);
-
-  // Phase 1: show thumbnail immediately, no backend call
   useEffect(() => {
     if (!focused) {
       setThumbSrc(null);
       return;
     }
     if (focused.is_raw) {
+      // 优先用 thumbnailDir 拼接路径（rawThumbnailReady 标记已生成）
       if (rawThumbnailReady.has(focused.id) && thumbnailDir) {
         try {
           setThumbSrc(convertFileSrc(`${thumbnailDir}/${focused.id}.jpg`));
@@ -70,7 +70,17 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           setThumbSrc(null);
         }
       } else {
-        setThumbSrc(null);
+        // 懒加载：调用后端提取并写盘，返回路径
+        let cancelled = false;
+        const handle = setTimeout(() => {
+          api.getRawThumbnail(focused.id)
+            .then((path) => {
+              if (cancelled) return;
+              try { setThumbSrc(convertFileSrc(path)); } catch { setThumbSrc(null); }
+            })
+            .catch(() => { if (!cancelled) setThumbSrc(null); });
+        }, 150);
+        return () => { cancelled = true; clearTimeout(handle); };
       }
     } else {
       try {
@@ -129,16 +139,11 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
 
   async function handleShowOriginal() {
     setShowOriginal(true);
-    if (focused?.is_raw && !originalPreview && !originalLoading) {
-      setOriginalLoading(true);
-      setOriginalError(null);
+    if (focused?.is_raw && !(rawThumbnailReady.has(focused.id) && thumbnailDir)) {
       try {
-        const r = await api.getRawThumbnail(focused.id);
-        setOriginalPreview(r);
-      } catch (e) {
-        setOriginalError(String(e));
-      } finally {
-        setOriginalLoading(false);
+        await api.getRawThumbnail(focused.id);
+      } catch {
+        // 静默失败
       }
     }
   }
@@ -155,8 +160,9 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   }
 
   const previewSrc = preview?.blobUrl ?? null;
+  // originalSrc 用 thumbSrc（懒加载后已确认文件存在），非 RAW 直接用原文件
   const originalSrc = focused.is_raw
-    ? (originalPreview ? `data:${originalPreview.mime};base64,${originalPreview.data}` : null)
+    ? thumbSrc
     : convertFileSrc(focused.file_path);
 
   return (
@@ -192,21 +198,9 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 className="max-w-full max-h-full object-contain shadow-2xl no-drag"
               />
             )}
-            {showOriginal && originalLoading && (
-              <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
-                {t("previewPanel.loadingOriginal")}
-              </div>
-            )}
-            {showOriginal && originalError && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-zinc-400 text-sm bg-zinc-900/80 px-4 py-2 rounded border border-zinc-800">
-                  {originalError}
-                </div>
-              </div>
-            )}
             {!showOriginal && (previewSrc ?? thumbSrc) && (
               <div
-                ref={containerRef}
+                ref={containerCallbackRef}
                 className="relative max-w-full max-h-full shadow-2xl"
                 style={
                   preview

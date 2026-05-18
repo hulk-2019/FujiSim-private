@@ -417,3 +417,36 @@ impl<'a> Tiff<'a> {
         }
     }
 }
+
+/// 从 RAW 文件提取嵌入 JPEG，缩放到指定长边后返回 JPEG 字节。
+///
+/// 跳过 orientation 校正（400px 封面图旋转偏差可接受），只做：
+/// 提取 → 解码 → Triangle 缩放 → 编码，共 1次解码 + 1次编码。
+pub fn extract_cover_fast(path: &Path, max_edge: u32) -> Result<Vec<u8>> {
+    let data = std::fs::read(path)?;
+
+    let jpeg = if let Ok(j) = extract_thumb_rsraw(&data) {
+        j
+    } else {
+        extract_thumb_tiff(&data)?
+    };
+
+    let img = image::load_from_memory_with_format(&jpeg, image::ImageFormat::Jpeg)
+        .map_err(|e| AppError::other(format!("cover decode: {e}")))?;
+
+    let (w, h) = (img.width(), img.height());
+    let resized = if w.max(h) > max_edge {
+        let scale = max_edge as f32 / w.max(h) as f32;
+        let nw = ((w as f32 * scale).round() as u32).max(1);
+        let nh = ((h as f32 * scale).round() as u32).max(1);
+        img.resize(nw, nh, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    resized
+        .write_to(&mut buf, image::ImageFormat::Jpeg)
+        .map_err(|e| AppError::other(format!("cover encode: {e}")))?;
+    Ok(buf.into_inner())
+}

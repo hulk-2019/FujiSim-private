@@ -32,7 +32,6 @@ export function Sidebar() {
   const refreshFacets = useStore((s) => s.refreshFacets);
   const setImporting = useStore((s) => s.setImporting);
   const selectedIds = useStore((s) => s.selectedIds);
-  const setProgress = useStore((s) => s.setProgress);
   const theme = useStore((s) => s.theme);
   const toggleTheme = useStore((s) => s.toggleTheme);
   const toggleLanguage = useStore((s) => s.toggleLanguage);
@@ -45,14 +44,14 @@ export function Sidebar() {
   const [clearCacheOpen, setClearCacheOpen] = useState(false);
 
   useEffect(() => {
-    refreshAlbums();
-  }, [refreshAlbums]);
+    useStore.getState().refreshAlbums();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     let unlisten: UnlistenFn | undefined;
     listen<BatchProgress>("export:progress", (e) => {
-      setProgress(e.payload);
+      useStore.getState().setProgress(e.payload);
     }).then((u) => {
       if (cancelled) {
         u();
@@ -64,7 +63,7 @@ export function Sidebar() {
       cancelled = true;
       unlisten?.();
     };
-  }, [setProgress]);
+  }, []);
 
   const ids = useMemo(() => Array.from(selectedIds), [selectedIds]);
   void ids; // retained for future batch ops

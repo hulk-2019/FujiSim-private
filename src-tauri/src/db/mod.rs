@@ -66,6 +66,8 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE assets DROP COLUMN display_width",
         "ALTER TABLE assets DROP COLUMN display_height",
         "ALTER TABLE batch_tasks DROP COLUMN watermark_layer_json",
+        "ALTER TABLE assets DROP COLUMN thumbnail_path",
+        "ALTER TABLE assets DROP COLUMN cover_path",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }

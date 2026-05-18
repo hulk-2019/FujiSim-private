@@ -18,6 +18,7 @@ pub struct AppState {
     pub lut_dir: PathBuf,
     /// 水印层 PNG 文件目录：<data_dir>/watermarks/<task_id>.png
     pub watermark_dir: PathBuf,
+    pub cover_dir: PathBuf,
     pub font_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
     pub export_pool: Arc<rayon::ThreadPool>,
@@ -54,6 +55,8 @@ impl AppState {
         std::fs::create_dir_all(&lut_dir)?;
         let watermark_dir = data_dir.join("watermarks");
         std::fs::create_dir_all(&watermark_dir)?;
+        let cover_dir = data_dir.join("covers");
+        std::fs::create_dir_all(&cover_dir)?;
         let font_dir = data_dir.join("fonts");
         std::fs::create_dir_all(&font_dir)?;
         let db_path = data_dir.join("library.db");
@@ -86,12 +89,14 @@ impl AppState {
             thumbnail_dir,
             lut_dir,
             watermark_dir,
+            cover_dir,
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),
             export_pool,
             preview_pool,
             task_queue: TaskQueue::new(2),
-            thumbnail_sem: Arc::new(Semaphore::new(2)),
+            // 封面图生成并发：逻辑核心数的一半（最少 2），与预览线程池策略一致
+            thumbnail_sem: Arc::new(Semaphore::new((logical_cpus / 2).max(2))),
             preview_cache: Arc::new(Mutex::new(HashMap::new())),
         });
         seed_builtin_presets(&state.pool).await?;

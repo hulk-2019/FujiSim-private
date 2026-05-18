@@ -70,7 +70,9 @@ type AppState = {
   toggleLanguage: () => void;
 
   // ===== 资产列表与查询 =====
-  assets: Asset[];
+  assets: (Asset | undefined)[];
+  totalCount: number;
+  isLoadingPage: Set<number>;
   loading: boolean;
   query: AssetQuery;
   /** 当前选中（多选）的资产 id 集合，用于批操作 */
@@ -117,9 +119,12 @@ type AppState = {
   // ===== RAW 缩略图缓存 =====
   /** 后端缩略图目录的绝对路径，App 启动时从后端获取一次 */
   thumbnailDir: string | null;
-  /** 已确认磁盘上有 {id}.jpg 缩略图文件的 asset id 集合 */
+  /** 后端封面图目录的绝对路径，App 启动时从后端获取一次 */
+  coverDir: string | null;
+  /** 已确认磁盘上有封面图文件的 asset id 集合 */
   rawThumbnailReady: Set<number>;
   setThumbnailDir: (dir: string) => void;
+  setCoverDir: (dir: string) => void;
   markThumbnailReady: (assetId: number) => void;
   /** 清空 rawThumbnailReady（清除缓存后调用） */
   clearThumbnailReady: () => void;
@@ -128,6 +133,7 @@ type AppState = {
   /** 修改查询条件并立即刷新资产列表 */
   setQuery: (q: AssetQuery) => Promise<void>;
   refreshAssets: () => Promise<void>;
+  loadPage: (offset: number) => Promise<void>;
   /** 刷新筛选下拉里的"相机列表 / 富士预设名"等只读数据 */
   refreshFacets: () => Promise<void>;
   refreshPresets: () => Promise<void>;
@@ -188,8 +194,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   assets: [],
+  totalCount: 0,
+  isLoadingPage: new Set<number>(),
   loading: false,
-  query: { sort_by: "date_taken", sort_dir: "desc", limit: 100 },
+  query: { sort_by: "date_taken", sort_dir: "desc" },
   selectedIds: new Set(),
   focusedId: null,
   filter: { ...DEFAULT_FILTER },
@@ -212,6 +220,7 @@ export const useStore = create<AppState>((set, get) => ({
   dismissedTaskIds: new Set(),
   progress: null,
   thumbnailDir: null,
+  coverDir: null,
   rawThumbnailReady: new Set<number>(),
 
   setQuery: async (q) => {
@@ -220,11 +229,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   refreshAssets: async () => {
-    set({ loading: true });
+    set({ loading: true, assets: [], totalCount: 0, isLoadingPage: new Set() });
     try {
-      const list = await api.listAssets(get().query);
-      // 收敛 selectedIds：把已被删除/筛掉的 id 剔除，保持选择集合始终是当前列表的子集
-      const validIds = new Set(list.map((a) => a.id));
+      const { items, total } = await api.listAssets({ ...get().query, limit: 60, offset: 0 });
+      const arr: (Asset | undefined)[] = Array(total).fill(undefined);
+      items.forEach((item, i) => { arr[i] = item; });
+
+      const validIds = new Set(items.map((a) => a.id));
       const prevSelected = get().selectedIds;
       let nextSelected = prevSelected;
       if (prevSelected.size > 0) {
@@ -235,32 +246,63 @@ export const useStore = create<AppState>((set, get) => ({
         if (filtered.size !== prevSelected.size) nextSelected = filtered;
       }
 
-      // 收敛 focusedId：当前聚焦失效时，优先聚焦还在选中集合里的某一项（删除一批后能继续看下一张），
-      // 否则退回到列表首张；列表为空则置空。
       const focused = get().focusedId;
       let nextFocused: number | null = focused;
       if (focused == null || !validIds.has(focused)) {
         nextFocused =
           nextSelected.size > 0
             ? (nextSelected.values().next().value ?? null)
-            : (list[0]?.id ?? null);
+            : (items[0]?.id ?? null);
       }
 
       set({
-        assets: list,
+        assets: arr,
+        totalCount: total,
+        isLoadingPage: new Set(),
         loading: false,
         selectedIds: nextSelected,
         focusedId: nextFocused,
       });
 
-      // 后台预生成 RAW 缩略图（fire-and-forget，延迟 600ms 让 UI 先渲染完）
-      const rawIds = list.filter((a) => Boolean(a.is_raw)).map((a) => a.id);
+      const rawIds = items.filter((a) => Boolean(a.is_raw)).map((a) => a.id);
       if (rawIds.length > 0) {
-        setTimeout(() => api.generateThumbnails(rawIds).catch(() => {}), 600);
+        // 用全量 RAW id 触发生成，避免只处理当前页的 60 条
+        setTimeout(() => {
+          api.listRawAssetIds()
+            .then((ids) => api.generateThumbnails(ids))
+            .catch(() => {});
+        }, 600);
       }
     } catch (e) {
       console.error("refreshAssets failed", e);
       set({ loading: false });
+    }
+  },
+
+  loadPage: async (offset: number) => {
+    const { isLoadingPage, query } = get();
+    if (isLoadingPage.has(offset)) return;
+    const next = new Set(isLoadingPage);
+    next.add(offset);
+    set({ isLoadingPage: next });
+    try {
+      const { items, total } = await api.listAssets({ ...query, limit: 60, offset });
+      set((state) => {
+        const arr: (Asset | undefined)[] = state.assets.length === total
+          ? [...state.assets]
+          : Object.assign(Array(total).fill(undefined), state.assets.slice(0, total));
+        items.forEach((item, i) => { arr[offset + i] = item; });
+        const nextLoading = new Set(state.isLoadingPage);
+        nextLoading.delete(offset);
+        return { assets: arr, totalCount: total, isLoadingPage: nextLoading };
+      });
+    } catch (e) {
+      console.error("loadPage failed", e);
+      set((state) => {
+        const nextLoading = new Set(state.isLoadingPage);
+        nextLoading.delete(offset);
+        return { isLoadingPage: nextLoading };
+      });
     }
   },
 
@@ -300,23 +342,29 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   selectRange: (id) => {
-    // Shift 框选：以 focusedId 为锚点找到起/止索引，把区间内所有资产纳入选中集
     const { assets, focusedId } = get();
     if (!focusedId) {
       get().toggleSelect(id, false);
       return;
     }
-    const a = assets.findIndex((x) => x.id === focusedId);
-    const b = assets.findIndex((x) => x.id === id);
+    const a = assets.findIndex((x) => x?.id === focusedId);
+    const b = assets.findIndex((x) => x?.id === id);
     if (a < 0 || b < 0) return;
     const [lo, hi] = a < b ? [a, b] : [b, a];
     const cur = new Set(get().selectedIds);
-    for (let i = lo; i <= hi; i++) cur.add(assets[i].id);
+    for (let i = lo; i <= hi; i++) {
+      const asset = assets[i];
+      if (asset !== undefined) cur.add(asset.id);
+    }
     set({ selectedIds: cur });
   },
 
   clearSelection: () => set({ selectedIds: new Set() }),
-  selectAll: () => set({ selectedIds: new Set(get().assets.map((a) => a.id)) }),
+  selectAll: () => set({
+    selectedIds: new Set(
+      get().assets.filter((a): a is Asset => a !== undefined).map((a) => a.id)
+    ),
+  }),
   focusAsset: (id) => set({ focusedId: id }),
 
   setFilter: (patch) => set({ filter: { ...get().filter, ...patch } }),
@@ -439,6 +487,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setSelectedWatermarkPresetId: (id) => set({ selectedWatermarkPresetId: id }),
   setThumbnailDir: (dir) => set({ thumbnailDir: dir }),
+  setCoverDir: (dir) => set({ coverDir: dir }),
   markThumbnailReady: (assetId) => {
     const next = new Set(get().rawThumbnailReady);
     next.add(assetId);

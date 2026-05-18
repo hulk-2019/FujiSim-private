@@ -37,7 +37,7 @@ export const api = {
   /** 批量导入用户手动选择的图片文件（不递归）。传 `albumId` 时同样挂到相册。 */
   importFiles: (paths: string[], albumId?: number | null) =>
     invoke<ImportReport>("import_files", { paths, albumId: albumId ?? null }),
-  listAssets: (query: AssetQuery = {}) => invoke<Asset[]>("list_assets", { query }),
+  listAssets: (query: AssetQuery = {}) => invoke<{ items: Asset[]; total: number }>("list_assets", { query }),
   getAsset: (id: number) => invoke<Asset>("get_asset", { id }),
   libraryStats: () => invoke<LibraryStats>("library_stats"),
   distinctCameras: () => invoke<string[]>("distinct_cameras"),
@@ -92,12 +92,18 @@ export const api = {
   getPreview: (assetId: number, settings: FilterSettings | null, maxEdge?: number) =>
     invoke<PreviewResult>("get_preview", { assetId, settings, maxEdge }),
 
-  /** 提取 RAW 文件嵌入的最大 JPEG 缩略图，速度远快于完整解码。 */
+  /** 懒加载 RAW 预览图，返回磁盘绝对路径，用 convertFileSrc(path) 加载。 */
   getRawThumbnail: (assetId: number) =>
-    invoke<PreviewResult>("get_raw_thumbnail", { assetId }),
+    invoke<string>("get_raw_thumbnail", { assetId }),
 
   /** 返回缩略图缓存目录的绝对路径（macOS 通常为 ~/Library/Application Support/FujiSim/thumbnails）。 */
   getThumbnailDir: () => invoke<string>("get_thumbnail_dir"),
+
+  /** 返回封面图缓存目录的绝对路径（macOS 通常为 ~/Library/Application Support/FujiSim/covers）。 */
+  getCoverDir: () => invoke<string>("get_cover_dir"),
+
+  /** 返回所有 RAW 资产的 id 列表，不受分页限制，用于触发全量缩略图生成。 */
+  listRawAssetIds: () => invoke<number[]>("list_raw_asset_ids"),
 
   /**
    * 批量为 RAW 资产生成磁盘缩略图缓存（fire-and-forget）。

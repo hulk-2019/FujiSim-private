@@ -55,7 +55,7 @@ export function FilterPanel() {
   const refreshUserLuts = useStore((s) => s.refreshUserLuts);
   const assets = useStore((s) => s.assets);
   const focusedId = useStore((s) => s.focusedId);
-  const focused = assets.find((a) => a.id === focusedId) ?? null;
+  const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -63,7 +63,8 @@ export function FilterPanel() {
 
   useEffect(() => {
     refreshPresets();
-  }, [refreshPresets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedValue = (() => {
     if (filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path) {

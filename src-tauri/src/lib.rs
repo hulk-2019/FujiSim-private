@@ -88,6 +88,8 @@ pub fn run() {
             ipc::get_preview,
             ipc::get_raw_thumbnail,
             ipc::get_thumbnail_dir,
+            ipc::get_cover_dir,
+            ipc::list_raw_asset_ids,
             ipc::generate_thumbnails,
             ipc::start_batch_export,
             ipc::get_task,
