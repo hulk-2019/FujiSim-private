@@ -96,6 +96,7 @@ pub fn run() {
             ipc::get_thumbnail_dir,
             ipc::get_cover_dir,
             ipc::set_cover_concurrency,
+            ipc::enqueue_cover_tasks,
             ipc::start_batch_export,
             ipc::get_task,
             ipc::list_fuji_simulations,

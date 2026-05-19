@@ -293,6 +293,13 @@ export const useStore = create<AppState>((set, get) => ({
         nextLoading.delete(offset);
         return { assets: arr, totalCount: total, isLoadingPage: nextLoading };
       });
+      // 把当前页中缺少封面的 RAW/DNG 资产推入全局封面生成队列
+      const needsCover = items
+        .filter((a) => a.is_raw && !a.cover_path)
+        .map((a) => a.id);
+      if (needsCover.length > 0) {
+        api.enqueueCoverTasks(needsCover).catch(() => {});
+      }
     } catch (e) {
       console.error("loadPage failed", e);
       set((state) => {

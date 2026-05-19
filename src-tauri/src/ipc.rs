@@ -92,14 +92,6 @@ pub async fn import_directory(
     };
     let _ = app.emit("import:done", &report);
     start_exif_worker(state.inner().clone(), app.clone());
-    let raw_ids: Vec<i64> = {
-        let paths: Vec<String> = scan.items.iter()
-            .filter(|a| a.is_raw)
-            .map(|a| a.file_path.clone())
-            .collect();
-        assets::ids_by_paths(&state.pool, &paths).await.unwrap_or_default()
-    };
-    state.cover_queue.enqueue(raw_ids, state.inner().clone(), app);
     Ok(report)
 }
 
@@ -806,14 +798,6 @@ pub async fn import_files(
     };
     let _ = app.emit("import:done", &report);
     start_exif_worker(state.inner().clone(), app.clone());
-    let raw_ids: Vec<i64> = {
-        let paths: Vec<String> = scan.items.iter()
-            .filter(|a| a.is_raw)
-            .map(|a| a.file_path.clone())
-            .collect();
-        assets::ids_by_paths(&state.pool, &paths).await.unwrap_or_default()
-    };
-    state.cover_queue.enqueue(raw_ids, state.inner().clone(), app);
     Ok(report)
 }
 
@@ -1372,5 +1356,17 @@ pub async fn get_cover_dir(state: State<'_, SharedState>) -> Result<String> {
 #[tauri::command]
 pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> Result<()> {
     state.cover_queue.set_concurrency(n);
+    Ok(())
+}
+
+/// 分页加载后，前端把当前页中缺少封面的 RAW/DNG 资产 id 推入全局封面生成队列。
+/// 队列内置去重，同一 asset_id 不会被重复处理。
+#[tauri::command]
+pub async fn enqueue_cover_tasks(
+    state: State<'_, SharedState>,
+    app: tauri::AppHandle,
+    asset_ids: Vec<i64>,
+) -> Result<()> {
+    state.cover_queue.enqueue(asset_ids, state.inner().clone(), app);
     Ok(())
 }
