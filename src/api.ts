@@ -112,15 +112,8 @@ export const api = {
   /** 返回封面图缓存目录的绝对路径（macOS 通常为 ~/Library/Application Support/FujiSim/covers）。 */
   getCoverDir: () => invoke<string>("get_cover_dir"),
 
-  /** 返回所有 RAW 资产的 id 列表，不受分页限制，用于触发全量缩略图生成。 */
-  listRawAssetIds: () => invoke<number[]>("list_raw_asset_ids"),
-
-  /**
-   * 批量为 RAW 资产生成磁盘缩略图缓存（fire-and-forget）。
-   * 每张完成后后端推送 `thumbnail:done` 事件；全部完成后推送 `thumbnail:all_done`。
-   */
-  generateThumbnails: (assetIds: number[]) =>
-    invoke<void>("generate_thumbnails", { assetIds }),
+  setCoverConcurrency: (n: number) =>
+    invoke<void>("set_cover_concurrency", { n }),
 
   /**
    * 启动批量导出。返回新建的 task_id；
