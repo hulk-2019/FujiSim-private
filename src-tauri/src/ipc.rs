@@ -98,9 +98,18 @@ pub async fn import_directory(
 #[tauri::command]
 pub async fn list_assets(
     state: State<'_, SharedState>,
+    app: tauri::AppHandle,
     query: assets::AssetQuery,
 ) -> Result<assets::ListAssetsResult> {
-    assets::list(&state.pool, &query).await
+    let result = assets::list(&state.pool, &query).await?;
+    let ids: Vec<i64> = result.items.iter()
+        .filter(|a| a.is_raw != 0 && a.cover_path.is_none())
+        .map(|a| a.id)
+        .collect();
+    if !ids.is_empty() {
+        state.cover_queue.enqueue(ids, state.inner().clone(), app);
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1356,17 +1365,5 @@ pub async fn get_cover_dir(state: State<'_, SharedState>) -> Result<String> {
 #[tauri::command]
 pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> Result<()> {
     state.cover_queue.set_concurrency(n);
-    Ok(())
-}
-
-/// 分页加载后，前端把当前页中缺少封面的 RAW/DNG 资产 id 推入全局封面生成队列。
-/// 队列内置去重，同一 asset_id 不会被重复处理。
-#[tauri::command]
-pub async fn enqueue_cover_tasks(
-    state: State<'_, SharedState>,
-    app: tauri::AppHandle,
-    asset_ids: Vec<i64>,
-) -> Result<()> {
-    state.cover_queue.enqueue(asset_ids, state.inner().clone(), app);
     Ok(())
 }

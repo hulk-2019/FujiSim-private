@@ -115,10 +115,6 @@ export const api = {
   setCoverConcurrency: (n: number) =>
     invoke<void>("set_cover_concurrency", { n }),
 
-  /** 把当前页中缺少封面的 RAW/DNG 资产 id 推入全局封面生成队列（去重，fire-and-forget）。 */
-  enqueueCoverTasks: (assetIds: number[]) =>
-    invoke<void>("enqueue_cover_tasks", { assetIds }),
-
   /**
    * 启动批量导出。返回新建的 task_id；
    * 实际进度通过 `export:progress` Tauri Event 推送，需要在调用方提前 `listen`。
