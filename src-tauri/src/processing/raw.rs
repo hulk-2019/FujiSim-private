@@ -194,16 +194,29 @@ fn apply_orientation_rgb16(
     img: ImageBuffer<Rgb<u16>, Vec<u16>>,
     orientation: u32,
 ) -> ImageBuffer<Rgb<u16>, Vec<u16>> {
-    match orientation {
-        2 => image::imageops::flip_horizontal(&img),
-        3 => image::imageops::rotate180(&img),
-        4 => image::imageops::flip_vertical(&img),
-        5 => image::imageops::flip_horizontal(&image::imageops::rotate90(&img)),
-        6 => image::imageops::rotate90(&img),
-        7 => image::imageops::flip_horizontal(&image::imageops::rotate270(&img)),
-        8 => image::imageops::rotate270(&img),
-        _ => img,
+    if orientation <= 1 {
+        return img;
     }
+    let transform = |img: &ImageBuffer<Rgb<u16>, Vec<u16>>| -> Option<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+        use libvips::ops::{Angle, Direction};
+        let vimg = crate::vips_io::rgb16_to_vips(img).ok()?;
+        let rotated = match orientation {
+            2 => libvips::ops::flip(&vimg, Direction::Horizontal).ok()?,
+            3 => libvips::ops::rot(&vimg, Angle::D180).ok()?,
+            4 => libvips::ops::flip(&vimg, Direction::Vertical).ok()?,
+            5 => libvips::ops::rot(&vimg, Angle::D90)
+                    .ok()
+                    .and_then(|r| libvips::ops::flip(&r, Direction::Horizontal).ok())?,
+            6 => libvips::ops::rot(&vimg, Angle::D90).ok()?,
+            7 => libvips::ops::rot(&vimg, Angle::D270)
+                    .ok()
+                    .and_then(|r| libvips::ops::flip(&r, Direction::Horizontal).ok())?,
+            8 => libvips::ops::rot(&vimg, Angle::D270).ok()?,
+            _ => return None,
+        };
+        crate::vips_io::vips_to_rgb16(&rotated).ok()
+    };
+    transform(&img).unwrap_or(img)
 }
 
 fn decode_with_libraw(data: &[u8], max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
