@@ -56,6 +56,10 @@ pub enum AppError {
     #[error("unsupported format: {0}")]
     Unsupported(String),
 
+    /// libvips 操作失败（解码、变换、写出等）
+    #[error("vips: {0}")]
+    Vips(String),
+
     /// 兜底错误，用于无法归类到上面任一桶的业务异常
     #[error("{0}")]
     Other(String),

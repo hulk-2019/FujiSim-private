@@ -24,6 +24,7 @@ pub mod ipc;
 pub mod processing;
 pub mod queue;
 pub mod state;
+pub mod vips_io;
 
 /// Tauri 应用主入口。
 ///
