@@ -10,18 +10,25 @@ use crate::state::SharedState;
 pub struct CoverQueue {
     inflight: Mutex<HashSet<i64>>,
     concurrency: AtomicUsize,
+    /// 全局信号量：跨所有 enqueue 调用共享，确保同时运行的 spawn_blocking 任务数
+    /// 不超过 concurrency 上限，防止多次分页触发各自独立的并发窗口叠加。
+    sem: Arc<Semaphore>,
 }
 
 impl CoverQueue {
     pub fn new(concurrency: usize) -> Self {
+        let n = concurrency.clamp(2, 4);
         Self {
             inflight: Mutex::new(HashSet::new()),
-            concurrency: AtomicUsize::new(concurrency.clamp(2, 4)),
+            concurrency: AtomicUsize::new(n),
+            sem: Arc::new(Semaphore::new(n)),
         }
     }
 
     pub fn set_concurrency(&self, n: usize) {
         self.concurrency.store(n.clamp(2, 4), Ordering::Relaxed);
+        // 注意：Semaphore 容量不可动态调整，set_concurrency 仅更新 AtomicUsize 供参考，
+        // 实际并发上限由初始化时的 sem 容量决定。
     }
 
     pub fn concurrency(&self) -> usize {
@@ -41,12 +48,11 @@ impl CoverQueue {
 
         let queue = self.clone();
         tokio::task::spawn(async move {
-            let concurrency = queue.concurrency();
-            let sem = Arc::new(Semaphore::new(concurrency));
             let mut set = tokio::task::JoinSet::new();
 
             for asset_id in new_ids {
-                let permit = sem.clone().acquire_owned().await;
+                // 从全局 sem 获取 permit，跨所有 enqueue 批次共享并发上限
+                let permit = queue.sem.clone().acquire_owned().await;
                 let Ok(permit) = permit else { break };
                 let state = state.clone();
                 let app = app.clone();
