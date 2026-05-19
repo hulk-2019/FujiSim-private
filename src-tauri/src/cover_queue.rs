@@ -54,8 +54,19 @@ impl CoverQueue {
 
                 set.spawn_blocking(move || {
                     let _permit = permit;
+                    struct Guard {
+                        queue: Arc<CoverQueue>,
+                        asset_id: i64,
+                    }
+                    impl Drop for Guard {
+                        fn drop(&mut self) {
+                            if let Ok(mut inflight) = self.queue.inflight.lock() {
+                                inflight.remove(&self.asset_id);
+                            }
+                        }
+                    }
+                    let _guard = Guard { queue: queue.clone(), asset_id };
                     process_one(asset_id, &state, &app);
-                    queue.inflight.lock().expect("cover_queue inflight poisoned").remove(&asset_id);
                 });
             }
 
@@ -65,6 +76,7 @@ impl CoverQueue {
     }
 }
 
+/// Must only be called from a `spawn_blocking` context — calls `block_on` internally.
 fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
     let rt = tokio::runtime::Handle::current();
 
