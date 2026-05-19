@@ -32,6 +32,7 @@ export type Asset = {
   is_raw: number;
   file_mtime: number | null;
   preview_path: string | null;
+  cover_path: string | null;
   created_at: string;
 };
 

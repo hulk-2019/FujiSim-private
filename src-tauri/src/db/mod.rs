@@ -57,6 +57,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE assets ADD COLUMN exif_extracted INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE assets ADD COLUMN file_mtime INTEGER",
         "ALTER TABLE assets ADD COLUMN preview_path TEXT",
+        "ALTER TABLE assets ADD COLUMN cover_path TEXT",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }
@@ -70,7 +71,6 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE assets DROP COLUMN display_height",
         "ALTER TABLE batch_tasks DROP COLUMN watermark_layer_json",
         "ALTER TABLE assets DROP COLUMN thumbnail_path",
-        "ALTER TABLE assets DROP COLUMN cover_path",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }

@@ -31,6 +31,7 @@ pub struct Asset {
     pub is_raw: i64,
     pub created_at: String,
     pub preview_path: Option<String>,
+    pub cover_path: Option<String>,
 }
 
 /// 写模型：插入前不需要 `id` 与 `created_at`（由数据库自动生成）。
@@ -318,6 +319,14 @@ pub async fn delete(pool: &SqlitePool, id: i64) -> Result<()> {
 /// 用于导入完成后把刚入库 + 已存在的资产一起挂到目标相册——
 /// 仅靠 `insert_many` 返回的 inserted 数量不够，那只是"新插入"的计数。
 /// 路径列表长度通常 ≤ 单次扫描结果（几百到几千），分批 IN 查询足以。
+pub async fn id_by_path(pool: &SqlitePool, path: &str) -> Result<Option<i64>> {
+    let row = sqlx::query_as::<_, (i64,)>("SELECT id FROM assets WHERE file_path = ?")
+        .bind(path)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|(id,)| id))
+}
+
 pub async fn ids_by_paths(pool: &SqlitePool, paths: &[String]) -> Result<Vec<i64>> {
     if paths.is_empty() {
         return Ok(Vec::new());
@@ -433,6 +442,19 @@ pub async fn update_preview_path(
 ) -> Result<()> {
     sqlx::query("UPDATE assets SET preview_path = ? WHERE id = ?")
         .bind(preview_path)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_cover_path(
+    pool: &SqlitePool,
+    id: i64,
+    cover_path: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE assets SET cover_path = ? WHERE id = ?")
+        .bind(cover_path)
         .bind(id)
         .execute(pool)
         .await?;

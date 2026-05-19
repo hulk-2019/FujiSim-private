@@ -270,15 +270,6 @@ export const useStore = create<AppState>((set, get) => ({
         focusedId: nextFocused,
       });
 
-      const rawIds = items.filter((a) => Boolean(a.is_raw)).map((a) => a.id);
-      if (rawIds.length > 0) {
-        // 用全量 RAW id 触发生成，避免只处理当前页的 60 条
-        setTimeout(() => {
-          api.listRawAssetIds()
-            .then((ids) => api.generateThumbnails(ids))
-            .catch(() => {});
-        }, 600);
-      }
     } catch (e) {
       console.error("refreshAssets failed", e);
       set({ loading: false });

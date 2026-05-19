@@ -18,14 +18,13 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const setPreviewContainerSize = useStore((s) => s.setPreviewContainerSize);
   const previewContainerSize = useStore((s) => s.previewContainerSize);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
-  const rawThumbnailReady = useStore((s) => s.rawThumbnailReady);
-  const thumbnailDir = useStore((s) => s.thumbnailDir);
 
   const [preview, setPreview] = useState<{ blobUrl: string; width: number; height: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [thumbSrc, setThumbSrc] = useState<string | null>(null);
+  // 完整嵌入 JPEG（来自 get_raw_thumbnail），用于"按住对比原图"和 preview 占位
+  const [rawOriginalSrc, setRawOriginalSrc] = useState<string | null>(null);
   const reqId = useRef(0);
   const previewCache = useRef<Map<string, { blobUrl: string; width: number; height: number }>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -54,39 +53,22 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     };
   }, []);
 
+  // RAW 原图：后台静默加载完整嵌入 JPEG，用于"按住对比"和 preview 占位
   useEffect(() => {
-    if (!focused) {
-      setThumbSrc(null);
+    if (!focused?.is_raw) {
+      setRawOriginalSrc(null);
       return;
     }
-    if (focused.is_raw) {
-      // 优先用 thumbnailDir 拼接路径（rawThumbnailReady 标记已生成）
-      if (rawThumbnailReady.has(focused.id) && thumbnailDir) {
-        try {
-          setThumbSrc(convertFileSrc(`${thumbnailDir}/${focused.id}.jpg`));
-        } catch {
-          setThumbSrc(null);
-        }
-      } else {
-        // 懒加载：立刻请求，无 debounce（缩略图应尽快显示）
-        let cancelled = false;
-        setThumbSrc(null);
-        api.getRawThumbnail(focused.id)
-          .then((path) => {
-            if (cancelled) return;
-            try { setThumbSrc(convertFileSrc(path)); } catch { setThumbSrc(null); }
-          })
-          .catch(() => { if (!cancelled) setThumbSrc(null); });
-        return () => { cancelled = true; };
-      }
-    } else {
-      try {
-        setThumbSrc(convertFileSrc(focused.file_path));
-      } catch {
-        setThumbSrc(null);
-      }
-    }
-  }, [focused?.id, focused?.file_path, focused?.is_raw, rawThumbnailReady, thumbnailDir]);
+    let cancelled = false;
+    setRawOriginalSrc(null);
+    api.getRawThumbnail(focused.id)
+      .then((path) => {
+        if (cancelled) return;
+        try { setRawOriginalSrc(convertFileSrc(path)); } catch { /* ignore */ }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [focused?.id, focused?.is_raw]);
 
   useEffect(() => {
     if (!focused) {
@@ -109,6 +91,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     setError(null);
     const myId = ++reqId.current;
     setLoading(true);
+
     const handle = setTimeout(async () => {
       try {
         const r = await api.getPreview(focused.id, filter, 1280);
@@ -130,15 +113,8 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     return () => clearTimeout(handle);
   }, [focused?.id, filter]);
 
-  async function handleShowOriginal() {
+  function handleShowOriginal() {
     setShowOriginal(true);
-    if (focused?.is_raw && !(rawThumbnailReady.has(focused.id) && thumbnailDir)) {
-      try {
-        await api.getRawThumbnail(focused.id);
-      } catch {
-        // 静默失败
-      }
-    }
   }
 
   if (!focused) {
@@ -153,10 +129,24 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   }
 
   const previewSrc = preview?.blobUrl ?? null;
-  // originalSrc 用 thumbSrc（懒加载后已确认文件存在），非 RAW 直接用原文件
+  // originalSrc：RAW 用完整嵌入 JPEG（后台已异步加载），非 RAW 用原文件
   const originalSrc = focused.is_raw
-    ? thumbSrc
+    ? rawOriginalSrc
     : convertFileSrc(focused.file_path);
+
+  // preview 区域占位：RAW 用 rawOriginalSrc，非 RAW 直接用原文件
+  const placeholderSrc: string | null = focused.is_raw
+    ? rawOriginalSrc
+    : (() => { try { return convertFileSrc(focused.file_path); } catch { return null; } })();
+
+  const displaySrc = previewSrc ?? placeholderSrc;
+
+  // 容器宽高比固定用 DB 存储的原始尺寸，不随 preview 切换，避免加载时布局跳变
+  const aspectRatio = focused.width && focused.height
+    ? `${focused.width} / ${focused.height}`
+    : preview
+    ? `${preview.width} / ${preview.height}`
+    : null;
 
   return (
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
@@ -185,26 +175,25 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
         ) : (
           <>
             {showOriginal && originalSrc && (
-              <img
-                src={originalSrc}
-                alt="original"
-                className="max-w-full max-h-full object-contain shadow-2xl no-drag"
-              />
+              <div
+                className="relative max-w-full max-h-full shadow-2xl"
+                style={aspectRatio ? { aspectRatio } : undefined}
+              >
+                <img
+                  src={originalSrc}
+                  alt="original"
+                  className="w-full h-full object-contain no-drag"
+                />
+              </div>
             )}
-            {!showOriginal && (previewSrc ?? thumbSrc) && (
+            {!showOriginal && displaySrc && (
               <div
                 ref={containerCallbackRef}
                 className="relative max-w-full max-h-full shadow-2xl"
-                style={
-                  preview
-                    ? { aspectRatio: `${preview.width} / ${preview.height}` }
-                    : focused?.width && focused?.height
-                    ? { aspectRatio: `${focused.width} / ${focused.height}` }
-                    : undefined
-                }
+                style={aspectRatio ? { aspectRatio } : undefined}
               >
                 <img
-                  src={(previewSrc ?? thumbSrc)!}
+                  src={displaySrc}
                   alt="preview"
                   className="w-full h-full object-contain no-drag"
                 />
@@ -218,23 +207,16 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 )}
               </div>
             )}
-            {/* 无图可显示时的占位：loading 期间或图片尚未就绪 */}
-            {!showOriginal && !(previewSrc ?? thumbSrc) && (
-              <div className="flex flex-col items-center justify-center gap-3 text-zinc-600">
-                {loading ? (
-                  <>
-                    <svg className="animate-spin w-8 h-8 text-zinc-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                    <span className="text-xs text-zinc-500">{t("previewPanel.rendering")}</span>
-                  </>
-                ) : (
-                  <ImageIcon size={40} className="text-zinc-700" />
-                )}
+            {/* 无图可显示时：按宽高比显示骨架屏，撑满画布 */}
+            {!showOriginal && !displaySrc && (
+              <div
+                className="max-w-full max-h-full rounded-sm overflow-hidden"
+                style={aspectRatio ? { aspectRatio, width: '100%' } : { width: '100%', height: '100%' }}
+              >
+                <div className="w-full h-full bg-zinc-800/50 animate-pulse" />
               </div>
             )}
-            {loading && (previewSrc ?? thumbSrc) && (
+            {loading && displaySrc && (
               <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
                 {t("previewPanel.rendering")}
               </div>

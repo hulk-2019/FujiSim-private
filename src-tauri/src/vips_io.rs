@@ -2,8 +2,8 @@ use crate::error::{AppError, Result};
 use crate::export::ExportFormat;
 use image::{ImageBuffer, Rgb, RgbaImage};
 use libvips::{ops, VipsApp, VipsImage};
-use libvips::ops::{BandFormat, Direction, Angle, JpegsaveBufferOptions, PngsaveBufferOptions,
-                   WebpsaveBufferOptions, ResizeOptions, Kernel};
+use libvips::ops::{BandFormat, CastOptions, Direction, Angle, JpegsaveBufferOptions,
+                   PngsaveBufferOptions, WebpsaveBufferOptions, ResizeOptions, Kernel};
 use once_cell::sync::Lazy;
 use std::path::Path;
 
@@ -47,7 +47,7 @@ pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
         .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("decode {path_str}: {e}")))?;
-    let vimg = ops::cast(&vimg, BandFormat::Ushort)
+    let vimg = ops::cast_with_opts(&vimg, BandFormat::Ushort, &CastOptions { shift: true })
         .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
     // strip alpha if present (RGBA → RGB)
     let vimg = if vimg.get_bands() == 4 {
@@ -70,7 +70,7 @@ pub fn decode_bytes_to_rgb16(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u1
     ensure_init();
     let vimg = VipsImage::new_from_buffer(data, "")
         .map_err(|e| AppError::Vips(format!("decode bytes: {e}")))?;
-    let vimg = ops::cast(&vimg, BandFormat::Ushort)
+    let vimg = ops::cast_with_opts(&vimg, BandFormat::Ushort, &CastOptions { shift: true })
         .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
     vips_to_rgb16(&vimg)
 }
@@ -113,7 +113,7 @@ pub fn encode_rgb16(
     let vimg = rgb16_to_vips(img)?;
     match format {
         ExportFormat::Jpeg => {
-            let vimg8 = ops::cast(&vimg, BandFormat::Uchar)
+            let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
             ops::jpegsave_buffer_with_opts(&vimg8, &JpegsaveBufferOptions {
                 q: quality as i32,
@@ -129,7 +129,7 @@ pub fn encode_rgb16(
             }).map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Webp => {
-            let vimg8 = ops::cast(&vimg, BandFormat::Uchar)
+            let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
             ops::webpsave_buffer_with_opts(&vimg8, &WebpsaveBufferOptions {
                 q: quality as i32,
@@ -137,13 +137,13 @@ pub fn encode_rgb16(
             }).map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Tiff => {
-            let vimg8 = ops::cast(&vimg, BandFormat::Uchar)
+            let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
             ops::tiffsave_buffer(&vimg8)
                 .map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Gif => {
-            let vimg8 = ops::cast(&vimg, BandFormat::Uchar)
+            let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
             ops::gifsave_buffer(&vimg8)
                 .map_err(|e| AppError::Vips(e.to_string()))

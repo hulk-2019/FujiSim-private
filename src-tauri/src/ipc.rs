@@ -91,7 +91,11 @@ pub async fn import_directory(
         skipped: scan.skipped,
     };
     let _ = app.emit("import:done", &report);
-    start_exif_worker(state.inner().clone(), app);
+    start_exif_worker(state.inner().clone(), app.clone());
+    spawn_cover_worker(state.inner().clone(), app, scan.items.iter()
+        .filter(|a| a.is_raw)
+        .map(|a| a.file_path.clone())
+        .collect());
     Ok(report)
 }
 
@@ -362,33 +366,7 @@ pub async fn get_preview(
         .map_err(|e| AppError::other(e.to_string()))?;
     }
 
-    // L2：磁盘预览底图（800px 16-bit PNG），命中时跳过 LibRaw 解码
-    if let Some(ref pp) = asset.preview_path {
-        let pp_path = PathBuf::from(pp);
-        if pp_path.exists() {
-            let cache = state.preview_cache.clone();
-            let preview_pool = state.preview_pool.clone();
-            let pcd = preview_cache_dir.clone();
-            return tokio::task::spawn_blocking(move || {
-                preview_pool.install(|| {
-                    let img = crate::vips_io::decode_to_rgb16(&pp_path)
-                        .map_err(|e| AppError::other(format!("preview_base read: {e}")))?;
-                    let resized = Arc::new(img);
-                    if let Ok(mut c) = cache.lock() {
-                        while c.len() >= 20 {
-                            c.shift_remove_index(0);
-                        }
-                        c.insert((asset_id, max_edge), resized.clone());
-                    }
-                    render_preview_from_cache(&resized, &settings, lut.as_deref(), &pcd, asset_id)
-                })
-            })
-            .await
-            .map_err(|e| AppError::other(e.to_string()))?;
-        }
-    }
-
-    // 未命中：在 async 上下文 acquire permit，排队等待而非降级，
+    // 未命中内存缓存：在 async 上下文 acquire permit，排队等待而非降级，
     // 保证同时进入 load_and_downsample 的请求严格 ≤ 2。
     let cache = state.preview_cache.clone();
     let permit = state.preview_sem.clone().acquire_owned().await
@@ -465,6 +443,7 @@ fn render_preview_from_cache(
             crate::export::ExportFormat::Jpeg,
             88,
         )?;
+        let _ = std::fs::create_dir_all(preview_cache_dir);
         std::fs::write(&out_path, &jpeg)
             .map_err(|e| crate::error::AppError::other(format!("preview write: {e}")))?;
 
@@ -822,7 +801,11 @@ pub async fn import_files(
         skipped: scan.skipped,
     };
     let _ = app.emit("import:done", &report);
-    start_exif_worker(state.inner().clone(), app);
+    start_exif_worker(state.inner().clone(), app.clone());
+    spawn_cover_worker(state.inner().clone(), app, scan.items.iter()
+        .filter(|a| a.is_raw)
+        .map(|a| a.file_path.clone())
+        .collect());
     Ok(report)
 }
 
@@ -1366,92 +1349,103 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
     });
 }
 
-/// `thumbnail:done` 事件载荷：单张缩略图写盘完成。
+/// `thumbnail:done` 事件载荷：单张封面写盘完成。
 #[derive(Debug, Serialize, Clone)]
 pub struct ThumbnailDonePayload {
     pub asset_id: i64,
 }
 
-/// 批量为 RAW/DNG 资产生成磁盘缩略图缓存。
+/// 导入后后台批量生成 200px 封面图。
 ///
-/// 串行处理每张：已有缓存则跳过（幂等）；提取并写盘后推送 `thumbnail:done` 事件。
-/// 全部处理完毕后推送 `thumbnail:all_done`（无载荷）。
-/// 单张失败不中断整批，只记录 warning。
-/// 通过 Semaphore 限制最大并发为 2，避免启动时大量 RAW 解码占满 CPU。
+/// 用 `extract_cover_fast`（嵌入 JPEG 快速路径），不做 LibRaw 全解码。
+/// 使用 `cover_sem`（容量 4）+ `JoinSet` 实现真正的动态并发：
+/// 每个任务 acquire permit 后立刻 spawn，不等待完成，最多 4 个 blocking 线程同时跑。
+/// 单张失败不中断整批；全部完成后推送 `thumbnail:all_done`。
+fn spawn_cover_worker(state: SharedState, app: tauri::AppHandle, raw_paths: Vec<String>) {
+    if raw_paths.is_empty() {
+        return;
+    }
+    tokio::task::spawn(async move {
+        let mut set = tokio::task::JoinSet::new();
+        for file_path in raw_paths {
+            let permit = state.cover_sem.clone().acquire_owned().await;
+            let Ok(permit) = permit else { break };
+            let cover_dir = state.cover_dir.clone();
+            let pool = state.pool.clone();
+            let app = app.clone();
+            // 立刻 spawn，不 await，JoinSet 持有 handle
+            set.spawn_blocking(move || {
+                let _permit = permit;
+                let path = std::path::Path::new(&file_path);
+                let mtime = path.metadata().ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+
+                let rt = tokio::runtime::Handle::current();
+                let asset_id = match rt.block_on(crate::db::assets::id_by_path(&pool, &file_path)) {
+                    Ok(Some(id)) => id,
+                    _ => return,
+                };
+
+                let cover_path = cover_dir.join(format!("{}_{}.jpg", asset_id, mtime));
+                if cover_path.exists() {
+                    let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id });
+                    return;
+                }
+
+                let cover_jpeg = match processing::raw::extract_cover_fast(path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        tracing::warn!(asset_id, error = %e, "cover worker: extract failed");
+                        return;
+                    }
+                };
+                if let Err(e) = std::fs::create_dir_all(&cover_dir)
+                    .and_then(|_| std::fs::write(&cover_path, &cover_jpeg))
+                {
+                    tracing::warn!(asset_id, error = %e, "cover worker: write failed");
+                    return;
+                }
+                let cover_path_str = cover_path.to_string_lossy().to_string();
+                let _ = rt.block_on(crate::db::assets::update_cover_path(&pool, asset_id, &cover_path_str));
+                let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id });
+            });
+        }
+        // 等待所有已 spawn 的任务完成
+        while set.join_next().await.is_some() {}
+        let _ = app.emit("thumbnail:all_done", ());
+    });
+}
+
+/// 批量为 RAW/DNG 资产补全封面图（用于已导入但缺少封面的历史数据）。
+///
+/// 仅处理 cover_path 为空或文件不存在的资产，幂等。
 #[tauri::command]
 pub async fn generate_thumbnails(
     state: State<'_, SharedState>,
     app: tauri::AppHandle,
     asset_ids: Vec<i64>,
 ) -> Result<()> {
-    let mut raw_assets = Vec::new();
+    let mut raw_paths = Vec::new();
     for id in &asset_ids {
-        match assets::get(&state.pool, *id).await {
-            Ok(a) if a.is_raw != 0 => raw_assets.push(a),
-            _ => {}
+        if let Ok(a) = assets::get(&state.pool, *id).await {
+            if a.is_raw != 0 {
+                let needs_cover = match &a.cover_path {
+                    Some(p) => !std::path::Path::new(p).exists(),
+                    None => true,
+                };
+                if needs_cover {
+                    raw_paths.push(a.file_path);
+                } else {
+                    // 封面已存在，直接通知前端
+                    let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: a.id });
+                }
+            }
         }
     }
-
-    let cover_dir = state.cover_dir.clone();
-    let sem = state.io_sem.clone();
-    let preview_base_dir = state.preview_base_dir.clone();
-    let pool = state.pool.clone();
-
-    tokio::task::spawn(async move {
-        for asset in raw_assets {
-            let permit = sem.clone().acquire_owned().await;
-            let Ok(permit) = permit else { break };
-            let cover_dir = cover_dir.clone();
-            let app = app.clone();
-            let preview_base_dir = preview_base_dir.clone();
-            let pool = pool.clone();
-            // await 每个任务完成后再继续，真正串行限流，不会同时 spawn 大量 blocking 线程
-            let _ = tokio::task::spawn_blocking(move || {
-                let _permit = permit;
-                let mtime = std::path::Path::new(&asset.file_path)
-                    .metadata()
-                    .ok()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                let cover_path = cover_dir.join(format!("{}_{}.jpg", asset.id, mtime));
-
-                // 幂等：cover 和 preview_base 都已存在则跳过
-                let preview_path = preview_base_dir.join(format!("{}_{}.png", asset.id, mtime));
-                if cover_path.exists() && preview_path.exists() {
-                    let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
-                    return;
-                }
-
-                let src = std::path::PathBuf::from(&asset.file_path);
-                let (cover_jpeg, preview_png) = match processing::raw::generate_cover_and_preview_base(&src) {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: decode failed");
-                        return;
-                    }
-                };
-
-                if let Err(e) = std::fs::write(&cover_path, &cover_jpeg) {
-                    tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: write cover failed");
-                    return;
-                }
-
-                if let Err(e) = std::fs::write(&preview_path, &preview_png) {
-                    tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: write preview_base failed");
-                } else {
-                    let rt = tokio::runtime::Handle::current();
-                    let preview_path_str = preview_path.to_string_lossy().to_string();
-                    let _ = rt.block_on(crate::db::assets::update_preview_path(&pool, asset.id, &preview_path_str));
-                }
-
-                let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
-            }).await;
-        }
-        let _ = app.emit("thumbnail:all_done", ());
-    });
-
+    spawn_cover_worker(state.inner().clone(), app, raw_paths);
     Ok(())
 }
 

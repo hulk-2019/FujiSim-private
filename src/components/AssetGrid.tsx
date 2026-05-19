@@ -426,11 +426,16 @@ function Thumb({
     if (!asset.is_raw) {
       try { return convertFileSrc(asset.file_path); } catch { return null; }
     }
+    // Prefer cover_path stored in DB (set during import)
+    if (asset.cover_path) {
+      try { return convertFileSrc(asset.cover_path); } catch { return null; }
+    }
+    // Fallback: convention-based path once thumbnail:done event fires
     if (isThumbReady && coverDir) {
       try { return convertFileSrc(`${coverDir}/${asset.id}_${asset.file_mtime ?? 0}.jpg`); } catch { return null; }
     }
     return null;
-  }, [asset.file_path, asset.is_raw, asset.id, isThumbReady, coverDir]);
+  }, [asset.file_path, asset.is_raw, asset.id, asset.cover_path, isThumbReady, coverDir]);
 
   function openRename(e: React.MouseEvent) {
     e.stopPropagation();
