@@ -38,3 +38,66 @@ pub(crate) fn vips_to_rgb16(vimg: &VipsImage) -> Result<ImageBuffer<Rgb<u16>, Ve
     ImageBuffer::from_raw(w, h, pixels)
         .ok_or_else(|| AppError::Vips("vips→rgb16 buffer size mismatch".into()))
 }
+
+// ── public decode / resize / info ─────────────────────────────────────────────
+
+pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    ensure_init();
+    let path_str = path.to_str()
+        .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
+    let vimg = VipsImage::new_from_file(path_str)
+        .map_err(|e| AppError::Vips(format!("decode {path_str}: {e}")))?;
+    let vimg = ops::cast(&vimg, BandFormat::Ushort)
+        .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
+    // strip alpha if present (RGBA → RGB)
+    let vimg = if vimg.get_bands() == 4 {
+        let r = ops::extract_band(&vimg, 0)
+            .map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
+        let g = ops::extract_band(&vimg, 1)
+            .map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
+        let b = ops::extract_band(&vimg, 2)
+            .map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
+        let mut bands = [r, g, b];
+        ops::bandjoin(&mut bands)
+            .map_err(|e| AppError::Vips(format!("bandjoin: {e}")))?
+    } else {
+        vimg
+    };
+    vips_to_rgb16(&vimg)
+}
+
+pub fn decode_bytes_to_rgb16(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    ensure_init();
+    let vimg = VipsImage::new_from_buffer(data, "")
+        .map_err(|e| AppError::Vips(format!("decode bytes: {e}")))?;
+    let vimg = ops::cast(&vimg, BandFormat::Ushort)
+        .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
+    vips_to_rgb16(&vimg)
+}
+
+pub fn resize_rgb16(
+    img: &ImageBuffer<Rgb<u16>, Vec<u16>>,
+    nw: u32,
+    nh: u32,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    ensure_init();
+    let (w, h) = img.dimensions();
+    let vimg = rgb16_to_vips(img)?;
+    let hscale = nw as f64 / w as f64;
+    let vscale = nh as f64 / h as f64;
+    let resized = ops::resize_with_opts(&vimg, hscale, &ResizeOptions {
+        kernel: Kernel::Lanczos3,
+        vscale,
+        ..ResizeOptions::default()
+    }).map_err(|e| AppError::Vips(format!("resize: {e}")))?;
+    vips_to_rgb16(&resized)
+}
+
+pub fn image_dimensions(path: &Path) -> Result<(u32, u32)> {
+    ensure_init();
+    let path_str = path.to_str()
+        .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
+    let vimg = VipsImage::new_from_file(path_str)
+        .map_err(|e| AppError::Vips(format!("dimensions {path_str}: {e}")))?;
+    Ok((vimg.get_width() as u32, vimg.get_height() as u32))
+}
