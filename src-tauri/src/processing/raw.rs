@@ -35,35 +35,7 @@ pub fn extract_raw_thumbnail(path: &Path) -> Result<Vec<u8>> {
 /// 读取 JPEG 的 EXIF orientation，把像素旋转到正向后重新编码，orientation 标签置 1。
 /// 若 orientation 已经是 1 或无法解析，原样返回。
 fn apply_jpeg_orientation(jpeg: Vec<u8>, orientation: u32) -> Result<Vec<u8>> {
-    if orientation == 1 {
-        return Ok(jpeg);
-    }
-
-    let img = image::load_from_memory_with_format(&jpeg, image::ImageFormat::Jpeg)
-        .map_err(|e| AppError::other(format!("thumbnail decode: {e}")))?;
-
-    let rotated = match orientation {
-        2 => image::DynamicImage::ImageRgb8(image::imageops::flip_horizontal(&img.to_rgb8())),
-        3 => image::DynamicImage::ImageRgb8(image::imageops::rotate180(&img.to_rgb8())),
-        4 => image::DynamicImage::ImageRgb8(image::imageops::flip_vertical(&img.to_rgb8())),
-        5 => {
-            let r = image::imageops::rotate90(&img.to_rgb8());
-            image::DynamicImage::ImageRgb8(image::imageops::flip_horizontal(&r))
-        }
-        6 => image::DynamicImage::ImageRgb8(image::imageops::rotate90(&img.to_rgb8())),
-        7 => {
-            let r = image::imageops::rotate270(&img.to_rgb8());
-            image::DynamicImage::ImageRgb8(image::imageops::flip_horizontal(&r))
-        }
-        8 => image::DynamicImage::ImageRgb8(image::imageops::rotate270(&img.to_rgb8())),
-        _ => img,
-    };
-
-    let mut buf = std::io::Cursor::new(Vec::new());
-    rotated
-        .write_to(&mut buf, image::ImageFormat::Jpeg)
-        .map_err(|e| AppError::other(format!("thumbnail re-encode: {e}")))?;
-    Ok(buf.into_inner())
+    crate::vips_io::apply_jpeg_orientation(jpeg, orientation)
 }
 
 /// 从外层 RAW/TIFF 文件的 IFD0 读取 orientation 标签（tag 0x0112）。
@@ -323,10 +295,8 @@ fn decode_lossy_dng(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
 
     for (i, (&off, &cnt)) in offsets.iter().zip(counts.iter()).enumerate() {
         let tile_bytes = &data[off as usize..(off + cnt) as usize];
-        let tile_img =
-            image::load_from_memory_with_format(tile_bytes, image::ImageFormat::Jpeg)
-                .map_err(|e| AppError::other(format!("DNG tile {i} decode failed: {e}")))?;
-        let tile_rgb = tile_img.to_rgb16();
+        let tile_rgb = crate::vips_io::decode_bytes_to_rgb16(tile_bytes)
+            .map_err(|e| AppError::other(format!("DNG tile {i} decode failed: {e}")))?;
 
         let tx = (i as u32 % tiles_x) * tile_w;
         let ty = (i as u32 / tiles_x) * tile_h;
@@ -346,9 +316,8 @@ fn decode_lossy_dng(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
 // ── 线性 DNG 路径（Lightroom 导出等，本质是 TIFF）────────────────────────────
 
 fn decode_linear_dng(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
-    let img = image::load_from_memory_with_format(data, image::ImageFormat::Tiff)
+    let linear = crate::vips_io::decode_bytes_to_rgb16(data)
         .map_err(|e| AppError::other(format!("linear DNG decode failed: {e}")))?;
-    let linear = img.to_rgb16();
     // 线性光 → sRGB gamma，使流水线的色调曲线和 >> 8 输出在正确色彩空间工作
     let (w, h) = linear.dimensions();
     let mut out = ImageBuffer::new(w, h);
@@ -431,24 +400,20 @@ pub fn extract_cover_fast(path: &Path, max_edge: u32) -> Result<Vec<u8>> {
         extract_thumb_tiff(&data)?
     };
 
-    let img = image::load_from_memory_with_format(&jpeg, image::ImageFormat::Jpeg)
+    let src = crate::vips_io::decode_bytes_to_rgb16(&jpeg)
         .map_err(|e| AppError::other(format!("cover decode: {e}")))?;
-
-    let (w, h) = (img.width(), img.height());
+    let (w, h) = src.dimensions();
     let resized = if w.max(h) > max_edge {
         let scale = max_edge as f32 / w.max(h) as f32;
         let nw = ((w as f32 * scale).round() as u32).max(1);
         let nh = ((h as f32 * scale).round() as u32).max(1);
-        img.resize(nw, nh, image::imageops::FilterType::Triangle)
+        crate::vips_io::resize_rgb16(&src, nw, nh)
+            .map_err(|e| AppError::other(format!("cover resize: {e}")))?
     } else {
-        img
+        src
     };
-
-    let mut buf = std::io::Cursor::new(Vec::new());
-    resized
-        .write_to(&mut buf, image::ImageFormat::Jpeg)
-        .map_err(|e| AppError::other(format!("cover encode: {e}")))?;
-    Ok(buf.into_inner())
+    crate::vips_io::encode_rgb16(&resized, crate::export::ExportFormat::Jpeg, 88)
+        .map_err(|e| AppError::other(format!("cover encode: {e}")))
 }
 
 /// 一次 LibRaw 解码，同时生成 400px cover JPEG 和 800px 16-bit PNG 预览底图。
@@ -469,35 +434,27 @@ pub fn generate_cover_and_preview_base(
     let cover_scale = (400f32 / w.max(h) as f32).min(1.0);
     let cover_w = ((w as f32 * cover_scale).round() as u32).max(1);
     let cover_h = ((h as f32 * cover_scale).round() as u32).max(1);
-    let cover_16 = image::imageops::resize(&rgb16, cover_w, cover_h, image::imageops::FilterType::Triangle);
-    let mut cover_rgb8 = image::RgbImage::new(cover_w, cover_h);
-    for (x, y, px) in cover_16.enumerate_pixels() {
-        cover_rgb8.put_pixel(x, y, image::Rgb([
-            (px.0[0] >> 8) as u8,
-            (px.0[1] >> 8) as u8,
-            (px.0[2] >> 8) as u8,
-        ]));
-    }
-    let mut cover_buf = std::io::Cursor::new(Vec::new());
-    cover_rgb8
-        .write_to(&mut cover_buf, image::ImageFormat::Jpeg)
-        .map_err(|e| AppError::other(format!("cover encode: {e}")))?;
-    let cover_jpeg = cover_buf.into_inner();
+    let cover_jpeg = {
+        let cover_16 = crate::vips_io::resize_rgb16(&rgb16, cover_w, cover_h)
+            .map_err(|e| AppError::other(format!("cover resize: {e}")))?;
+        crate::vips_io::encode_rgb16(&cover_16, crate::export::ExportFormat::Jpeg, 88)
+            .map_err(|e| AppError::other(format!("cover encode: {e}")))?
+    };
 
-    // ── preview_base 800px 16-bit PNG ────────────────────────────────────────
-    let prev_scale = (800f32 / w.max(h) as f32).min(1.0);
+    // ── preview_base 1600px 16-bit PNG ───────────────────────────────────────
+    let prev_scale = (1600f32 / w.max(h) as f32).min(1.0);
     let prev_w = ((w as f32 * prev_scale).round() as u32).max(1);
     let prev_h = ((h as f32 * prev_scale).round() as u32).max(1);
-    let preview_16 = if prev_scale < 1.0 {
-        image::imageops::resize(&rgb16, prev_w, prev_h, image::imageops::FilterType::Triangle)
-    } else {
-        rgb16
+    let preview_png = {
+        let preview_16 = if prev_scale < 1.0 {
+            crate::vips_io::resize_rgb16(&rgb16, prev_w, prev_h)
+                .map_err(|e| AppError::other(format!("preview resize: {e}")))?
+        } else {
+            rgb16
+        };
+        crate::vips_io::encode_rgb16(&preview_16, crate::export::ExportFormat::Png, 0)
+            .map_err(|e| AppError::other(format!("preview encode: {e}")))?
     };
-    let mut preview_buf = std::io::Cursor::new(Vec::new());
-    preview_16
-        .write_to(&mut preview_buf, image::ImageFormat::Png)
-        .map_err(|e| AppError::other(format!("preview_base encode: {e}")))?;
-    let preview_png = preview_buf.into_inner();
 
     Ok((cover_jpeg, preview_png))
 }
