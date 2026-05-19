@@ -16,12 +16,12 @@ impl CoverQueue {
     pub fn new(concurrency: usize) -> Self {
         Self {
             inflight: Mutex::new(HashSet::new()),
-            concurrency: AtomicUsize::new(concurrency.max(2)),
+            concurrency: AtomicUsize::new(concurrency.clamp(2, 4)),
         }
     }
 
     pub fn set_concurrency(&self, n: usize) {
-        self.concurrency.store(n.max(2), Ordering::Relaxed);
+        self.concurrency.store(n.clamp(2, 4), Ordering::Relaxed);
     }
 
     pub fn concurrency(&self) -> usize {
