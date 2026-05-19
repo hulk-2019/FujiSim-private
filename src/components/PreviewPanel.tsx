@@ -35,8 +35,10 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     roRef.current = null;
     containerRef.current = el;
     if (!el) return;
+    let rafId = 0;
     const ro = new ResizeObserver((entries) => {
-      requestAnimationFrame(() => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0)
           setPreviewContainerSize({ width: Math.round(width), height: Math.round(height) });
@@ -104,12 +106,35 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           setLoading(false);
         }
       } catch (e) {
-        if (reqId.current === myId) {
-          setError(String(e));
-          setLoading(false);
+        if (reqId.current !== myId) return;
+        // Backend busy (another decode in flight) — retry after a short delay
+        if (String(e).includes("preview_busy")) {
+          const retryHandle = setTimeout(async () => {
+            if (reqId.current !== myId) return;
+            try {
+              const r = await api.getPreview(focused.id, filter, 1280);
+              if (reqId.current === myId) {
+                const src = convertFileSrc(r.path);
+                const entry = { blobUrl: src, width: r.width, height: r.height };
+                previewCache.current.set(cacheKey, entry);
+                setPreview(entry);
+                setPreviewSize({ width: r.width, height: r.height }, focused.id);
+                setLoading(false);
+              }
+            } catch (e2) {
+              if (reqId.current === myId) {
+                setError(String(e2));
+                setLoading(false);
+              }
+            }
+          }, 300);
+          // Store retry handle so it can be cancelled if focus changes
+          return () => clearTimeout(retryHandle);
         }
+        setError(String(e));
+        setLoading(false);
       }
-    }, 150);
+    }, 250);
     return () => clearTimeout(handle);
   }, [focused?.id, filter]);
 
@@ -174,30 +199,29 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           </div>
         ) : (
           <>
-            {showOriginal && originalSrc && (
-              <div
-                className="relative max-w-full max-h-full shadow-2xl"
-                style={aspectRatio ? { aspectRatio } : undefined}
-              >
-                <img
-                  src={originalSrc}
-                  alt="original"
-                  className="w-full h-full object-contain no-drag"
-                />
-              </div>
-            )}
-            {!showOriginal && displaySrc && (
+            {(displaySrc || originalSrc) ? (
               <div
                 ref={containerCallbackRef}
                 className="relative max-w-full max-h-full shadow-2xl"
-                style={aspectRatio ? { aspectRatio } : undefined}
+                style={{ aspectRatio: aspectRatio ?? undefined, width: "100%", height: "100%" }}
               >
-                <img
-                  src={displaySrc}
-                  alt="preview"
-                  className="w-full h-full object-contain no-drag"
-                />
-                {watermark.enabled && preview && previewContainerSize && (
+                {displaySrc && (
+                  <img
+                    src={displaySrc}
+                    alt="preview"
+                    className="absolute inset-0 w-full h-full object-contain no-drag"
+                    style={{ opacity: showOriginal ? 0 : 1 }}
+                  />
+                )}
+                {originalSrc && (
+                  <img
+                    src={originalSrc}
+                    alt="original"
+                    className="absolute inset-0 w-full h-full object-contain no-drag"
+                    style={{ opacity: showOriginal ? 1 : 0 }}
+                  />
+                )}
+                {!showOriginal && watermark.enabled && preview && previewContainerSize && (
                   <WatermarkOverlay
                     wm={watermark}
                     previewW={preview.width}
@@ -206,12 +230,13 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                   />
                 )}
               </div>
-            )}
-            {/* 无图可显示时：按宽高比显示骨架屏，撑满画布 */}
-            {!showOriginal && !displaySrc && (
+            ) : (
+              /* 无图可显示时：按宽高比显示骨架屏，撑满画布 */
               <div
                 className="max-w-full max-h-full rounded-sm overflow-hidden"
-                style={aspectRatio ? { aspectRatio, width: '100%' } : { width: '100%', height: '100%' }}
+                style={aspectRatio
+                  ? { aspectRatio, width: "100%", height: "100%" }
+                  : { width: "100%", height: "100%" }}
               >
                 <div className="w-full h-full bg-zinc-800/50 animate-pulse" />
               </div>

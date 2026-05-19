@@ -67,12 +67,11 @@ pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
 }
 
 pub fn decode_bytes_to_rgb16(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
-    ensure_init();
-    let vimg = VipsImage::new_from_buffer(data, "")
+    // Use image crate to avoid libvips new_from_buffer GObject ABI issue with empty option_str
+    let dyn_img = image::load_from_memory(data)
         .map_err(|e| AppError::Vips(format!("decode bytes: {e}")))?;
-    let vimg = ops::cast_with_opts(&vimg, BandFormat::Ushort, &CastOptions { shift: true })
-        .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
-    vips_to_rgb16(&vimg)
+    let rgb16 = dyn_img.into_rgb16();
+    Ok(rgb16)
 }
 
 pub fn resize_rgb16(
@@ -183,8 +182,9 @@ pub fn apply_jpeg_orientation(jpeg: Vec<u8>, orientation: u32) -> Result<Vec<u8>
         return Ok(jpeg);
     }
     ensure_init();
-    let vimg = VipsImage::new_from_buffer(&jpeg, ".jpg")
-        .map_err(|e| AppError::Vips(format!("orient decode: {e}")))?;
+    // Decode via image crate to avoid new_from_buffer GObject ABI issue
+    let rgb16 = decode_bytes_to_rgb16(&jpeg)?;
+    let vimg = rgb16_to_vips(&rgb16)?;
     let rotated = match orientation {
         2 => ops::flip(&vimg, Direction::Horizontal),
         3 => ops::rot(&vimg, Angle::D180),
@@ -197,7 +197,9 @@ pub fn apply_jpeg_orientation(jpeg: Vec<u8>, orientation: u32) -> Result<Vec<u8>
         8 => ops::rot(&vimg, Angle::D270),
         _ => return Ok(jpeg),
     }.map_err(|e| AppError::Vips(format!("orient transform: {e}")))?;
-    ops::jpegsave_buffer_with_opts(&rotated, &JpegsaveBufferOptions {
+    let vimg8 = ops::cast_with_opts(&rotated, BandFormat::Uchar, &CastOptions { shift: true })
+        .map_err(|e| AppError::Vips(e.to_string()))?;
+    ops::jpegsave_buffer_with_opts(&vimg8, &JpegsaveBufferOptions {
         q: 90,
         ..JpegsaveBufferOptions::default()
     }).map_err(|e| AppError::Vips(e.to_string()))

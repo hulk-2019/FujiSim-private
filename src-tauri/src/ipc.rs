@@ -366,11 +366,11 @@ pub async fn get_preview(
         .map_err(|e| AppError::other(e.to_string()))?;
     }
 
-    // 未命中内存缓存：在 async 上下文 acquire permit，排队等待而非降级，
-    // 保证同时进入 load_and_downsample 的请求严格 ≤ 2。
+    // 未命中内存缓存：非阻塞 try_acquire，拿不到 permit 说明已有 2 个解码任务在跑，
+    // 直接返回 busy 错误让前端忽略（前端 reqId 防抖保证只用最新请求的结果）。
     let cache = state.preview_cache.clone();
-    let permit = state.preview_sem.clone().acquire_owned().await
-        .map_err(|e| AppError::other(e.to_string()))?;
+    let permit = state.preview_sem.clone().try_acquire_owned()
+        .map_err(|_| AppError::other("preview_busy"))?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit; // 持有至 blocking 任务结束
         preview_pool.install(|| {
