@@ -32,6 +32,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "/opt/homebrew/lib/libvips.42.dylib",
+      "/opt/homebrew/lib/libvips-cpp.42.dylib",
+      "/opt/homebrew/lib/libglib-2.0.0.dylib",
+      "/opt/homebrew/lib/libgobject-2.0.0.dylib"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
