@@ -362,14 +362,15 @@ pub async fn get_preview(
         .map_err(|e| AppError::other(e.to_string()))?;
     }
 
-    // 未命中：完整解码 + 下采样，结果存入缓存
+    // 未命中：acquire preview_sem 后再解码，限制同时跑的 LibRaw 解码数 ≤ 2
     let cache = state.preview_cache.clone();
+    let preview_sem = state.preview_sem.clone();
     tokio::task::spawn_blocking(move || {
+        let _permit = preview_sem.try_acquire_owned().ok();
         preview_pool.install(|| {
             let resized = load_and_downsample(&path, max_edge)?;
             let resized = Arc::new(resized);
 
-            // 写入缓存，超过 20 张时淘汰最早的一条（FIFO/LRU）
             if let Ok(mut c) = cache.lock() {
                 while c.len() >= 20 {
                     c.shift_remove_index(0);

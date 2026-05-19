@@ -68,17 +68,16 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           setThumbSrc(null);
         }
       } else {
-        // 懒加载：调用后端提取并写盘，返回路径
+        // 懒加载：立刻请求，无 debounce（缩略图应尽快显示）
         let cancelled = false;
-        const handle = setTimeout(() => {
-          api.getRawThumbnail(focused.id)
-            .then((path) => {
-              if (cancelled) return;
-              try { setThumbSrc(convertFileSrc(path)); } catch { setThumbSrc(null); }
-            })
-            .catch(() => { if (!cancelled) setThumbSrc(null); });
-        }, 150);
-        return () => { cancelled = true; clearTimeout(handle); };
+        setThumbSrc(null);
+        api.getRawThumbnail(focused.id)
+          .then((path) => {
+            if (cancelled) return;
+            try { setThumbSrc(convertFileSrc(path)); } catch { setThumbSrc(null); }
+          })
+          .catch(() => { if (!cancelled) setThumbSrc(null); });
+        return () => { cancelled = true; };
       }
     } else {
       try {
@@ -219,7 +218,23 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 )}
               </div>
             )}
-            {loading && (
+            {/* 无图可显示时的占位：loading 期间或图片尚未就绪 */}
+            {!showOriginal && !(previewSrc ?? thumbSrc) && (
+              <div className="flex flex-col items-center justify-center gap-3 text-zinc-600">
+                {loading ? (
+                  <>
+                    <svg className="animate-spin w-8 h-8 text-zinc-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                    <span className="text-xs text-zinc-500">{t("previewPanel.rendering")}</span>
+                  </>
+                ) : (
+                  <ImageIcon size={40} className="text-zinc-700" />
+                )}
+              </div>
+            )}
+            {loading && (previewSrc ?? thumbSrc) && (
               <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
                 {t("previewPanel.rendering")}
               </div>
