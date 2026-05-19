@@ -21,6 +21,7 @@ pub struct AppState {
     /// 水印层 PNG 文件目录：<data_dir>/watermarks/<task_id>.png
     pub watermark_dir: PathBuf,
     pub cover_dir: PathBuf,
+    pub preview_base_dir: PathBuf,
     pub font_dir: PathBuf,
     pub preview_cache_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
@@ -67,6 +68,8 @@ impl AppState {
         std::fs::create_dir_all(&watermark_dir)?;
         let cover_dir = data_dir.join("covers");
         std::fs::create_dir_all(&cover_dir)?;
+        let preview_base_dir = data_dir.join("preview_base");
+        std::fs::create_dir_all(&preview_base_dir)?;
         let font_dir = data_dir.join("fonts");
         std::fs::create_dir_all(&font_dir)?;
         let preview_cache_dir = data_dir.join("preview_cache");
@@ -105,6 +108,7 @@ impl AppState {
             lut_dir,
             watermark_dir,
             cover_dir,
+            preview_base_dir,
             font_dir,
             preview_cache_dir,
             lut_cache: Mutex::new(HashMap::new()),

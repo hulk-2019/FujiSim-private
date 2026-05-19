@@ -56,6 +56,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE watermark_presets ADD COLUMN deleted_at TEXT",
         "ALTER TABLE assets ADD COLUMN exif_extracted INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE assets ADD COLUMN file_mtime INTEGER",
+        "ALTER TABLE assets ADD COLUMN preview_path TEXT",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }

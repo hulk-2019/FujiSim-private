@@ -30,6 +30,7 @@ pub struct Asset {
     /// SQLite 没有布尔类型，用 0/1 整数代替。前端类型 `is_raw: number`。
     pub is_raw: i64,
     pub created_at: String,
+    pub preview_path: Option<String>,
 }
 
 /// 写模型：插入前不需要 `id` 与 `created_at`（由数据库自动生成）。
@@ -423,4 +424,17 @@ pub async fn update_exif(
 #[allow(dead_code)]
 pub fn _placeholder_time() -> DateTime<Utc> {
     Utc::now()
+}
+
+pub async fn update_preview_path(
+    pool: &SqlitePool,
+    id: i64,
+    preview_path: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE assets SET preview_path = ? WHERE id = ?")
+        .bind(preview_path)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }

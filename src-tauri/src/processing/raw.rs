@@ -450,3 +450,54 @@ pub fn extract_cover_fast(path: &Path, max_edge: u32) -> Result<Vec<u8>> {
         .map_err(|e| AppError::other(format!("cover encode: {e}")))?;
     Ok(buf.into_inner())
 }
+
+/// 一次 LibRaw 解码，同时生成 400px cover JPEG 和 800px 16-bit PNG 预览底图。
+/// cover 用于网格缩略图快速显示；preview_base 用于永久磁盘缓存，避免重复 RAW 解码。
+pub fn generate_cover_and_preview_base(
+    path: &Path,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let data = std::fs::read(path)?;
+    let orientation = read_tiff_file_orientation(&data).unwrap_or(1);
+
+    // LibRaw 解码，full resolution（half_size=false 保证 800px 底图质量）
+    let rgb16 = decode_raw_rgb16_from_bytes(&data, None)?;
+    let rgb16 = apply_orientation_rgb16(rgb16, orientation);
+
+    let (w, h) = rgb16.dimensions();
+
+    // ── cover 400px JPEG ─────────────────────────────────────────────────────
+    let cover_scale = (400f32 / w.max(h) as f32).min(1.0);
+    let cover_w = ((w as f32 * cover_scale).round() as u32).max(1);
+    let cover_h = ((h as f32 * cover_scale).round() as u32).max(1);
+    let cover_16 = image::imageops::resize(&rgb16, cover_w, cover_h, image::imageops::FilterType::Triangle);
+    let mut cover_rgb8 = image::RgbImage::new(cover_w, cover_h);
+    for (x, y, px) in cover_16.enumerate_pixels() {
+        cover_rgb8.put_pixel(x, y, image::Rgb([
+            (px.0[0] >> 8) as u8,
+            (px.0[1] >> 8) as u8,
+            (px.0[2] >> 8) as u8,
+        ]));
+    }
+    let mut cover_buf = std::io::Cursor::new(Vec::new());
+    cover_rgb8
+        .write_to(&mut cover_buf, image::ImageFormat::Jpeg)
+        .map_err(|e| AppError::other(format!("cover encode: {e}")))?;
+    let cover_jpeg = cover_buf.into_inner();
+
+    // ── preview_base 800px 16-bit PNG ────────────────────────────────────────
+    let prev_scale = (800f32 / w.max(h) as f32).min(1.0);
+    let prev_w = ((w as f32 * prev_scale).round() as u32).max(1);
+    let prev_h = ((h as f32 * prev_scale).round() as u32).max(1);
+    let preview_16 = if prev_scale < 1.0 {
+        image::imageops::resize(&rgb16, prev_w, prev_h, image::imageops::FilterType::Triangle)
+    } else {
+        rgb16
+    };
+    let mut preview_buf = std::io::Cursor::new(Vec::new());
+    preview_16
+        .write_to(&mut preview_buf, image::ImageFormat::Png)
+        .map_err(|e| AppError::other(format!("preview_base encode: {e}")))?;
+    let preview_png = preview_buf.into_inner();
+
+    Ok((cover_jpeg, preview_png))
+}

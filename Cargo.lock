@@ -1244,6 +1244,7 @@ dependencies = [
  "dirs 5.0.1",
  "image",
  "imageproc",
+ "indexmap 2.14.0",
  "kamadak-exif",
  "once_cell",
  "rand 0.8.6",

@@ -362,6 +362,33 @@ pub async fn get_preview(
         .map_err(|e| AppError::other(e.to_string()))?;
     }
 
+    // L2：磁盘预览底图（800px 16-bit PNG），命中时跳过 LibRaw 解码
+    if let Some(ref pp) = asset.preview_path {
+        let pp_path = PathBuf::from(pp);
+        if pp_path.exists() {
+            let cache = state.preview_cache.clone();
+            let preview_pool = state.preview_pool.clone();
+            let pcd = preview_cache_dir.clone();
+            return tokio::task::spawn_blocking(move || {
+                preview_pool.install(|| {
+                    let img = image::open(&pp_path)
+                        .map_err(|e| AppError::other(format!("preview_base read: {e}")))?
+                        .to_rgb16();
+                    let resized = Arc::new(img);
+                    if let Ok(mut c) = cache.lock() {
+                        while c.len() >= 20 {
+                            c.shift_remove_index(0);
+                        }
+                        c.insert((asset_id, max_edge), resized.clone());
+                    }
+                    render_preview_from_cache(&resized, &settings, lut.as_deref(), &pcd, asset_id)
+                })
+            })
+            .await
+            .map_err(|e| AppError::other(e.to_string()))?;
+        }
+    }
+
     // 未命中：在 async 上下文 acquire permit，排队等待而非降级，
     // 保证同时进入 load_and_downsample 的请求严格 ≤ 2。
     let cache = state.preview_cache.clone();
@@ -1376,6 +1403,8 @@ pub async fn generate_thumbnails(
 
     let cover_dir = state.cover_dir.clone();
     let sem = state.io_sem.clone();
+    let preview_base_dir = state.preview_base_dir.clone();
+    let pool = state.pool.clone();
 
     tokio::task::spawn(async move {
         for asset in raw_assets {
@@ -1383,6 +1412,8 @@ pub async fn generate_thumbnails(
             let Ok(permit) = permit else { break };
             let cover_dir = cover_dir.clone();
             let app = app.clone();
+            let preview_base_dir = preview_base_dir.clone();
+            let pool = pool.clone();
             // await 每个任务完成后再继续，真正串行限流，不会同时 spawn 大量 blocking 线程
             let _ = tokio::task::spawn_blocking(move || {
                 let _permit = permit;
@@ -1395,17 +1426,18 @@ pub async fn generate_thumbnails(
                     .unwrap_or(0);
                 let cover_path = cover_dir.join(format!("{}_{}.jpg", asset.id, mtime));
 
-                // 幂等：cover 文件已存在则跳过
-                if cover_path.exists() {
+                // 幂等：cover 和 preview_base 都已存在则跳过
+                let preview_path = preview_base_dir.join(format!("{}_{}.png", asset.id, mtime));
+                if cover_path.exists() && preview_path.exists() {
                     let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
                     return;
                 }
 
                 let src = std::path::PathBuf::from(&asset.file_path);
-                let cover_jpeg = match processing::raw::extract_cover_fast(&src, 400) {
-                    Ok(c) => c,
+                let (cover_jpeg, preview_png) = match processing::raw::generate_cover_and_preview_base(&src) {
+                    Ok(pair) => pair,
                     Err(e) => {
-                        tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: cover extract failed");
+                        tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: decode failed");
                         return;
                     }
                 };
@@ -1413,6 +1445,14 @@ pub async fn generate_thumbnails(
                 if let Err(e) = std::fs::write(&cover_path, &cover_jpeg) {
                     tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: write cover failed");
                     return;
+                }
+
+                if let Err(e) = std::fs::write(&preview_path, &preview_png) {
+                    tracing::warn!(asset_id = asset.id, error = %e, "generate_thumbnails: write preview_base failed");
+                } else {
+                    let rt = tokio::runtime::Handle::current();
+                    let preview_path_str = preview_path.to_string_lossy().to_string();
+                    let _ = rt.block_on(crate::db::assets::update_preview_path(&pool, asset.id, &preview_path_str));
                 }
 
                 let _ = app.emit("thumbnail:done", &ThumbnailDonePayload { asset_id: asset.id });
