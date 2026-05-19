@@ -13,4 +13,4 @@ src-tauri/gen
 *.tsbuildinfo
 target
 
-tmp
+src-tauri/libs/
