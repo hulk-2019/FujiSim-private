@@ -362,11 +362,13 @@ pub async fn get_preview(
         .map_err(|e| AppError::other(e.to_string()))?;
     }
 
-    // 未命中：acquire preview_sem 后再解码，限制同时跑的 LibRaw 解码数 ≤ 2
+    // 未命中：在 async 上下文 acquire permit，排队等待而非降级，
+    // 保证同时进入 load_and_downsample 的请求严格 ≤ 2。
     let cache = state.preview_cache.clone();
-    let preview_sem = state.preview_sem.clone();
+    let permit = state.preview_sem.clone().acquire_owned().await
+        .map_err(|e| AppError::other(e.to_string()))?;
     tokio::task::spawn_blocking(move || {
-        let _permit = preview_sem.try_acquire_owned().ok();
+        let _permit = permit; // 持有至 blocking 任务结束
         preview_pool.install(|| {
             let resized = load_and_downsample(&path, max_edge)?;
             let resized = Arc::new(resized);
