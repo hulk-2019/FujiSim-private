@@ -87,25 +87,6 @@ pub fn resolve_destination_dir(src: &Path, dest: &Destination) -> Result<PathBuf
     Ok(dir)
 }
 
-/// 从磁盘读取水印 PNG，按各轴独立缩放到输出图尺寸后合成。
-/// 独立缩放（而非等比+居中）保证位置语义正确：bottom-center 始终在底部中央，
-/// 即使水印 canvas 与输出图宽高比不同也不会偏移。
-fn load_watermark_from_file(path: &Path, out_w: u32, out_h: u32) -> Result<image::RgbaImage> {
-    let wm_img = image::open(path)
-        .map_err(|e| AppError::other(format!("watermark open: {e}")))?
-        .into_rgba8();
-
-    let (wm_w, wm_h) = wm_img.dimensions();
-    if (wm_w, wm_h) == (out_w, out_h) {
-        return Ok(wm_img);
-    }
-    Ok(image::imageops::resize(
-        &wm_img,
-        out_w,
-        out_h,
-        image::imageops::FilterType::Lanczos3,
-    ))
-}
 
 fn composite_watermark(base: &mut RgbImage, overlay: &image::RgbaImage) {
     let (out_w, out_h) = base.dimensions();
@@ -146,8 +127,7 @@ pub fn export_one(
             } else {
                 let nw = (w as f32 * scale).round() as u32;
                 let nh = (h as f32 * scale).round() as u32;
-                let resized = image::imageops::resize(&processed, nw, nh, image::imageops::FilterType::Lanczos3);
-                // processed 已不再需要，立即释放（约 144MB）
+                let resized = crate::vips_io::resize_rgb16(&processed, nw, nh)?;
                 drop(processed);
                 resized
             }
@@ -157,7 +137,7 @@ pub fn export_one(
             let s = (*p as f32) / 100.0;
             let nw = (w as f32 * s).round().max(1.0) as u32;
             let nh = (h as f32 * s).round().max(1.0) as u32;
-            let resized = image::imageops::resize(&processed, nw, nh, image::imageops::FilterType::Lanczos3);
+            let resized = crate::vips_io::resize_rgb16(&processed, nw, nh)?;
             drop(processed);
             resized
         }
@@ -166,22 +146,33 @@ pub fn export_one(
 
     let out_w = final_image.width();
     let out_h = final_image.height();
-    let mut rgb8: RgbImage = ImageBuffer::new(out_w, out_h);
-    for (x, y, px) in final_image.enumerate_pixels() {
-        rgb8.put_pixel(
-            x,
-            y,
-            Rgb([(px.0[0] >> 8) as u8, (px.0[1] >> 8) as u8, (px.0[2] >> 8) as u8]),
-        );
-    }
 
-    // 合成水印：从磁盘读取预渲染的 PNG，按输出尺寸独立缩放后合成
-    if let Some(wm_path) = watermark_path {
-        match load_watermark_from_file(wm_path, out_w, out_h) {
-            Ok(overlay) => composite_watermark(&mut rgb8, &overlay),
-            Err(e) => tracing::warn!("watermark composite skipped: {e}"),
+    // watermark composite
+    let final_image = if let Some(wm_path) = watermark_path {
+        match crate::vips_io::load_watermark(wm_path, out_w, out_h) {
+            Ok(overlay) => {
+                let mut rgb8 = to_rgb8(&final_image);
+                composite_watermark(&mut rgb8, &overlay);
+                let pixels: Vec<u16> = rgb8
+                    .pixels()
+                    .flat_map(|p| {
+                        [
+                            p.0[0] as u16 * 257,
+                            p.0[1] as u16 * 257,
+                            p.0[2] as u16 * 257,
+                        ]
+                    })
+                    .collect();
+                image::ImageBuffer::from_raw(out_w, out_h, pixels).unwrap_or(final_image)
+            }
+            Err(e) => {
+                tracing::warn!("watermark composite skipped: {e}");
+                final_image
+            }
         }
-    }
+    } else {
+        final_image
+    };
 
     let stem = src_path
         .file_stem()
@@ -203,24 +194,25 @@ pub fn export_one(
         i += 1;
     }
 
-    match export.format {
-        ExportFormat::Jpeg => {
-            let mut writer = std::fs::File::create(&out)?;
-            let encoder =
-                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut writer, export.quality);
-            rgb8.write_with_encoder(encoder)?;
-        }
-        ExportFormat::Png => rgb8.save_with_format(&out, image::ImageFormat::Png)?,
-        ExportFormat::Tiff => rgb8.save_with_format(&out, image::ImageFormat::Tiff)?,
-        ExportFormat::Webp => {
-            let mut writer = std::fs::File::create(&out)?;
-            let encoder = image::codecs::webp::WebPEncoder::new_lossless(&mut writer);
-            rgb8.write_with_encoder(encoder)?;
-        }
-        ExportFormat::Gif => rgb8.save_with_format(&out, image::ImageFormat::Gif)?,
-        ExportFormat::Bmp => rgb8.save_with_format(&out, image::ImageFormat::Bmp)?,
-    }
+    crate::vips_io::encode_rgb16_to_file(&final_image, &out, export.format, export.quality)?;
     Ok(out)
+}
+
+fn to_rgb8(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> RgbImage {
+    let (w, h) = img.dimensions();
+    let mut out = RgbImage::new(w, h);
+    for (x, y, px) in img.enumerate_pixels() {
+        out.put_pixel(
+            x,
+            y,
+            Rgb([
+                (px.0[0] >> 8) as u8,
+                (px.0[1] >> 8) as u8,
+                (px.0[2] >> 8) as u8,
+            ]),
+        );
+    }
+    out
 }
 
 /// 文件名清理：把非 ASCII 字母数字字符替换为下划线。
