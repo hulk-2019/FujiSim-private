@@ -371,9 +371,8 @@ pub async fn get_preview(
             let pcd = preview_cache_dir.clone();
             return tokio::task::spawn_blocking(move || {
                 preview_pool.install(|| {
-                    let img = image::open(&pp_path)
-                        .map_err(|e| AppError::other(format!("preview_base read: {e}")))?
-                        .to_rgb16();
+                    let img = crate::vips_io::decode_to_rgb16(&pp_path)
+                        .map_err(|e| AppError::other(format!("preview_base read: {e}")))?;
                     let resized = Arc::new(img);
                     if let Ok(mut c) = cache.lock() {
                         while c.len() >= 20 {
@@ -427,7 +426,7 @@ fn load_and_downsample(path: &Path, max_edge: u32) -> Result<image::ImageBuffer<
     if scale < 1.0 {
         let nw = (w as f32 * scale).round().max(1.0) as u32;
         let nh = (h as f32 * scale).round().max(1.0) as u32;
-        Ok(image::imageops::resize(&src, nw, nh, image::imageops::FilterType::Triangle))
+        crate::vips_io::resize_rgb16(&src, nw, nh)
     } else {
         Ok(src)
     }
@@ -461,20 +460,12 @@ fn render_preview_from_cache(
 
     if !out_path.exists() {
         let processed = crate::processing::process_image(resized, settings, lut)?;
-        let (pw, ph) = processed.dimensions();
-        let mut rgb8 = image::RgbImage::new(pw, ph);
-        for (x, y, px) in processed.enumerate_pixels() {
-            rgb8.put_pixel(x, y, image::Rgb([
-                (px.0[0] >> 8) as u8,
-                (px.0[1] >> 8) as u8,
-                (px.0[2] >> 8) as u8,
-            ]));
-        }
-        let mut buf = std::io::Cursor::new(Vec::new());
-        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 88);
-        rgb8.write_with_encoder(encoder)
-            .map_err(|e| crate::error::AppError::other(format!("jpeg encode: {e}")))?;
-        std::fs::write(&out_path, buf.into_inner())
+        let jpeg = crate::vips_io::encode_rgb16(
+            &processed,
+            crate::export::ExportFormat::Jpeg,
+            88,
+        )?;
+        std::fs::write(&out_path, &jpeg)
             .map_err(|e| crate::error::AppError::other(format!("preview write: {e}")))?;
 
         evict_preview_cache(preview_cache_dir, 40);
