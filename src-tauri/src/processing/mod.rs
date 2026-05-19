@@ -30,16 +30,13 @@ pub use pipeline::{process_image, FilterSettings};
 
 /// 加载图片到 16-bit linear RGB。
 ///
-/// - 普通图片走 `image::open`，一步到位；
+/// - 普通图片走 `vips_io::decode_to_rgb16`；
 /// - RAW 文件转发到 [`raw::decode_raw_rgb16`]（MVP 阶段返回 `Unsupported`）；
 /// - 不支持的扩展名返回 `Unsupported` 错误。
 pub fn load_image_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     use crate::asset::format::{classify, FileKind};
     match classify(path) {
-        FileKind::Image => {
-            let img = image::open(path)?;
-            Ok(img.to_rgb16())
-        }
+        FileKind::Image => crate::vips_io::decode_to_rgb16(path),
         FileKind::Raw => raw::decode_raw_rgb16(path),
         FileKind::Unsupported => Err(crate::error::AppError::Unsupported(
             path.display().to_string(),

@@ -111,7 +111,7 @@ fn extract_meta(path: &Path, kind: FileKind) -> (ExifData, Option<i64>, Option<i
             let mut width = exif.width;
             let mut height = exif.height;
             if width.is_none() || height.is_none() {
-                if let Ok(dim) = image::image_dimensions(path) {
+                if let Ok(dim) = crate::vips_io::image_dimensions(path) {
                     width = Some(dim.0 as i64);
                     height = Some(dim.1 as i64);
                 }
