@@ -24,10 +24,6 @@ pub enum AppError {
     #[error("migrate: {0}")]
     Migrate(#[from] sqlx::migrate::MigrateError),
 
-    /// `image` crate 解码/编码失败
-    #[error("image: {0}")]
-    Image(#[from] image::ImageError),
-
     /// Exif 解析失败（坏文件、不支持的标签等）
     #[error("exif: {0}")]
     Exif(#[from] exif::Error),
