@@ -28,8 +28,7 @@ pub struct AppState {
     /// 预览渲染专用线程池，与导出线程池隔离，避免导出任务阻塞 UI 预览响应
     pub preview_pool: Arc<rayon::ThreadPool>,
     pub task_queue: TaskQueue,
-    /// 封面图生成专用信号量，容量 4，与 EXIF io_sem 解耦
-    pub cover_sem: Arc<Semaphore>,
+    pub cover_queue: Arc<crate::cover_queue::CoverQueue>,
     /// 统一限制缩略图生成和 EXIF 提取的总并发数（固定 4），
     /// 两个 worker 共享同一个信号量，无论同时跑都不超过 4 个 blocking 线程。
     pub io_sem: Arc<Semaphore>,
@@ -113,8 +112,9 @@ impl AppState {
             export_pool,
             preview_pool,
             task_queue: TaskQueue::new(2),
-            // 封面图生成专用信号量，容量 4，与 EXIF io_sem 解耦
-            cover_sem: Arc::new(Semaphore::new(4)),
+            cover_queue: Arc::new(crate::cover_queue::CoverQueue::new(
+                (logical_cpus / 2).max(2),
+            )),
             // 缩略图生成和 EXIF 提取共享信号量，总并发固定 4
             io_sem: Arc::new(Semaphore::new(4)),
             // RAW 解码并发上限 2，防止快速切换时 CPU 急升

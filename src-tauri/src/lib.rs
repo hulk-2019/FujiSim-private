@@ -22,6 +22,7 @@ pub mod error;
 pub mod export;
 pub mod ipc;
 pub mod processing;
+pub mod cover_queue;
 pub mod queue;
 pub mod state;
 pub mod vips_io;
