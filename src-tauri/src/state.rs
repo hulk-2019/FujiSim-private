@@ -31,6 +31,10 @@ pub struct AppState {
     /// 每次 get_preview / get_raw_original 调用时前端传入最新 token，
     /// 后端在 CPU 密集节点检查是否仍是最新值，不是则提前返回 preview_cancelled。
     pub preview_token: Arc<AtomicU64>,
+    /// 限制 get_preview 同时只跑 1 个解码任务。
+    /// 快速切换时旧请求拿到 permit 后发现 token 过期立即退出，新请求才真正解码，
+    /// 避免多个 RAW 解码同时占满 CPU。
+    pub preview_sem: Arc<Semaphore>,
 }
 
 /// 共享状态别名。用 `Arc` 包裹以便在 spawn_blocking / rayon 之间廉价克隆。
@@ -60,8 +64,8 @@ impl AppState {
             .map(|n| n.get())
             .unwrap_or(4);
 
-        // 导出并发：逻辑核心数 - 1（最少 2），配合内存预算系统动态控制实际并发
-        let export_threads = (logical_cpus.saturating_sub(1)).max(2);
+        // 导出并发：逻辑核心数的一半（最少 2），给系统和预览留出余量
+        let export_threads = (logical_cpus / 2).max(2);
         let export_pool = Arc::new(
             rayon::ThreadPoolBuilder::new()
                 .num_threads(export_threads)
@@ -89,6 +93,7 @@ impl AppState {
             io_sem: Arc::new(Semaphore::new(4)),
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
             preview_token: Arc::new(AtomicU64::new(0)),
+            preview_sem: Arc::new(Semaphore::new(1)),
         });
         seed_builtin_presets(&state.pool).await?;
         Ok(state)

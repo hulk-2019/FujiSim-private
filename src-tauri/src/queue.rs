@@ -33,6 +33,23 @@ impl TaskQueue {
         self.running() < self.max_concurrent
     }
 
+    /// 原子地检查是否有空闲槽位并占用一个，返回 true 表示成功获取槽位。
+    /// 相比 can_start_more() + on_task_start() 分开调用，消除了并发竞争窗口。
+    pub fn try_acquire(&self) -> bool {
+        loop {
+            let cur = self.running_count.load(Ordering::SeqCst);
+            if cur >= self.max_concurrent {
+                return false;
+            }
+            if self.running_count
+                .compare_exchange(cur, cur + 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return true;
+            }
+        }
+    }
+
     /// 任务开始时调用，递增计数器
     pub fn on_task_start(&self) {
         self.running_count.fetch_add(1, Ordering::SeqCst);

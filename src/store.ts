@@ -39,7 +39,7 @@ import { registerFont, unregisterFont } from "./lib/fontManager";
  * 用作 `resetFilter` 的目标，以及组件挂载时的初始值。
  */
 export const DEFAULT_FILTER: FilterSettings = {
-  base_simulation: "Provia",
+  base_simulation: "Pass-Through",
   grain_effect: "None",
   grain_size: "Small",
   color_chrome_effect: "None",
@@ -168,6 +168,8 @@ type AppState = {
   setPreviewContainerSize: (size: { width: number; height: number } | null) => void;
   /** 用单条最新 asset 数据原地更新 assets 数组（封面生成完成后调用） */
   patchAsset: (updated: Asset) => void;
+  /** 批量原地更新多条 asset，单次状态更新避免多次重渲染 */
+  batchPatchAssets: (updates: Asset[]) => void;
 };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -208,7 +210,11 @@ export const useStore = create<AppState>((set, get) => ({
   previewSizeAssetId: null,
   previewContainerSize: null,
   cameras: [],
-  fujiSimulations: [],
+  fujiSimulations: [
+    "Provia", "Velvia", "Astia", "Classic Chrome",
+    "Pro Neg Std", "Pro Neg Hi", "Eterna", "Classic Neg",
+    "Nostalgic Neg", "Acros", "Acros + Y", "Acros + R", "Monochrome",
+  ],
   albums: [],
   currentFolderId: null,
   currentFolderName: null,
@@ -493,5 +499,14 @@ export const useStore = create<AppState>((set, get) => ({
     const arr = [...state.assets];
     arr[idx] = updated;
     return { assets: arr };
+  }),
+  batchPatchAssets: (updates) => set((state) => {
+    const map = new Map(updates.map((a) => [a.id, a]));
+    let changed = false;
+    const arr = state.assets.map((a) => {
+      if (a && map.has(a.id)) { changed = true; return map.get(a.id)!; }
+      return a;
+    });
+    return changed ? { assets: arr } : {};
   }),
 }));

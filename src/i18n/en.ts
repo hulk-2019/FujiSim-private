@@ -49,6 +49,7 @@ const en = {
       info: "Info",
     },
     filmSimulation: "Film simulation",
+    noSimulation: "None",
     importing: "Importing…",
     importLut: "Import LUT",
     importFiles: "Choose files (multi-select)",

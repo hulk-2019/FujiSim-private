@@ -79,7 +79,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     // 应用重启时所有 processing 任务实际上已中断，重置为 pending 以便队列重新调度。
     for sql in [
         "ALTER TABLE batch_tasks ADD COLUMN watermark_layer_path TEXT",
-        "UPDATE batch_tasks SET status = 'pending'    WHERE status IN ('Processing')",
+        "UPDATE batch_tasks SET status = 'pending'    WHERE status IN ('Processing', 'processing')",
         "UPDATE batch_tasks SET status = 'done'       WHERE status IN ('Completed')",
         "UPDATE batch_tasks SET status = 'error'      WHERE status IN ('Failed')",
         "UPDATE batch_tasks SET status = 'cancelled'  WHERE status IN ('Cancelled')",

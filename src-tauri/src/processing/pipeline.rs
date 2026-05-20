@@ -43,10 +43,27 @@ pub struct FilterSettings {
     pub lut_file_path: Option<PathBuf>,
 }
 
+impl FilterSettings {
+    /// 所有参数都在默认值时返回 true，pipeline 可以直接返回原图。
+    pub fn is_identity(&self) -> bool {
+        (self.base_simulation == "Pass-Through" || self.base_simulation.is_empty())
+            && self.lut_file_path.is_none()
+            && self.highlight_tone == 0.0
+            && self.shadow_tone == 0.0
+            && self.color_saturation == 0.0
+            && self.clarity == 0.0
+            && self.sharpness == 0.0
+            && self.wb_shift_r == 0
+            && self.wb_shift_b == 0
+            && matches!(self.grain_effect.as_deref(), None | Some("None"))
+            && matches!(self.color_chrome_effect.as_deref(), None | Some("None"))
+    }
+}
+
 impl Default for FilterSettings {
     fn default() -> Self {
         Self {
-            base_simulation: "Provia".into(),
+            base_simulation: "Pass-Through".into(),
             grain_effect: None,
             grain_size: None,
             color_chrome_effect: None,
@@ -84,6 +101,11 @@ pub fn process_image(
     settings: &FilterSettings,
     lut: Option<&Lut3D>,
 ) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    // 全默认 + 无 LUT 时直接返回原图，避免 decode→float→u16 的量化误差
+    if lut.is_none() && settings.is_identity() {
+        return Ok(src.clone());
+    }
+
     let (w, h) = src.dimensions();
     let profile = fuji::lookup(&settings.base_simulation);
 

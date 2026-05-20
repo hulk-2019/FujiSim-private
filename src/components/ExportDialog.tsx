@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const [longEdge, setLongEdge] = useState(2048);
   const [percent, setPercent] = useState(50);
   const [stripGps, setStripGps] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const targetIds =
     selectedIds.size > 0
@@ -64,7 +66,9 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   }
 
   async function submit() {
-    if (targetIds.length === 0) return;
+    if (targetIds.length === 0 || submitting) return;
+    setSubmitting(true);
+    try {
     const destination: Destination =
       destKind === "subfolder"
         ? { kind: "subfolder", name: subfolder || "FujiSim_Export" }
@@ -120,6 +124,9 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
       watermark_settings: watermark.enabled ? watermark : null,
     });
     onOpenChange(false);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -230,7 +237,8 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={submit} disabled={targetIds.length === 0}>
+            <Button onClick={submit} disabled={targetIds.length === 0 || submitting}>
+              {submitting && <Loader2 size={13} className="mr-1.5 animate-spin" />}
               {t("exportDialog.startExport", { count: targetIds.length })}
             </Button>
           </div>

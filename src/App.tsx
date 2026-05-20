@@ -27,17 +27,28 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
+    const pendingIds = new Set<number>();
+    let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
     listen<{ asset_id: number }>("thumbnail:done", (e) => {
       if (cancelled) return;
-      api.getAsset(e.payload.asset_id)
-        .then((updated) => { if (!cancelled) useStore.getState().patchAsset(updated); })
-        .catch(() => {});
+      pendingIds.add(e.payload.asset_id);
+      if (batchTimer) clearTimeout(batchTimer);
+      batchTimer = setTimeout(async () => {
+        if (cancelled) return;
+        const ids = [...pendingIds];
+        pendingIds.clear();
+        const updates = await Promise.all(ids.map((id) => api.getAsset(id).catch(() => null)));
+        const valid = updates.filter((a): a is NonNullable<typeof a> => a !== null);
+        if (valid.length > 0) useStore.getState().batchPatchAssets(valid);
+      }, 200);
     }).then((u) => {
       if (cancelled) u();
       else unlisten = u;
     });
     return () => {
       cancelled = true;
+      if (batchTimer) clearTimeout(batchTimer);
       unlisten?.();
     };
   }, []);

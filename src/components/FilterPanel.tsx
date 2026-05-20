@@ -199,6 +199,7 @@ export function FilterPanel() {
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>{t("filterPanel.systemPresets")}</SelectLabel>
+                  <SelectItem value={`${FUJI_PREFIX}Pass-Through`}>{t("filterPanel.noSimulation")}</SelectItem>
                   {fujiSimulations.map((s) => (
                     <SelectItem key={s} value={`${FUJI_PREFIX}${s}`}>{s}</SelectItem>
                   ))}

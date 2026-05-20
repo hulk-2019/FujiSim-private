@@ -71,6 +71,15 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     setLoading(true);
 
     const handle = setTimeout(async () => {
+      const isIdentity =
+        (filter.base_simulation === "Pass-Through" || !filter.base_simulation) &&
+        !filter.lut_file_path &&
+        filter.highlight_tone === 0 && filter.shadow_tone === 0 &&
+        filter.color_saturation === 0 && filter.clarity === 0 &&
+        filter.sharpness === 0 && filter.wb_shift_r === 0 && filter.wb_shift_b === 0 &&
+        (!filter.grain_effect || filter.grain_effect === "None") &&
+        (!filter.color_chrome_effect || filter.color_chrome_effect === "None");
+
       // Step 1: RAW 嵌入原图（仅 RAW 文件，缓存命中时几乎无延迟）
       if (focused.is_raw) {
         try {
@@ -80,11 +89,16 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
           }
         } catch (e) {
           if (String(e).includes("preview_cancelled")) return;
-          // 其他错误忽略，继续加载 preview
         }
       }
 
       if (currentTokenRef.current !== token) return;
+
+      // identity filter + RAW：相机嵌入 JPEG 即为最终展示，跳过 LibRaw 解码
+      if (isIdentity && focused.is_raw) {
+        setLoading(false);
+        return;
+      }
 
       // Step 2: 实时预览
       const doPreview = async () => {

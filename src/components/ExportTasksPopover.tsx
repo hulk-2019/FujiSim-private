@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
 import { Download, X, CheckCircle, AlertCircle, Loader2, RotateCcw, CirclePause, Clock, Ban } from "lucide-react";
 import { cn, getTaskStatus, TASK_STATUS_COLOR, formatTime } from "@/lib/utils";
@@ -130,10 +131,33 @@ export function ExportTasksPopover() {
   const retryExportTask = useStore((s) => s.retryExportTask);
 
   const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const STATUS_PRIORITY: Record<string, number> = {
+    processing: 0,
+    pending: 1,
+    error: 2,
+    cancelled: 3,
+    done: 4,
+  };
 
   const tasks = [...exportTasks.values()]
     .filter((t) => !dismissedTaskIds.has(t.task_id))
-    .sort((a, b) => b.task_id - a.task_id);
+    .sort((a, b) => {
+      const sa = getTaskStatus(a, taskDetails.get(a.task_id)?.status);
+      const sb = getTaskStatus(b, taskDetails.get(b.task_id)?.status);
+      const pa = STATUS_PRIORITY[sa] ?? 9;
+      const pb = STATUS_PRIORITY[sb] ?? 9;
+      if (pa !== pb) return pa - pb;
+      return b.task_id - a.task_id;
+    });
+
+  const virtualizer = useVirtualizer({
+    count: tasks.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 80,
+    overscan: 3,
+  });
 
   const activeCount = tasks.filter((t) => {
     const s = getTaskStatus(t, taskDetails.get(t.task_id)?.status);
@@ -187,20 +211,31 @@ export function ExportTasksPopover() {
                 )}
               </div>
             </div>
-            <div className="px-3 max-h-80 overflow-y-auto">
+            <div ref={listRef} className="px-3 max-h-80 overflow-y-auto">
               {tasks.length === 0 ? (
                 <p className="py-4 text-center text-xs text-zinc-600">{t("exportTasks.empty")}</p>
               ) : (
-                tasks.map((task) => (
-                  <TaskRow
-                    key={task.task_id}
-                    progress={task}
-                    detail={taskDetails.get(task.task_id)}
-                    onDismiss={() => dismissExportTask(task.task_id)}
-                    onCancel={() => cancelExportTask(task.task_id)}
-                    onRetry={() => retryExportTask(task.task_id)}
-                  />
-                ))
+                <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+                  {virtualizer.getVirtualItems().map((vItem) => {
+                    const task = tasks[vItem.index];
+                    return (
+                      <div
+                        key={task.task_id}
+                        style={{ position: "absolute", top: vItem.start, left: 0, right: 0 }}
+                        ref={virtualizer.measureElement}
+                        data-index={vItem.index}
+                      >
+                        <TaskRow
+                          progress={task}
+                          detail={taskDetails.get(task.task_id)}
+                          onDismiss={() => dismissExportTask(task.task_id)}
+                          onCancel={() => cancelExportTask(task.task_id)}
+                          onRetry={() => retryExportTask(task.task_id)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>

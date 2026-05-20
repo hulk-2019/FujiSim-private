@@ -349,7 +349,7 @@ pub async fn get_preview(
     let settings = settings.unwrap_or_default();
     let lut = cached_lut(&state, settings.lut_file_path.as_deref())?;
     let export_pool = state.export_pool.clone();
-    let sem = state.io_sem.clone();
+    let sem = state.preview_sem.clone();
     let preview_token = state.preview_token.clone();
 
     let permit = sem.acquire_owned().await
@@ -506,10 +506,14 @@ pub async fn start_batch_export(
 
 /// 从数据库取出 pending 任务填充空闲并发槽位。
 async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
-    while state.task_queue.can_start_more() {
+    while state.task_queue.try_acquire() {
         let task = match tasks::claim_next_pending(&state.pool).await {
             Ok(Some(t)) => t,
-            _ => break,
+            _ => {
+                // 没有 pending 任务，归还刚占用的槽位
+                state.task_queue.on_task_finish(-1);
+                break;
+            }
         };
 
         let task_id = task.id;
@@ -519,6 +523,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             Err(e) => {
                 tracing::error!(task_id, error = %e, "dispatch_pending: bad filter_json");
                 let _ = tasks::finish(&state.pool, task_id).await;
+                state.task_queue.on_task_finish(task_id);
                 continue;
             }
         };
@@ -527,6 +532,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             Err(e) => {
                 tracing::error!(task_id, error = %e, "dispatch_pending: bad export_json");
                 let _ = tasks::finish(&state.pool, task_id).await;
+                state.task_queue.on_task_finish(task_id);
                 continue;
             }
         };
@@ -535,6 +541,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             Err(e) => {
                 tracing::error!(task_id, error = %e, "dispatch_pending: lut load failed");
                 let _ = tasks::finish(&state.pool, task_id).await;
+                state.task_queue.on_task_finish(task_id);
                 continue;
             }
         };
@@ -543,7 +550,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             .as_deref()
             .map(PathBuf::from);
 
-        state.task_queue.on_task_start();
+        // try_acquire 已经递增了计数器，无需再调用 on_task_start
         run_export_task(
             state.clone(),
             app.clone(),
@@ -1056,14 +1063,14 @@ pub async fn retry_export_task(
         done: false,
     });
 
-    if state.task_queue.can_start_more() {
+    if state.task_queue.try_acquire() {
         sqlx::query("UPDATE batch_tasks SET status = 'processing' WHERE id = ?")
             .bind(task_id)
             .execute(&state.pool)
             .await?;
 
         let lut = cached_lut(&state, filter.lut_file_path.as_deref())?;
-        state.task_queue.on_task_start();
+        // try_acquire 已经递增了计数器，无需再调用 on_task_start
         run_export_task(
             state.inner().clone(), app,
             task_id, asset_id, filter, export_settings, lut, resolved_path,

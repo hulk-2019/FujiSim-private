@@ -49,6 +49,7 @@ const zh = {
       info: "信息",
     },
     filmSimulation: "胶片模拟",
+    noSimulation: "无",
     importing: "导入中…",
     importLut: "导入 LUT",
     importFiles: "选择文件（批量多选）",
