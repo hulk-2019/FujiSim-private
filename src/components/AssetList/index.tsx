@@ -183,7 +183,10 @@ export function AssetList() {
       </div>
       {loading && totalCount === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-[#4A4F5A] text-xs">
-          <div className="w-5 h-5 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin" />
+          <div className="relative w-5 h-5">
+              <div className="absolute inset-0 rounded-full border-2 border-zinc-600 animate-ping opacity-60" />
+              <div className="absolute inset-1 rounded-full bg-zinc-600 animate-pulse" />
+            </div>
           <span>{t("assetGrid.loading")}</span>
         </div>
       )}

@@ -225,12 +225,11 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 )}
               </div>
             ) : (
-              /* 无图可显示时：按宽高比显示骨架屏，不全屏 */
-              <div
-                className="max-w-full max-h-full rounded-sm overflow-hidden"
-                style={{ aspectRatio, width: "100%", height: "100%" }}
-              >
-                <div className="w-full h-full bg-zinc-800/50 animate-pulse" />
+              <div className="flex flex-col items-center justify-center gap-3 text-zinc-500">
+                <div className="relative w-10 h-10">
+                  <div className="absolute inset-0 rounded-full border-2 border-zinc-600 animate-ping opacity-60" />
+                  <div className="absolute inset-1.5 rounded-full bg-zinc-600 animate-pulse" />
+                </div>
               </div>
             )}
             {loading && displaySrc && (
