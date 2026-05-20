@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
+// 全局单调递增 token，每次发起新预览请求时递增，后端用它识别过期请求
+let previewTokenCounter = 0;
+
 export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const { t } = useTranslation();
   const focusedId = useStore((s) => s.focusedId);
@@ -23,10 +26,9 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
-  // 完整嵌入 JPEG（来自 get_raw_thumbnail），用于"按住对比原图"和 preview 占位
   const [rawOriginalSrc, setRawOriginalSrc] = useState<string | null>(null);
-  const reqId = useRef(0);
-  const previewCache = useRef<Map<string, { blobUrl: string; width: number; height: number }>>(new Map());
+  // 当前请求的 token，用于在回调中判断结果是否仍然有效
+  const currentTokenRef = useRef(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
 
@@ -48,95 +50,77 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     roRef.current = ro;
   }, []);
 
-  // 组件卸载时断开 ResizeObserver（本地文件路径无需 revokeObjectURL）
   useEffect(() => {
-    return () => {
-      roRef.current?.disconnect();
-    };
+    return () => { roRef.current?.disconnect(); };
   }, []);
-
-  // RAW 原图：后台静默加载完整嵌入 JPEG，用于"按住对比"和 preview 占位
-  useEffect(() => {
-    if (!focused?.is_raw) {
-      setRawOriginalSrc(null);
-      return;
-    }
-    let cancelled = false;
-    setRawOriginalSrc(null);
-    api.getRawThumbnail(focused.id)
-      .then((path) => {
-        if (cancelled) return;
-        try { setRawOriginalSrc(convertFileSrc(path)); } catch { /* ignore */ }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [focused?.id, focused?.is_raw]);
 
   useEffect(() => {
     if (!focused) {
       setPreview(null);
       setLoading(false);
+      setRawOriginalSrc(null);
       return;
     }
-    const filterKey = JSON.stringify(filter);
-    const cacheKey = `${focused.id}:${filterKey}`;
-    // 命中前端缓存：直接恢复结果，零后端调用
-    const cached = previewCache.current.get(cacheKey);
-    if (cached) {
-      setPreview(cached);
-      setPreviewSize({ width: cached.width, height: cached.height }, focused.id);
-      setLoading(false);
-      return;
-    }
-    // Clear stale full preview immediately so we fall back to thumbSrc
+
+    const token = ++previewTokenCounter;
+    currentTokenRef.current = token;
+
     setPreview(null);
     setError(null);
-    const myId = ++reqId.current;
+    setRawOriginalSrc(null);
     setLoading(true);
 
     const handle = setTimeout(async () => {
+      // Step 1: RAW 嵌入原图（仅 RAW 文件，缓存命中时几乎无延迟）
+      if (focused.is_raw) {
+        try {
+          const path = await api.getRawOriginal(focused.id, token);
+          if (currentTokenRef.current === token) {
+            setRawOriginalSrc(convertFileSrc(path));
+          }
+        } catch (e) {
+          if (String(e).includes("preview_cancelled")) return;
+          // 其他错误忽略，继续加载 preview
+        }
+      }
+
+      if (currentTokenRef.current !== token) return;
+
+      // Step 2: 实时预览
+      const doPreview = async () => {
+        const r = await api.getPreview(focused.id, filter, 1280, token);
+        if (currentTokenRef.current !== token) return;
+        const src = convertFileSrc(r.path);
+        setPreview({ blobUrl: src, width: r.width, height: r.height });
+        setPreviewSize({ width: r.width, height: r.height }, focused.id);
+        setLoading(false);
+      };
+
       try {
-        const r = await api.getPreview(focused.id, filter, 1280);
-        if (reqId.current === myId) {
-          const src = convertFileSrc(r.path);
-          const entry = { blobUrl: src, width: r.width, height: r.height };
-          previewCache.current.set(cacheKey, entry);
-          setPreview(entry);
-          setPreviewSize({ width: r.width, height: r.height }, focused.id);
+        await doPreview();
+      } catch (e) {
+        if (currentTokenRef.current !== token) return;
+        if (String(e).includes("preview_cancelled")) return;
+        if (String(e).includes("preview_busy")) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (currentTokenRef.current !== token) return;
+          try {
+            await doPreview();
+          } catch (e2) {
+            if (currentTokenRef.current === token && !String(e2).includes("preview_cancelled")) {
+              setError(String(e2));
+              setLoading(false);
+            }
+          }
+        } else {
+          setError(String(e));
           setLoading(false);
         }
-      } catch (e) {
-        if (reqId.current !== myId) return;
-        // Backend busy (another decode in flight) — retry after a short delay
-        if (String(e).includes("preview_busy")) {
-          const retryHandle = setTimeout(async () => {
-            if (reqId.current !== myId) return;
-            try {
-              const r = await api.getPreview(focused.id, filter, 1280);
-              if (reqId.current === myId) {
-                const src = convertFileSrc(r.path);
-                const entry = { blobUrl: src, width: r.width, height: r.height };
-                previewCache.current.set(cacheKey, entry);
-                setPreview(entry);
-                setPreviewSize({ width: r.width, height: r.height }, focused.id);
-                setLoading(false);
-              }
-            } catch (e2) {
-              if (reqId.current === myId) {
-                setError(String(e2));
-                setLoading(false);
-              }
-            }
-          }, 300);
-          // Store retry handle so it can be cancelled if focus changes
-          return () => clearTimeout(retryHandle);
-        }
-        setError(String(e));
-        setLoading(false);
       }
     }, 250);
+
     return () => clearTimeout(handle);
-  }, [focused?.id, filter]);
+  }, [focused?.id, focused?.is_raw, filter]);
 
   function handleShowOriginal() {
     setShowOriginal(true);
@@ -159,19 +143,29 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     ? rawOriginalSrc
     : convertFileSrc(focused.file_path);
 
-  // preview 区域占位：RAW 用 rawOriginalSrc，非 RAW 直接用原文件
-  const placeholderSrc: string | null = focused.is_raw
-    ? rawOriginalSrc
-    : (() => { try { return convertFileSrc(focused.file_path); } catch { return null; } })();
+  // 占位图优先级：rawOriginalSrc > DB 缓存的 preview_path > cover_path > 非 RAW 原文件
+  const placeholderSrc: string | null = (() => {
+    if (rawOriginalSrc) return rawOriginalSrc;
+    if (focused.is_raw) {
+      if (focused.preview_path) {
+        try { return convertFileSrc(focused.preview_path); } catch { /* ignore */ }
+      }
+      if (focused.cover_path) {
+        try { return convertFileSrc(focused.cover_path); } catch { /* ignore */ }
+      }
+      return null;
+    }
+    try { return convertFileSrc(focused.file_path); } catch { return null; }
+  })();
 
   const displaySrc = previewSrc ?? placeholderSrc;
 
-  // 容器宽高比固定用 DB 存储的原始尺寸，不随 preview 切换，避免加载时布局跳变
+  // 宽高比：优先用 DB 存储的原始尺寸，没有时用 3/2 作为合理默认值，避免骨架屏全屏
   const aspectRatio = focused.width && focused.height
     ? `${focused.width} / ${focused.height}`
     : preview
     ? `${preview.width} / ${preview.height}`
-    : null;
+    : "3 / 2";
 
   return (
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
@@ -231,12 +225,10 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 )}
               </div>
             ) : (
-              /* 无图可显示时：按宽高比显示骨架屏，撑满画布 */
+              /* 无图可显示时：按宽高比显示骨架屏，不全屏 */
               <div
                 className="max-w-full max-h-full rounded-sm overflow-hidden"
-                style={aspectRatio
-                  ? { aspectRatio, width: "100%", height: "100%" }
-                  : { width: "100%", height: "100%" }}
+                style={{ aspectRatio, width: "100%", height: "100%" }}
               >
                 <div className="w-full h-full bg-zinc-800/50 animate-pulse" />
               </div>

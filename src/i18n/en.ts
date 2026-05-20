@@ -249,7 +249,7 @@ const en = {
     delete: "Delete",
     namePlaceholder: "Folder name",
     nameExists: "Folder name already exists",
-    confirmDelete: "This will permanently delete {{count}} file(s) inside. This cannot be undone.",
+    confirmDelete: "This folder and {{count}} file(s) will be removed from the library. Original files will not be deleted.",
     confirmDeleteEmpty: "Delete this empty folder?",
     noFolders: "No folders yet. Click + to create one.",
   },

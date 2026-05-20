@@ -279,13 +279,7 @@ pub async fn delete_folder(
     state: State<'_, SharedState>,
     id: i64,
 ) -> Result<()> {
-    let paths = albums::delete_with_assets(&state.pool, id).await?;
-    for p in paths {
-        let path = std::path::PathBuf::from(&p);
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
-    }
+    albums::delete_with_assets(&state.pool, id).await?;
     Ok(())
 }
 
@@ -333,147 +327,79 @@ pub struct PreviewResult {
     pub height: u32,
 }
 
-/// 渲染单张照片的预览图。
-///
-/// 关键优化：先下采样到 `max_edge`（默认 1280px）再走色彩流水线，
-/// 把一张 6000×4000 像素图的处理压缩到 1280×853，速度提升约 20×，
-/// 视觉效果对 UI 预览足够。
-/// 使用独立的 preview_pool，与导出任务的 export_pool 隔离，避免导出阻塞预览响应。
-/// 下采样结果缓存在 state.preview_cache，调整滤镜时命中缓存可跳过磁盘 IO 和 RAW 解码。
+/// 实时渲染单张照片的预览图。每次调用都重新解码 + 下采样 + 色彩流水线，
+/// 结果写入系统临时目录下的文件，返回路径供前端 convertFileSrc 加载。
+/// token 用于取消：前端每次切换文件时递增 token，后端在解码完成后检查，
+/// 若 token 已过期则返回 preview_cancelled，前端静默丢弃。
 #[tauri::command]
 pub async fn get_preview(
     state: State<'_, SharedState>,
     asset_id: i64,
     settings: Option<FilterSettings>,
     max_edge: Option<u32>,
+    token: u64,
 ) -> Result<PreviewResult> {
+    use std::sync::atomic::Ordering;
+    // 注册为当前最新 token，同时让旧的请求在检查时发现自己已过期
+    state.preview_token.store(token, Ordering::SeqCst);
+
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
     let max_edge = max_edge.unwrap_or(1280);
     let settings = settings.unwrap_or_default();
     let lut = cached_lut(&state, settings.lut_file_path.as_deref())?;
-    let preview_pool = state.preview_pool.clone();
-    let preview_cache_dir = state.preview_cache_dir.clone();
+    let export_pool = state.export_pool.clone();
+    let sem = state.io_sem.clone();
+    let preview_token = state.preview_token.clone();
 
-    // 尝试从缓存取下采样底图，命中时跳过磁盘 IO + RAW 解码
-    let cached = state
-        .preview_cache
-        .lock()
-        .ok()
-        .and_then(|c| c.get(&(asset_id, max_edge)).cloned());
+    let permit = sem.acquire_owned().await
+        .map_err(|_| AppError::other("preview_busy"))?;
 
-    if let Some(resized) = cached {
-        let pcd = preview_cache_dir.clone();
-        return tokio::task::spawn_blocking(move || {
-            preview_pool.install(|| render_preview_from_cache(&resized, &settings, lut.as_deref(), &pcd, asset_id))
-        })
-        .await
-        .map_err(|e| AppError::other(e.to_string()))?;
+    // 等到拿到 permit 后再检查一次，可能已经有更新的请求进来了
+    if preview_token.load(Ordering::SeqCst) != token {
+        return Err(AppError::other("preview_cancelled"));
     }
 
-    // 未命中内存缓存：非阻塞 try_acquire，拿不到 permit 说明已有 2 个解码任务在跑，
-    // 直接返回 busy 错误让前端忽略（前端 reqId 防抖保证只用最新请求的结果）。
-    let cache = state.preview_cache.clone();
-    let permit = state.preview_sem.clone().try_acquire_owned()
-        .map_err(|_| AppError::other("preview_busy"))?;
     tokio::task::spawn_blocking(move || {
-        let _permit = permit; // 持有至 blocking 任务结束
-        preview_pool.install(|| {
-            let resized = load_and_downsample(&path, max_edge)?;
-            let resized = Arc::new(resized);
-
-            if let Ok(mut c) = cache.lock() {
-                while c.len() >= 20 {
-                    c.shift_remove_index(0);
-                }
-                c.insert((asset_id, max_edge), resized.clone());
+        let _permit = permit;
+        export_pool.install(|| {
+            use crate::asset::format::{classify, FileKind};
+            let src = match classify(&path) {
+                FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(&path, max_edge)?,
+                _ => processing::load_image_rgb16(&path)?,
+            };
+            // 解码完成后再检查一次（RAW 解码是最耗时的部分）
+            if preview_token.load(Ordering::SeqCst) != token {
+                return Err(AppError::other("preview_cancelled"));
             }
-
-            render_preview_from_cache(&resized, &settings, lut.as_deref(), &preview_cache_dir, asset_id)
+            let (w, h) = src.dimensions();
+            let scale = (max_edge as f32 / w.max(h) as f32).min(1.0);
+            let resized = if scale < 1.0 {
+                let nw = (w as f32 * scale).round().max(1.0) as u32;
+                let nh = (h as f32 * scale).round().max(1.0) as u32;
+                crate::vips_io::resize_rgb16(&src, nw, nh)?
+            } else {
+                src
+            };
+            let (rw, rh) = resized.dimensions();
+            let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
+            let jpeg = crate::vips_io::encode_rgb16(
+                &processed,
+                crate::export::ExportFormat::Jpeg,
+                88,
+            )?;
+            let out_path = std::env::temp_dir().join(format!("fujisim_preview_{asset_id}.jpg"));
+            std::fs::write(&out_path, &jpeg)
+                .map_err(|e| AppError::other(format!("preview write: {e}")))?;
+            Ok(PreviewResult {
+                path: out_path.to_string_lossy().to_string(),
+                width: rw,
+                height: rh,
+            })
         })
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
-}
-
-/// 从磁盘加载图片并下采样到 `max_edge`，返回 16-bit RGB 缓冲区。
-/// 结果会被缓存在 preview_cache，调整滤镜时无需重复执行。
-fn load_and_downsample(path: &Path, max_edge: u32) -> Result<image::ImageBuffer<image::Rgb<u16>, Vec<u16>>> {
-    use crate::asset::format::{classify, FileKind};
-    let src = match classify(path) {
-        FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(path, max_edge)?,
-        _ => processing::load_image_rgb16(path)?,
-    };
-    let (w, h) = src.dimensions();
-    let scale = (max_edge as f32 / w.max(h) as f32).min(1.0);
-    if scale < 1.0 {
-        let nw = (w as f32 * scale).round().max(1.0) as u32;
-        let nh = (h as f32 * scale).round().max(1.0) as u32;
-        crate::vips_io::resize_rgb16(&src, nw, nh)
-    } else {
-        Ok(src)
-    }
-}
-
-/// 从已下采样的底图应用色彩流水线，将结果写入 preview_cache_dir 下的 JPEG 文件，
-/// 返回文件路径供前端用 convertFileSrc 加载。相同参数命中磁盘缓存时直接返回路径。
-fn render_preview_from_cache(
-    resized: &image::ImageBuffer<image::Rgb<u16>, Vec<u16>>,
-    settings: &FilterSettings,
-    lut: Option<&Lut3D>,
-    preview_cache_dir: &std::path::Path,
-    asset_id: i64,
-) -> Result<PreviewResult> {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    settings.base_simulation.hash(&mut hasher);
-    settings.grain_effect.hash(&mut hasher);
-    settings.highlight_tone.to_bits().hash(&mut hasher);
-    settings.shadow_tone.to_bits().hash(&mut hasher);
-    settings.color_saturation.to_bits().hash(&mut hasher);
-    settings.clarity.to_bits().hash(&mut hasher);
-    settings.sharpness.to_bits().hash(&mut hasher);
-    settings.wb_shift_r.hash(&mut hasher);
-    settings.wb_shift_b.hash(&mut hasher);
-    settings.lut_file_path.hash(&mut hasher);
-    let h = hasher.finish();
-
-    let file_name = format!("{}_{:016x}.jpg", asset_id, h);
-    let out_path = preview_cache_dir.join(&file_name);
-
-    if !out_path.exists() {
-        let processed = crate::processing::process_image(resized, settings, lut)?;
-        let jpeg = crate::vips_io::encode_rgb16(
-            &processed,
-            crate::export::ExportFormat::Jpeg,
-            88,
-        )?;
-        let _ = std::fs::create_dir_all(preview_cache_dir);
-        std::fs::write(&out_path, &jpeg)
-            .map_err(|e| crate::error::AppError::other(format!("preview write: {e}")))?;
-
-        evict_preview_cache(preview_cache_dir, 40);
-    }
-
-    let (w, h_px) = resized.dimensions();
-    Ok(PreviewResult {
-        path: out_path.to_string_lossy().to_string(),
-        width: w,
-        height: h_px,
-    })
-}
-
-fn evict_preview_cache(dir: &std::path::Path, max_files: usize) {
-    let Ok(mut entries) = std::fs::read_dir(dir).map(|rd| {
-        rd.filter_map(|e| e.ok())
-          .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jpg"))
-          .collect::<Vec<_>>()
-    }) else { return };
-    if entries.len() <= max_files { return }
-    entries.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
-    for e in entries.iter().take(entries.len() - max_files) {
-        let _ = std::fs::remove_file(e.path());
-    }
 }
 
 /// 每个资产对应的水印层。
@@ -1002,15 +928,27 @@ pub async fn reset_app_data(state: State<'_, SharedState>) -> Result<()> {
     Ok(())
 }
 
-/// 懒加载 RAW 预览图：优先读磁盘缓存，命中时直接返回路径。
-/// 未命中时提取嵌入 JPEG（含 orientation 校正）写盘，返回路径。
-/// 前端用 convertFileSrc(path) 加载，无 base64 开销。
+/// 懒加载 RAW 嵌入原图：优先查数据库 preview_path，命中且文件存在时直接返回。
+/// 未命中时提取嵌入 JPEG（含 orientation 校正）写盘，更新 preview_path，返回路径。
+/// token 与 get_preview 共享，用于快速切换时提前取消。
 #[tauri::command]
-pub async fn get_raw_thumbnail(
+pub async fn get_raw_original(
     state: State<'_, SharedState>,
     asset_id: i64,
+    token: u64,
 ) -> Result<String> {
+    use std::sync::atomic::Ordering;
+    state.preview_token.store(token, Ordering::SeqCst);
+
     let asset = assets::get(&state.pool, asset_id).await?;
+
+    // 数据库缓存命中：路径存在且文件在磁盘上
+    if let Some(ref p) = asset.preview_path {
+        if std::path::Path::new(p).exists() {
+            return Ok(p.clone());
+        }
+    }
+
     let mtime = std::path::Path::new(&asset.file_path)
         .metadata()
         .ok()
@@ -1018,21 +956,40 @@ pub async fn get_raw_thumbnail(
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let cache_path = state.thumbnail_dir.join(format!("{asset_id}_{mtime}.jpg"));
+    let cache_path = state.raw_original_dir.join(format!("{asset_id}_{mtime}.jpg"));
 
-    // 磁盘缓存命中：直接返回
+    // 磁盘缓存命中（数据库未记录但文件已存在）
     if cache_path.exists() {
-        return Ok(cache_path.to_string_lossy().to_string());
+        let path_str = cache_path.to_string_lossy().to_string();
+        let pool = state.pool.clone();
+        let path_for_db = path_str.clone();
+        tokio::spawn(async move {
+            let _ = assets::update_preview_path(&pool, asset_id, &path_for_db).await;
+        });
+        return Ok(path_str);
     }
 
     let file_path = std::path::PathBuf::from(&asset.file_path);
     let sem = state.io_sem.clone();
+    let pool = state.pool.clone();
+    let preview_token = state.preview_token.clone();
+    let rt = tokio::runtime::Handle::current();
     tokio::task::spawn_blocking(move || {
-        let _permit = sem.try_acquire_owned().ok();
+        let _permit = rt.block_on(sem.acquire_owned()).ok();
+        // 等到拿到 permit 后检查 token，可能已有更新的请求
+        if preview_token.load(Ordering::SeqCst) != token {
+            return Err(AppError::other("preview_cancelled"));
+        }
         let bytes = processing::raw::extract_raw_thumbnail(&file_path)?;
         std::fs::write(&cache_path, &bytes)
-            .map_err(|e| AppError::other(format!("thumbnail write: {e}")))?;
-        Ok(cache_path.to_string_lossy().to_string())
+            .map_err(|e| AppError::other(format!("raw_original write: {e}")))?;
+        let path_str = cache_path.to_string_lossy().to_string();
+        let path_for_db = path_str.clone();
+        let rt2 = tokio::runtime::Handle::current();
+        rt2.spawn(async move {
+            let _ = assets::update_preview_path(&pool, asset_id, &path_for_db).await;
+        });
+        Ok(path_str)
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
@@ -1152,28 +1109,20 @@ pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
     if let Ok(mut cache) = state.lut_cache.lock() {
         cache.clear();
     }
-    if let Ok(mut cache) = state.preview_cache.lock() {
-        cache.clear();
-    }
     // watermarks 目录整体清空
     if state.watermark_dir.exists() {
         let _ = std::fs::remove_dir_all(&state.watermark_dir);
         let _ = std::fs::create_dir_all(&state.watermark_dir);
     }
-    // thumbnails 目录整体清空
-    if state.thumbnail_dir.exists() {
-        let _ = std::fs::remove_dir_all(&state.thumbnail_dir);
-        let _ = std::fs::create_dir_all(&state.thumbnail_dir);
+    // raw_originals 目录整体清空
+    if state.raw_original_dir.exists() {
+        let _ = std::fs::remove_dir_all(&state.raw_original_dir);
+        let _ = std::fs::create_dir_all(&state.raw_original_dir);
     }
     // covers 目录整体清空
     if state.cover_dir.exists() {
         let _ = std::fs::remove_dir_all(&state.cover_dir);
         let _ = std::fs::create_dir_all(&state.cover_dir);
-    }
-    // preview_cache 目录整体清空
-    if state.preview_cache_dir.exists() {
-        let _ = std::fs::remove_dir_all(&state.preview_cache_dir);
-        let _ = std::fs::create_dir_all(&state.preview_cache_dir);
     }
     // 软删除所有字体记录，清空 fonts 目录
     user_fonts::delete_all(&state.pool).await?;
@@ -1348,12 +1297,6 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
 #[derive(Debug, Serialize, Clone)]
 pub struct ThumbnailDonePayload {
     pub asset_id: i64,
-}
-
-/// 返回缩略图缓存目录的绝对路径，供前端拼接 convertFileSrc 使用。
-#[tauri::command]
-pub async fn get_thumbnail_dir(state: State<'_, SharedState>) -> Result<String> {
-    Ok(state.thumbnail_dir.to_string_lossy().to_string())
 }
 
 /// 返回封面图缓存目录的绝对路径，供前端拼接 convertFileSrc 使用。

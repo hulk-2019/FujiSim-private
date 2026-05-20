@@ -249,7 +249,7 @@ const zh = {
     delete: "删除",
     namePlaceholder: "文件夹名称",
     nameExists: "文件夹名称已存在",
-    confirmDelete: "将同时物理删除文件夹内 {{count}} 个文件，此操作不可恢复。",
+    confirmDelete: "文件夹及内部 {{count}} 个文件将从库中移除，源文件不会被删除。",
     confirmDeleteEmpty: "确认删除此空文件夹？",
     noFolders: "还没有文件夹，点击右上角 + 新建",
   },

@@ -99,15 +99,12 @@ export const api = {
    * 后端会先把原图下采样到 `maxEdge`（默认 1280px）再走色彩流水线，
    * 这样滑块拖动时延迟可以控制在 80~150ms。
    */
-  getPreview: (assetId: number, settings: FilterSettings | null, maxEdge?: number) =>
-    invoke<PreviewResult>("get_preview", { assetId, settings, maxEdge }),
+  getPreview: (assetId: number, settings: FilterSettings | null, maxEdge?: number, token?: number) =>
+    invoke<PreviewResult>("get_preview", { assetId, settings, maxEdge, token: token ?? 0 }),
 
-  /** 懒加载 RAW 预览图，返回磁盘绝对路径，用 convertFileSrc(path) 加载。 */
-  getRawThumbnail: (assetId: number) =>
-    invoke<string>("get_raw_thumbnail", { assetId }),
-
-  /** 返回缩略图缓存目录的绝对路径（macOS 通常为 ~/Library/Application Support/FujiSim/thumbnails）。 */
-  getThumbnailDir: () => invoke<string>("get_thumbnail_dir"),
+  /** 懒加载 RAW 嵌入原图，优先从数据库缓存读取，返回磁盘绝对路径，用 convertFileSrc(path) 加载。 */
+  getRawOriginal: (assetId: number, token?: number) =>
+    invoke<string>("get_raw_original", { assetId, token: token ?? 0 }),
 
   /** 返回封面图缓存目录的绝对路径（macOS 通常为 ~/Library/Application Support/FujiSim/covers）。 */
   getCoverDir: () => invoke<string>("get_cover_dir"),

@@ -121,17 +121,9 @@ type AppState = {
   progress: BatchProgress | null;
 
   // ===== RAW 缩略图缓存 =====
-  /** 后端缩略图目录的绝对路径，App 启动时从后端获取一次 */
-  thumbnailDir: string | null;
   /** 后端封面图目录的绝对路径，App 启动时从后端获取一次 */
   coverDir: string | null;
-  /** 已确认磁盘上有封面图文件的 asset id 集合 */
-  rawThumbnailReady: Set<number>;
-  setThumbnailDir: (dir: string) => void;
   setCoverDir: (dir: string) => void;
-  markThumbnailReady: (assetId: number) => void;
-  /** 清空 rawThumbnailReady（清除缓存后调用） */
-  clearThumbnailReady: () => void;
 
   // ===== Actions =====
   /** 修改查询条件并立即刷新资产列表 */
@@ -174,7 +166,8 @@ type AppState = {
   setSelectedWatermarkPresetId: (id: number | null) => void;
   setPreviewSize: (size: { width: number; height: number } | null, assetId?: number | null) => void;
   setPreviewContainerSize: (size: { width: number; height: number } | null) => void;
-  
+  /** 用单条最新 asset 数据原地更新 assets 数组（封面生成完成后调用） */
+  patchAsset: (updated: Asset) => void;
 };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -225,9 +218,7 @@ export const useStore = create<AppState>((set, get) => ({
   taskDetails: new Map(),
   dismissedTaskIds: new Set(),
   progress: null,
-  thumbnailDir: null,
   coverDir: null,
-  rawThumbnailReady: new Set<number>(),
 
   setQuery: async (q) => {
     set({ query: { ...get().query, ...q } });
@@ -495,12 +486,12 @@ export const useStore = create<AppState>((set, get) => ({
     } catch { /* ignore malformed json */ }
   },
   setSelectedWatermarkPresetId: (id) => set({ selectedWatermarkPresetId: id }),
-  setThumbnailDir: (dir) => set({ thumbnailDir: dir }),
   setCoverDir: (dir) => set({ coverDir: dir }),
-  markThumbnailReady: (assetId) => {
-    const next = new Set(get().rawThumbnailReady);
-    next.add(assetId);
-    set({ rawThumbnailReady: next });
-  },
-  clearThumbnailReady: () => set({ rawThumbnailReady: new Set() }),
+  patchAsset: (updated) => set((state) => {
+    const idx = state.assets.findIndex((a) => a?.id === updated.id);
+    if (idx === -1) return {};
+    const arr = [...state.assets];
+    arr[idx] = updated;
+    return { assets: arr };
+  }),
 }));

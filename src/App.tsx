@@ -11,18 +11,16 @@ import { useStore } from "@/store";
 import { api } from "@/api";
 
 export default function App() {
-  const markThumbnailReady = useStore((s) => s.markThumbnailReady);
   const currentFolderId = useStore((s) => s.currentFolderId);
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
-    const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, refreshAlbums, setThumbnailDir, setCoverDir } = useStore.getState();
+    const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, refreshAlbums, setCoverDir } = useStore.getState();
     refreshAssets();
     refreshFacets();
     refreshPresets();
     refreshUserLuts();
     refreshAlbums();
-    api.getThumbnailDir().then(setThumbnailDir).catch(() => {});
     api.getCoverDir().then(setCoverDir).catch(() => {});
   }, []);
 
@@ -30,7 +28,10 @@ export default function App() {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     listen<{ asset_id: number }>("thumbnail:done", (e) => {
-      markThumbnailReady(e.payload.asset_id);
+      if (cancelled) return;
+      api.getAsset(e.payload.asset_id)
+        .then((updated) => { if (!cancelled) useStore.getState().patchAsset(updated); })
+        .catch(() => {});
     }).then((u) => {
       if (cancelled) u();
       else unlisten = u;
@@ -39,7 +40,7 @@ export default function App() {
       cancelled = true;
       unlisten?.();
     };
-  }, [markThumbnailReady]);
+  }, []);
 
   return (
     <div className="h-full w-full flex flex-col bg-zinc-950 text-zinc-200">
