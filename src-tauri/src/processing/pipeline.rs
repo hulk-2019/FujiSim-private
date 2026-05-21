@@ -204,11 +204,15 @@ pub fn process_image(
         });
 
     // [9] Clarity / Sharpness：基于亮度的非锐化遮罩。半径不同：Clarity 模拟"中频对比"，Sharpness 是细节锐化
+    // 以 1920px 为基准缩放半径，保证视觉效果与预览一致
+    let res_scale = (w.max(h) as f32 / 1920.0).max(1.0);
     if settings.clarity.abs() > 0.001 {
-        apply_clarity(&mut buf, w, h, settings.clarity);
+        let radius = (8.0 * res_scale).round() as i32;
+        apply_clarity(&mut buf, w, h, settings.clarity, radius);
     }
     if settings.sharpness.abs() > 0.001 {
-        apply_unsharp(&mut buf, w, h, settings.sharpness);
+        let radius = (2.0 * res_scale).round() as i32;
+        apply_unsharp(&mut buf, w, h, settings.sharpness, radius);
     }
 
     // [10] 颗粒：最后做，保证颗粒不会被锐化算法当作"细节"二次放大
@@ -237,8 +241,8 @@ pub fn process_image(
 /// "清晰度"（Clarity）：用半径 8 的大尺度模糊作为"低频参考"，
 /// 把每像素亮度与之做差再叠回原图，实现"中频对比增强"。
 /// 正值让图像更"通透"，负值产生柔焦效果。
-fn apply_clarity(buf: &mut [f32], w: u32, h: u32, amount: f32) {
-    let blurred = box_blur_lum(buf, w, h, 8);
+fn apply_clarity(buf: &mut [f32], w: u32, h: u32, amount: f32, radius: i32) {
+    let blurred = box_blur_lum(buf, w, h, radius);
     for (i, lum) in blurred.iter().enumerate() {
         let base = i * 3;
         let l = 0.2126 * buf[base] + 0.7152 * buf[base + 1] + 0.0722 * buf[base + 2];
@@ -251,8 +255,8 @@ fn apply_clarity(buf: &mut [f32], w: u32, h: u32, amount: f32) {
 
 /// "锐度"（Sharpness）：与 Clarity 同种数学，但用半径 2 的小模糊，
 /// 放大像素级细节而不是整体对比。系数 ×1.5 是经验放大值。
-fn apply_unsharp(buf: &mut [f32], w: u32, h: u32, amount: f32) {
-    let blurred = box_blur_lum(buf, w, h, 2);
+fn apply_unsharp(buf: &mut [f32], w: u32, h: u32, amount: f32, radius: i32) {
+    let blurred = box_blur_lum(buf, w, h, radius);
     for (i, lum) in blurred.iter().enumerate() {
         let base = i * 3;
         let l = 0.2126 * buf[base] + 0.7152 * buf[base + 1] + 0.0722 * buf[base + 2];

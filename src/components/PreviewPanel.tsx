@@ -100,11 +100,24 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     return () => { cancelled = true; };
   }, [focused?.id, focused?.width, focused?.height]);
 
+  // 切换图片时获取原图，与 filter 变化解耦
+  useEffect(() => {
+    if (!focused?.is_raw) {
+      setRawOriginalSrc(null);
+      return;
+    }
+    let cancelled = false;
+    const token = currentTokenRef.current;
+    api.getRawOriginal(focused.id, token).then((path) => {
+      if (!cancelled) setRawOriginalSrc(convertFileSrc(path));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [focused?.id, focused?.is_raw]);
+
   useEffect(() => {
     if (!focused) {
       setPreview(null);
       setLoading(false);
-      setRawOriginalSrc(null);
       return;
     }
 
@@ -113,7 +126,6 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
 
     setPreview(null);
     setError(null);
-    setRawOriginalSrc(null);
     setLoading(true);
 
     const handle = setTimeout(async () => {
@@ -129,15 +141,6 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
         filter.wb_shift_b === 0 &&
         (!filter.grain_effect || filter.grain_effect === "None") &&
         (!filter.color_chrome_effect || filter.color_chrome_effect === "None");
-
-      if (focused.is_raw) {
-        try {
-          const path = await api.getRawOriginal(focused.id, token);
-          if (currentTokenRef.current === token) setRawOriginalSrc(convertFileSrc(path));
-        } catch (e) {
-          if (String(e).includes("preview_cancelled")) return;
-        }
-      }
 
       if (currentTokenRef.current !== token) return;
 
@@ -179,7 +182,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     }, 250);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, focused?.is_raw, filter]);
+  }, [focused?.id, filter]);
 
   const bind = useGesture(
     {
