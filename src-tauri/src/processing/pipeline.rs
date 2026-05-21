@@ -214,7 +214,11 @@ pub fn process_image(
     // [10] 颗粒：最后做，保证颗粒不会被锐化算法当作"细节"二次放大
     let strength = GrainStrength::parse(settings.grain_effect.as_deref());
     let size = GrainSize::parse(settings.grain_size.as_deref());
-    grain::apply_grain(&mut buf, w, h, strength, size, 0xC0FFEEu64);
+    // 以 1920px 为基准缩放 cell，保证颗粒视觉大小与预览一致
+    let base_cell = size.cell();
+    let scale_factor = (w.max(h) as f32 / 1920.0).max(1.0).round() as u32;
+    let scaled_size = grain::GrainSize::Fixed(base_cell * scale_factor);
+    grain::apply_grain(&mut buf, w, h, strength, scaled_size, 0xC0FFEEu64);
 
     // 浮点缓冲区写回 16-bit RGB（按行并行）
     let mut out: ImageBuffer<Rgb<u16>, Vec<u16>> = ImageBuffer::new(w, h);

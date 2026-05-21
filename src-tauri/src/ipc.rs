@@ -391,7 +391,7 @@ pub async fn get_preview(
                 crate::export::ExportFormat::Jpeg,
                 88,
             )?;
-            let out_path = std::env::temp_dir().join(format!("fujisim_preview_{asset_id}.jpg"));
+            let out_path = std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}.jpg"));
             std::fs::write(&out_path, &jpeg)
                 .map_err(|e| AppError::other(format!("preview write: {e}")))?;
             Ok(PreviewResult {

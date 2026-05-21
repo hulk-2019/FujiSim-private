@@ -485,8 +485,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   applyWatermarkPreset: (preset) => {
     try {
-      const { position: _pos, offsetX: _ox, offsetY: _oy, ...settings } = JSON.parse(preset.settings_json);
-      set({ watermark: { ...get().watermark, ...settings, position: "bottom-center", offsetX: 0, offsetY: 0 }, selectedWatermarkPresetId: preset.id });
+      const { position: _pos, offsetX: _ox, offsetY: _oy, enabled: _en, ...settings } = JSON.parse(preset.settings_json);
+      set({ watermark: { ...get().watermark, ...settings, enabled: true, position: "bottom-center", offsetX: 0, offsetY: 0 }, selectedWatermarkPresetId: preset.id });
     } catch { /* ignore malformed json */ }
   },
   setSelectedWatermarkPresetId: (id) => set({ selectedWatermarkPresetId: id }),

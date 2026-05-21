@@ -9,11 +9,12 @@ pub enum GrainStrength {
     Strong,
 }
 
-/// 颗粒尺寸。Small=每像素一个颗粒；Large=每 2×2 像素一组颗粒，视觉上更"粗"。
+/// 颗粒尺寸。Small=每像素一个颗粒；Large=每 2×2 像素一组颗粒；Fixed=指定 cell 大小。
 #[derive(Debug, Clone, Copy)]
 pub enum GrainSize {
     Small,
     Large,
+    Fixed(u32),
 }
 
 impl GrainStrength {
@@ -49,6 +50,7 @@ impl GrainSize {
         match self {
             GrainSize::Small => 1,
             GrainSize::Large => 2,
+            GrainSize::Fixed(n) => n.max(1),
         }
     }
 }

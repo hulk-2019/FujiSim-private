@@ -147,7 +147,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
       }
 
       const doPreview = async () => {
-        const r = await api.getPreview(focused.id, filter, undefined, token);
+        const r = await api.getPreview(focused.id, filter, 1920, token);
         if (currentTokenRef.current !== token) return;
         const src = convertFileSrc(r.path);
         setPreview({ blobUrl: src, width: r.width, height: r.height });
@@ -244,12 +244,11 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
 
   const displaySrc = previewSrc ?? placeholderSrc;
 
-  const wmDims: { width: number; height: number } | null = (() => {
-    if (preview) return { width: preview.width, height: preview.height };
-    if (focused.width && focused.height) return { width: focused.width, height: focused.height };
-    return null;
-  })();
-  console.log(scale, '===>scale')
+  const wmDims: { width: number; height: number } | null =
+    focused.width && focused.height
+      ? { width: focused.width, height: focused.height }
+      : null;
+
   return (
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
       <div className="border-b border-zinc-800/60 px-4 py-2 flex items-center gap-3 text-xs bg-zinc-950/40">
@@ -313,8 +312,7 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                     }}
                     draggable={false}
                     onLoad={() => {
-                      if (previewSrc) {
-                        // 全分辨率预览首次加载：居中 fit；后续（滤镜变化）保持当前缩放
+                      if (previewSrc || rawOriginalSrc) {
                         if (!hasFitRef.current) {
                           hasFitRef.current = true;
                           resetToFit();
@@ -322,7 +320,6 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                           setImgVisible(true);
                         }
                       } else {
-                        // 缩略图加载完成：scale 已由 useEffect 算好，直接显示
                         setImgVisible(true);
                       }
                     }}
@@ -344,8 +341,8 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                 {!showOriginal && watermark.enabled && wmDims && (
                   <WatermarkOverlay
                     wm={watermark}
-                    previewW={wmDims.width}
-                    previewH={wmDims.height}
+                    imgW={wmDims.width}
+                    imgH={wmDims.height}
                   />
                 )}
               </div>
@@ -377,29 +374,29 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   );
 }
 
-const WM_OVERLAY_MAX_EDGE = 2560;
-
 function WatermarkOverlay({
   wm,
-  previewW,
-  previewH,
+  imgW,
+  imgH,
 }: {
   wm: WatermarkSettings;
-  previewW: number;
-  previewH: number;
+  imgW: number;
+  imgH: number;
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const overlayScale = Math.min(1, WM_OVERLAY_MAX_EDGE / Math.max(previewW, previewH));
-    const overlayW = Math.round(previewW * overlayScale);
-    const overlayH = Math.round(previewH * overlayScale);
-    renderWatermarkLayer(wm, overlayW, overlayH, 1).then((result) => {
+    const MAX = 1280;
+    const s = Math.min(1, MAX / Math.max(imgW, imgH));
+    const canvasW = Math.round(imgW * s);
+    const canvasH = Math.round(imgH * s);
+    // canvas 用缩小尺寸，fontSize 不缩放（保持用户设置值），img CSS 再拉伸到原图尺寸
+    renderWatermarkLayer(wm, canvasW, canvasH, 1).then((result) => {
       if (!cancelled) setDataUrl(`data:image/png;base64,${result.data}`);
     });
     return () => { cancelled = true; };
-  }, [wm, previewW, previewH]);
+  }, [wm, imgW, imgH]);
 
   if (!dataUrl) return null;
   return (
@@ -410,8 +407,8 @@ function WatermarkOverlay({
         position: "absolute",
         top: 0,
         left: 0,
-        width: previewW,
-        height: previewH,
+        width: imgW,
+        height: imgH,
         pointerEvents: "none",
       }}
     />

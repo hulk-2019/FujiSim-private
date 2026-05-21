@@ -88,8 +88,6 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
       filename_template: null,
     };
 
-    const PREVIEW_MAX_EDGE = 1280;
-
     // 根据 resize 设置计算实际导出尺寸
     function exportDims(assetW: number, assetH: number): { w: number; h: number } {
       if (!resize) return { w: assetW, h: assetH };
@@ -108,25 +106,16 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
       perAssetWatermark = [];
       for (const id of targetIds) {
         const asset = assets.find((a) => a?.id === id);
-        let previewW: number;
-        let previewH: number;
-        const { previewSize, previewSizeAssetId } = useStore.getState();
-        if (previewSize && previewSizeAssetId === id) {
-          previewW = previewSize.width;
-          previewH = previewSize.height;
-        } else if (asset?.width && asset?.height) {
-          const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(asset.width, asset.height));
-          previewW = Math.round(asset.width * scale);
-          previewH = Math.round(asset.height * scale);
-        } else {
-          previewW = PREVIEW_MAX_EDGE;
-          previewH = Math.round(PREVIEW_MAX_EDGE * 0.75);
-        }
-        // 按实际导出尺寸渲染水印，避免后端放大导致模糊
-        const wmScale = asset?.width && asset?.height
-          ? exportDims(asset.width, asset.height).w / previewW
-          : 1;
-        const layer = await renderWatermarkLayer(watermark, previewW, previewH, wmScale);
+        if (!asset?.width || !asset?.height) continue;
+        const { w: exportW } = exportDims(asset.width, asset.height);
+        // 预览 canvas 基准尺寸（与 PreviewPanel 里的 MAX 保持一致）
+        const PREVIEW_MAX = 1280;
+        const previewS = Math.min(1, PREVIEW_MAX / Math.max(asset.width, asset.height));
+        const previewCanvasW = Math.round(asset.width * previewS);
+        const previewCanvasH = Math.round(asset.height * previewS);
+        // 导出 scale = 导出尺寸 / 预览 canvas 尺寸，保持 fontSize 比例一致
+        const wmScale = exportW / previewCanvasW;
+        const layer = await renderWatermarkLayer(watermark, previewCanvasW, previewCanvasH, wmScale);
         perAssetWatermark.push({ asset_id: id, layer: { ...layer, opacity: watermark.opacity } });
       }
     }

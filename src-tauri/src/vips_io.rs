@@ -216,7 +216,9 @@ pub fn load_watermark(path: &Path, out_w: u32, out_h: u32) -> Result<RgbaImage> 
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("watermark open: {e}")))?;
     let (wm_w, wm_h) = (vimg.get_width() as u32, vimg.get_height() as u32);
-    let vimg = if (wm_w, wm_h) != (out_w, out_h) {
+    // 尺寸完全一致或仅差 ±2px（Math.round 精度误差）时不 resize，避免模糊
+    let needs_resize = wm_w.abs_diff(out_w) > 2 || wm_h.abs_diff(out_h) > 2;
+    let vimg = if needs_resize {
         let hscale = out_w as f64 / wm_w as f64;
         let vscale = out_h as f64 / wm_h as f64;
         ops::resize_with_opts(&vimg, hscale, &ResizeOptions {
@@ -234,6 +236,16 @@ pub fn load_watermark(path: &Path, out_w: u32, out_h: u32) -> Result<RgbaImage> 
         vimg
     };
     let raw = vimg.image_write_to_memory();
+    // 允许 ±2px 的尺寸误差，直接截断或零填充 buffer
+    let expected = (out_w * out_h * 4) as usize;
+    let raw = if raw.len() != expected {
+        let mut buf = vec![0u8; expected];
+        let copy_len = raw.len().min(expected);
+        buf[..copy_len].copy_from_slice(&raw[..copy_len]);
+        buf
+    } else {
+        raw
+    };
     RgbaImage::from_raw(out_w, out_h, raw)
         .ok_or_else(|| AppError::Vips("watermark buffer mismatch".into()))
 }
