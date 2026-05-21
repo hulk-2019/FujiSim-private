@@ -75,7 +75,10 @@ export async function renderWatermarkLayer(
   const octx = offscreen.getContext("2d")!;
 
   octx.clearRect(0, 0, canvasW, canvasH);
-  octx.font = `${wm.bold ? "bold " : ""}${wm.fontSize * scale}px ${quoteFontFamily(wm.fontFamily)}`;
+  const fontSpec = `${wm.bold ? "bold " : ""}${wm.fontSize * scale}px ${quoteFontFamily(wm.fontFamily)}`;
+  // 确保字体已加载，否则 canvas 会静默回退到默认字体
+  await document.fonts.load(fontSpec);
+  octx.font = fontSpec;
   // 文字颜色预乘 opacity
   octx.fillStyle = colorWithAlpha(wm.color, wm.opacity);
 

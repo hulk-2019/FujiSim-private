@@ -47,9 +47,6 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 
 const BUILTIN_FONTS = [
-  { value: "sans-serif",                                                    labelKey: "watermark.builtinFonts.sansSerif" },
-  { value: "serif",                                                         labelKey: "watermark.builtinFonts.serif" },
-  { value: "monospace",                                                     labelKey: "watermark.builtinFonts.monospace" },
   // 无衬线 — macOS / Windows 均有
   { value: "Arial, sans-serif",                                             label: "Arial" },
   { value: "'Helvetica Neue', Helvetica, Arial, sans-serif",                label: "Helvetica Neue" },
@@ -114,6 +111,17 @@ export function WatermarkTab() {
   const applyWatermarkPreset = useStore((s) => s.applyWatermarkPreset);
   const selectedId = useStore((s) => s.selectedWatermarkPresetId);
   const setSelectedId = useStore((s) => s.setSelectedWatermarkPresetId);
+
+  // 旧数据可能存了纯通用关键字（serif/sans-serif/monospace），这些在 canvas 里行为不可靠，
+  // 自动迁移到对应的具体字体栈
+  const GENERIC_FALLBACK: Record<string, string> = {
+    "serif":      "Georgia, 'Times New Roman', serif",
+    "sans-serif": "Arial, sans-serif",
+    "monospace":  "'Courier New', Courier, monospace",
+  };
+  if (GENERIC_FALLBACK[wm.fontFamily]) {
+    setWatermark({ fontFamily: GENERIC_FALLBACK[wm.fontFamily] });
+  }
 
   const [selectValue, setSelectValue] = useState("");
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
@@ -184,7 +192,7 @@ export function WatermarkTab() {
   }
 
   function applyPreset(p: typeof presetStyles[number]) {
-    setWatermark({ text: p.text, fontSize: p.fontSize, color: p.color, opacity: p.opacity, italic: p.italic, position: p.position, offsetX: 0, offsetY: 0 });
+    setWatermark({ enabled: true, text: p.text, fontSize: p.fontSize, color: p.color, opacity: p.opacity, bold: false, italic: p.italic, position: p.position, offsetX: 0, offsetY: 0 });
   }
 
   const builtinFonts = BUILTIN_FONTS.map((f) => ({

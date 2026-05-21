@@ -90,6 +90,17 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
 
     const PREVIEW_MAX_EDGE = 1280;
 
+    // 根据 resize 设置计算实际导出尺寸
+    function exportDims(assetW: number, assetH: number): { w: number; h: number } {
+      if (!resize) return { w: assetW, h: assetH };
+      if ("long_edge" in resize) {
+        const s = resize.long_edge / Math.max(assetW, assetH);
+        return { w: Math.round(assetW * s), h: Math.round(assetH * s) };
+      }
+      const s = (resize as { percent: number }).percent / 100;
+      return { w: Math.round(assetW * s), h: Math.round(assetH * s) };
+    }
+
     // 为每个 asset 按其实际显示尺寸独立渲染水印，避免不同宽高比时水印被拉伸压缩
     type WatermarkEntry = { asset_id: number; layer: { data: string; width: number; height: number; opacity: number } };
     let perAssetWatermark: WatermarkEntry[] | null = null;
@@ -111,7 +122,11 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
           previewW = PREVIEW_MAX_EDGE;
           previewH = Math.round(PREVIEW_MAX_EDGE * 0.75);
         }
-        const layer = await renderWatermarkLayer(watermark, previewW, previewH, 1);
+        // 按实际导出尺寸渲染水印，避免后端放大导致模糊
+        const wmScale = asset?.width && asset?.height
+          ? exportDims(asset.width, asset.height).w / previewW
+          : 1;
+        const layer = await renderWatermarkLayer(watermark, previewW, previewH, wmScale);
         perAssetWatermark.push({ asset_id: id, layer: { ...layer, opacity: watermark.opacity } });
       }
     }

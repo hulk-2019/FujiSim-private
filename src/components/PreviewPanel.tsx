@@ -174,6 +174,16 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
 
   const displaySrc = previewSrc ?? placeholderSrc;
 
+  // 水印叠层尺寸：preview 可用时直接用，否则将原始尺寸归一化到 1280 宽（与 getPreview 一致）
+  const wmDims: { width: number; height: number } | null = (() => {
+    if (preview) return { width: preview.width, height: preview.height };
+    if (focused.width && focused.height) {
+      const scale = 1280 / focused.width;
+      return { width: 1280, height: Math.round(focused.height * scale) };
+    }
+    return null;
+  })();
+
   // 宽高比：优先用 DB 存储的原始尺寸，没有时用 3/2 作为合理默认值，避免骨架屏全屏
   const aspectRatio = focused.width && focused.height
     ? `${focused.width} / ${focused.height}`
@@ -229,12 +239,13 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
                     style={{ opacity: showOriginal ? 1 : 0 }}
                   />
                 )}
-                {!showOriginal && watermark.enabled && preview && previewContainerSize && (
+                {!showOriginal && watermark.enabled && wmDims && previewContainerSize && (
                   <WatermarkOverlay
                     wm={watermark}
-                    previewW={preview.width}
-                    previewH={preview.height}
+                    previewW={wmDims.width}
+                    previewH={wmDims.height}
                     containerW={previewContainerSize.width}
+                    containerH={previewContainerSize.height}
                   />
                 )}
               </div>
@@ -302,11 +313,13 @@ function WatermarkOverlay({
   previewW,
   previewH,
   containerW,
+  containerH,
 }: {
   wm: WatermarkSettings;
   previewW: number;
   previewH: number;
   containerW: number;
+  containerH: number;
 }) {
   const shadow = wm.shadowEnabled
     ? `${wm.shadowOffsetX}px ${wm.shadowOffsetY}px ${wm.shadowBlur}px ${hexToRgba(wm.shadowColor, wm.opacity)}`
@@ -314,10 +327,24 @@ function WatermarkOverlay({
 
   const posStyle = resolvePositionStyle(wm);
 
-  const scale = containerW > 0 && previewW > 0 ? containerW / previewW : 1;
+  // 计算 object-contain 后图片实际显示区域，消除黑边偏移
+  const imageAspect = previewW / previewH;
+  const containerAspect = containerW / containerH;
+  let scale: number;
+  let offsetX = 0;
+  let offsetY = 0;
+  if (containerAspect > imageAspect) {
+    // 左右有黑边
+    scale = containerH / previewH;
+    offsetX = (containerW - previewW * scale) / 2;
+  } else {
+    // 上下有黑边
+    scale = containerW / previewW;
+    offsetY = (containerH - previewH * scale) / 2;
+  }
 
   return (
-    <div style={{ position: "absolute", top: 0, left: 0, width: previewW, height: previewH, transformOrigin: "top left", transform: `scale(${scale})`, pointerEvents: "none" }}>
+    <div style={{ position: "absolute", top: offsetY, left: offsetX, width: previewW, height: previewH, transformOrigin: "top left", transform: `scale(${scale})`, pointerEvents: "none" }}>
       <div style={{ position: "absolute", ...posStyle, fontFamily: wm.fontFamily, fontSize: wm.fontSize, fontWeight: wm.bold ? "bold" : "normal", color: hexToRgba(wm.color, wm.opacity), textShadow: shadow, whiteSpace: "nowrap", lineHeight: 1, userSelect: "none", WebkitTextStroke: wm.strokeEnabled ? `${wm.strokeWidth}px ${hexToRgba(wm.strokeColor, wm.opacity)}` : undefined, paintOrder: wm.strokeEnabled ? "fill stroke" : undefined }}>
         {wm.text}
       </div>

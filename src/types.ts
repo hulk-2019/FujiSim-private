@@ -242,10 +242,10 @@ export type WatermarkSettings = {
 };
 
 export const DEFAULT_WATERMARK: WatermarkSettings = {
-  enabled: true,
+  enabled: false,
   text: "© FujiSim",
   fontSize: 32,
-  fontFamily: "sans-serif",
+  fontFamily: "Arial, sans-serif",
   color: "#ffffff",
   opacity: 0.7,
   italic: false,
