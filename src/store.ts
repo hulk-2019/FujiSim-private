@@ -471,12 +471,14 @@ export const useStore = create<AppState>((set, get) => ({
     set({ watermarkPresets: presets });
   },
   addWatermarkPreset: async (name) => {
-    const settingsJson = JSON.stringify(get().watermark);
+    const { position: _pos, offsetX: _ox, offsetY: _oy, ...rest } = get().watermark;
+    const settingsJson = JSON.stringify(rest);
     const preset = await api.createWatermarkPreset(name, settingsJson);
     set({ watermarkPresets: [...get().watermarkPresets, preset], selectedWatermarkPresetId: preset.id });
   },
   updateWatermarkPreset: async (id, name) => {
-    const settingsJson = JSON.stringify(get().watermark);
+    const { position: _pos, offsetX: _ox, offsetY: _oy, ...rest } = get().watermark;
+    const settingsJson = JSON.stringify(rest);
     const updated = await api.updateWatermarkPreset(id, name, settingsJson);
     set({ watermarkPresets: get().watermarkPresets.map((p) => (p.id === id ? updated : p)) });
   },
@@ -487,8 +489,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   applyWatermarkPreset: (preset) => {
     try {
-      const settings = JSON.parse(preset.settings_json);
-      set({ watermark: { ...get().watermark, ...settings }, selectedWatermarkPresetId: preset.id });
+      const { position: _pos, offsetX: _ox, offsetY: _oy, ...settings } = JSON.parse(preset.settings_json);
+      set({ watermark: { ...get().watermark, ...settings, position: "bottom-center", offsetX: 0, offsetY: 0 }, selectedWatermarkPresetId: preset.id });
     } catch { /* ignore malformed json */ }
   },
   setSelectedWatermarkPresetId: (id) => set({ selectedWatermarkPresetId: id }),
