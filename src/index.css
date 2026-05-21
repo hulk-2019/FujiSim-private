@@ -58,3 +58,11 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: rgb(var(--zinc-50) / 0.3); border: 3px solid transparent; background-clip: padding-box; }
 
 .no-drag { -webkit-user-drag: none; user-drag: none; }
+
+/* 禁用 macOS WebKit Live Text 图片文字识别覆盖层 */
+img {
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+

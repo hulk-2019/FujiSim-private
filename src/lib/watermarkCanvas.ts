@@ -45,17 +45,23 @@ function resolveAnchor(
   const cy = (canvasH - th) / 2;
   const r = canvasW - padding - tw;
   const b = canvasH - padding - th;
+  let ax: number;
+  let ay: number;
   switch (position) {
-    case "top-left":     return { ax: padding + offX,  ay: padding + offY };
-    case "top-center":   return { ax: cx + offX,       ay: padding + offY };
-    case "top-right":    return { ax: r + offX,        ay: padding + offY };
-    case "bottom-left":  return { ax: padding + offX,  ay: b + offY };
-    case "bottom-center":return { ax: cx + offX,       ay: b + offY };
-    case "bottom-right": return { ax: r + offX,        ay: b + offY };
-    case "left-center":  return { ax: padding + offX,  ay: cy + offY };
-    case "right-center": return { ax: r + offX,        ay: cy + offY };
-    default:             return { ax: cx + offX,       ay: cy + offY };
+    case "top-left":     ax = padding + offX;  ay = padding + offY; break;
+    case "top-center":   ax = cx + offX;       ay = padding + offY; break;
+    case "top-right":    ax = r + offX;        ay = padding + offY; break;
+    case "bottom-left":  ax = padding + offX;  ay = b + offY;       break;
+    case "bottom-center":ax = cx + offX;       ay = b + offY;       break;
+    case "bottom-right": ax = r + offX;        ay = b + offY;       break;
+    case "left-center":  ax = padding + offX;  ay = cy + offY;      break;
+    case "right-center": ax = r + offX;        ay = cy + offY;      break;
+    default:             ax = cx + offX;       ay = cy + offY;      break;
   }
+  return {
+    ax: Math.max(0, Math.min(canvasW - tw, ax)),
+    ay: Math.max(0, Math.min(canvasH - th, ay)),
+  };
 }
 
 export async function renderWatermarkLayer(

@@ -28,6 +28,7 @@
     "@tauri-apps/plugin-dialog": "^2.0.1",
     "@tauri-apps/plugin-fs": "^2.0.2",
     "@tauri-apps/plugin-shell": "^2.0.1",
+    "@use-gesture/react": "^10.3.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "i18next": "^26.2.0",
@@ -36,6 +37,7 @@
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.8",
     "react-resizable-panels": "^4.11.0",
+    "react-zoom-pan-pinch": "^4.0.3",
     "tailwind-merge": "^2.5.4",
     "zustand": "^5.0.1"
   },

@@ -345,7 +345,6 @@ pub async fn get_preview(
 
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
-    let max_edge = max_edge.unwrap_or(1280);
     let settings = settings.unwrap_or_default();
     let lut = cached_lut(&state, settings.lut_file_path.as_deref())?;
     let export_pool = state.export_pool.clone();
@@ -373,11 +372,15 @@ pub async fn get_preview(
                 return Err(AppError::other("preview_cancelled"));
             }
             let (w, h) = src.dimensions();
-            let scale = (max_edge as f32 / w.max(h) as f32).min(1.0);
-            let resized = if scale < 1.0 {
-                let nw = (w as f32 * scale).round().max(1.0) as u32;
-                let nh = (h as f32 * scale).round().max(1.0) as u32;
-                crate::vips_io::resize_rgb16(&src, nw, nh)?
+            let resized = if let Some(me) = max_edge {
+                let scale = (me as f32 / w.max(h) as f32).min(1.0);
+                if scale < 1.0 {
+                    let nw = (w as f32 * scale).round().max(1.0) as u32;
+                    let nh = (h as f32 * scale).round().max(1.0) as u32;
+                    crate::vips_io::resize_rgb16(&src, nw, nh)?
+                } else {
+                    src
+                }
             } else {
                 src
             };

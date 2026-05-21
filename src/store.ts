@@ -96,9 +96,6 @@ type AppState = {
   previewSize: { width: number; height: number } | null;
   /** previewSize 对应的资产 id，用于校验是否过期 */
   previewSizeAssetId: number | null;
-  /** 预览容器在屏幕上的 CSS 像素尺寸，水印 Canvas 渲染时以此为基准 */
-  previewContainerSize: { width: number; height: number } | null;
-
   // ===== 筛选项缓存（侧边栏下拉用）=====
   cameras: string[];
   fujiSimulations: string[];
@@ -165,7 +162,7 @@ type AppState = {
   refreshWatermarkPresets: () => Promise<void>;
   setSelectedWatermarkPresetId: (id: number | null) => void;
   setPreviewSize: (size: { width: number; height: number } | null, assetId?: number | null) => void;
-  setPreviewContainerSize: (size: { width: number; height: number } | null) => void;
+
   /** 用单条最新 asset 数据原地更新 assets 数组（封面生成完成后调用） */
   patchAsset: (updated: Asset) => void;
   /** 批量原地更新多条 asset，单次状态更新避免多次重渲染 */
@@ -208,7 +205,7 @@ export const useStore = create<AppState>((set, get) => ({
   selectedWatermarkPresetId: null,
   previewSize: null,
   previewSizeAssetId: null,
-  previewContainerSize: null,
+
   cameras: [],
   fujiSimulations: [
     "Provia", "Velvia", "Astia", "Classic Chrome",
@@ -465,7 +462,6 @@ export const useStore = create<AppState>((set, get) => ({
     set({ userFonts: get().userFonts.filter((f) => f.id !== id) });
   },
   setPreviewSize: (size, assetId) => set({ previewSize: size, previewSizeAssetId: assetId ?? null }),
-  setPreviewContainerSize: (size) => set({ previewContainerSize: size }),
   refreshWatermarkPresets: async () => {
     const presets = await api.listWatermarkPresets().catch(() => []);
     set({ watermarkPresets: presets });

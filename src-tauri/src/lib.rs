@@ -49,8 +49,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             use tauri::Manager;
-            // `block_on` 在 Tauri setup 中是允许的：此处尚未进入事件循环。
-            // 失败时通过 `?` 把错误向上抛给 Tauri，避免 expect 触发 panic。
             let state = tauri::async_runtime::block_on(state::AppState::init())?;
             app.manage(state);
             Ok(())

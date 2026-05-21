@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { ImageIcon, Eye, EyeOff } from "lucide-react";
+import { useGesture } from "@use-gesture/react";
 import { api } from "@/api";
 import type { WatermarkSettings } from "@/types";
 import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { renderWatermarkLayer } from "@/lib/watermarkCanvas";
 
-// 全局单调递增 token，每次发起新预览请求时递增，后端用它识别过期请求
 let previewTokenCounter = 0;
+
+const MIN_SCALE_FACTOR = 0.5;  // 相对 fit scale 的最小倍率
+const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
+const FIT_FILL = 0.8;
 
 export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const { t } = useTranslation();
@@ -18,41 +23,82 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   const filter = useStore((s) => s.filter);
   const watermark = useStore((s) => s.watermark);
   const setPreviewSize = useStore((s) => s.setPreviewSize);
-  const setPreviewContainerSize = useStore((s) => s.setPreviewContainerSize);
-  const previewContainerSize = useStore((s) => s.previewContainerSize);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
-  const [preview, setPreview] = useState<{ blobUrl: string; width: number; height: number } | null>(null);
+  const [preview, setPreview] = useState<{
+    blobUrl: string;
+    width: number;
+    height: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
   const [rawOriginalSrc, setRawOriginalSrc] = useState<string | null>(null);
-  // 当前请求的 token，用于在回调中判断结果是否仍然有效
   const currentTokenRef = useRef(0);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const roRef = useRef<ResizeObserver | null>(null);
 
-  const containerCallbackRef = useCallback((el: HTMLDivElement | null) => {
-    roRef.current?.disconnect();
-    roRef.current = null;
-    containerRef.current = el;
-    if (!el) return;
-    let rafId = 0;
-    const ro = new ResizeObserver((entries) => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const { width, height } = entries[0].contentRect;
-        if (width > 0 && height > 0)
-          setPreviewContainerSize({ width: Math.round(width), height: Math.round(height) });
-      });
-    });
-    ro.observe(el);
-    roRef.current = ro;
-  }, []);
+  const [scale, setScale] = useState<number>(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const [containerW, setContainerW] = useState(0);
+  const [containerH, setContainerH] = useState(0);
+  // 隐藏图片直到 fit 计算完成，避免切换时闪烁到左上角
+  const [imgVisible, setImgVisible] = useState(false);
 
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  // 防止全分辨率预览替换缩略图时重复 fit
+  const hasFitRef = useRef(false);
+  const fitScaleRef = useRef(1);
+
+  // 重置到 fit 状态：容器为图片原始尺寸，scale 缩放到占 viewport 80% 并居中
+  const resetToFit = useCallback(() => {
+    const vp = viewportRef.current;
+    const imgW = focused?.width;
+    const imgH = focused?.height;
+    if (!vp || !imgW || !imgH) return;
+    const vpW = vp.clientWidth;
+    const vpH = vp.clientHeight;
+    const fit = Math.min(vpW / imgW, vpH / imgH) * FIT_FILL;
+    fitScaleRef.current = fit;
+    setContainerW(imgW);
+    setContainerH(imgH);
+    setScale(fit);
+    setTx((vpW - imgW * fit) / 2);
+    setTy((vpH - imgH * fit) / 2);
+    setImgVisible(true);
+  }, [focused?.width, focused?.height]);
+
+  // 切换素材时重置，用 rAF 确保 viewport 尺寸已稳定
   useEffect(() => {
-    return () => { roRef.current?.disconnect(); };
-  }, []);
+    hasFitRef.current = false;
+    setImgVisible(false);
+    let cancelled = false;
+
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      const vp = viewportRef.current;
+      const imgW = focused?.width;
+      const imgH = focused?.height;
+      if (!vp || vp.clientWidth === 0 || vp.clientHeight === 0 || !imgW || !imgH) {
+        fitScaleRef.current = 1;
+        setScale(1);
+        setTx(0);
+        setTy(0);
+        return;
+      }
+      const vpW = vp.clientWidth;
+      const vpH = vp.clientHeight;
+      const fit = Math.min(vpW / imgW, vpH / imgH) * FIT_FILL;
+      fitScaleRef.current = fit;
+      setContainerW(imgW);
+      setContainerH(imgH);
+      setScale(fit);
+      setTx((vpW - imgW * fit) / 2);
+      setTy((vpH - imgH * fit) / 2);
+    });
+
+    return () => { cancelled = true; };
+  }, [focused?.id, focused?.width, focused?.height]);
 
   useEffect(() => {
     if (!focused) {
@@ -74,19 +120,20 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
       const isIdentity =
         (filter.base_simulation === "Pass-Through" || !filter.base_simulation) &&
         !filter.lut_file_path &&
-        filter.highlight_tone === 0 && filter.shadow_tone === 0 &&
-        filter.color_saturation === 0 && filter.clarity === 0 &&
-        filter.sharpness === 0 && filter.wb_shift_r === 0 && filter.wb_shift_b === 0 &&
+        filter.highlight_tone === 0 &&
+        filter.shadow_tone === 0 &&
+        filter.color_saturation === 0 &&
+        filter.clarity === 0 &&
+        filter.sharpness === 0 &&
+        filter.wb_shift_r === 0 &&
+        filter.wb_shift_b === 0 &&
         (!filter.grain_effect || filter.grain_effect === "None") &&
         (!filter.color_chrome_effect || filter.color_chrome_effect === "None");
 
-      // Step 1: RAW 嵌入原图（仅 RAW 文件，缓存命中时几乎无延迟）
       if (focused.is_raw) {
         try {
           const path = await api.getRawOriginal(focused.id, token);
-          if (currentTokenRef.current === token) {
-            setRawOriginalSrc(convertFileSrc(path));
-          }
+          if (currentTokenRef.current === token) setRawOriginalSrc(convertFileSrc(path));
         } catch (e) {
           if (String(e).includes("preview_cancelled")) return;
         }
@@ -94,15 +141,13 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
 
       if (currentTokenRef.current !== token) return;
 
-      // identity filter + RAW：相机嵌入 JPEG 即为最终展示，跳过 LibRaw 解码
       if (isIdentity && focused.is_raw) {
         setLoading(false);
         return;
       }
 
-      // Step 2: 实时预览
       const doPreview = async () => {
-        const r = await api.getPreview(focused.id, filter, 1280, token);
+        const r = await api.getPreview(focused.id, filter, undefined, token);
         if (currentTokenRef.current !== token) return;
         const src = convertFileSrc(r.path);
         setPreview({ blobUrl: src, width: r.width, height: r.height });
@@ -136,9 +181,38 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
     return () => clearTimeout(handle);
   }, [focused?.id, focused?.is_raw, filter]);
 
-  function handleShowOriginal() {
-    setShowOriginal(true);
-  }
+  const bind = useGesture(
+    {
+      onWheel: ({ delta: [, dy], event }) => {
+        event.preventDefault();
+        const vp = viewportRef.current;
+        if (!vp) return;
+        const rect = vp.getBoundingClientRect();
+        const mouseX = (event as WheelEvent).clientX - rect.left;
+        const mouseY = (event as WheelEvent).clientY - rect.top;
+
+        setScale((prevScale) => {
+          const fitScale = fitScaleRef.current;
+          const factor = Math.pow(0.999, dy);
+          const next = Math.max(fitScale * MIN_SCALE_FACTOR, Math.min(fitScale * MAX_SCALE_FACTOR, prevScale * factor));
+          const ratio = next / prevScale;
+          setTx((prevTx) => mouseX - ratio * (mouseX - prevTx));
+          setTy((prevTy) => mouseY - ratio * (mouseY - prevTy));
+          return next;
+        });
+      },
+      onDrag: ({ delta: [dx, dy], event }) => {
+        event.preventDefault();
+        setTx((prev) => prev + dx);
+        setTy((prev) => prev + dy);
+      },
+      onDoubleClick: () => resetToFit(),
+    },
+    {
+      wheel: { eventOptions: { passive: false } },
+      drag: { filterTaps: true, eventOptions: { passive: false } },
+    },
+  );
 
   if (!focused) {
     return (
@@ -152,12 +226,8 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   }
 
   const previewSrc = preview?.blobUrl ?? null;
-  // originalSrc：RAW 用完整嵌入 JPEG（后台已异步加载），非 RAW 用原文件
-  const originalSrc = focused.is_raw
-    ? rawOriginalSrc
-    : convertFileSrc(focused.file_path);
+  const originalSrc = focused.is_raw ? rawOriginalSrc : convertFileSrc(focused.file_path);
 
-  // 占位图优先级：rawOriginalSrc > DB 缓存的 preview_path > cover_path > 非 RAW 原文件
   const placeholderSrc: string | null = (() => {
     if (rawOriginalSrc) return rawOriginalSrc;
     if (focused.is_raw) {
@@ -174,23 +244,12 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
 
   const displaySrc = previewSrc ?? placeholderSrc;
 
-  // 水印叠层尺寸：preview 可用时直接用，否则将原始尺寸归一化到 1280 宽（与 getPreview 一致）
   const wmDims: { width: number; height: number } | null = (() => {
     if (preview) return { width: preview.width, height: preview.height };
-    if (focused.width && focused.height) {
-      const scale = 1280 / focused.width;
-      return { width: 1280, height: Math.round(focused.height * scale) };
-    }
+    if (focused.width && focused.height) return { width: focused.width, height: focused.height };
     return null;
   })();
-
-  // 宽高比：优先用 DB 存储的原始尺寸，没有时用 3/2 作为合理默认值，避免骨架屏全屏
-  const aspectRatio = focused.width && focused.height
-    ? `${focused.width} / ${focused.height}`
-    : preview
-    ? `${preview.width} / ${preview.height}`
-    : "3 / 2";
-
+  console.log(scale, '===>scale')
   return (
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
       <div className="border-b border-zinc-800/60 px-4 py-2 flex items-center gap-3 text-xs bg-zinc-950/40">
@@ -200,154 +259,161 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
         <Button
           variant="ghost"
           size="sm"
-          onMouseDown={handleShowOriginal}
+          onMouseDown={() => setShowOriginal(true)}
           onMouseUp={() => setShowOriginal(false)}
           onMouseLeave={() => setShowOriginal(false)}
         >
-          {showOriginal ? <EyeOff size={12} /> : <Eye size={12} />} {t("previewPanel.holdToCompare")}
+          {showOriginal ? <EyeOff size={12} /> : <Eye size={12} />}{" "}
+          {t("previewPanel.holdToCompare")}
         </Button>
         <Button onClick={onExport} size="sm">
           {t("previewPanel.export")}
         </Button>
       </div>
-      <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-zinc-950/20">
-        {error ? (
-          <div className="text-zinc-400 text-sm bg-zinc-900/80 px-4 py-2 rounded border border-zinc-800">
-            {error}
-          </div>
-        ) : (
+      <div
+        ref={viewportRef}
+        className="flex-1 relative overflow-hidden bg-zinc-950/20 cursor-grab active:cursor-grabbing"
+        {...bind()}
+        style={{ touchAction: "none" }}
+      >
+        {scale !== null && (
           <>
-            {(displaySrc || originalSrc) ? (
+            {error ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-zinc-400 text-sm bg-zinc-900/80 px-4 py-2 rounded border border-zinc-800">
+                  {error}
+                </div>
+              </div>
+            ) : displaySrc || originalSrc ? (
               <div
-                ref={containerCallbackRef}
-                className="relative max-w-full max-h-full shadow-2xl"
-                style={{ aspectRatio: aspectRatio ?? undefined, width: "100%", height: "100%" }}
+                style={{
+                  transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+                  transformOrigin: "0 0",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: containerW || undefined,
+                  height: containerH || undefined,
+                  lineHeight: 0,
+                  visibility: imgVisible ? "visible" : "hidden",
+                }}
               >
                 {displaySrc && (
                   <img
+                    ref={imgRef}
                     src={displaySrc}
                     alt="preview"
-                    className="absolute inset-0 w-full h-full object-contain no-drag"
-                    style={{ opacity: showOriginal ? 0 : 1 }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      height: "100%",
+                      opacity: imgVisible && !showOriginal ? 1 : 0,
+                      WebkitUserSelect: "none",
+                      WebkitTouchCallout: "none",
+                    }}
+                    draggable={false}
+                    onLoad={() => {
+                      if (previewSrc) {
+                        // 全分辨率预览首次加载：居中 fit；后续（滤镜变化）保持当前缩放
+                        if (!hasFitRef.current) {
+                          hasFitRef.current = true;
+                          resetToFit();
+                        } else {
+                          setImgVisible(true);
+                        }
+                      } else {
+                        // 缩略图加载完成：scale 已由 useEffect 算好，直接显示
+                        setImgVisible(true);
+                      }
+                    }}
                   />
                 )}
-                {originalSrc && (
+                {originalSrc && showOriginal && (
                   <img
                     src={originalSrc}
                     alt="original"
-                    className="absolute inset-0 w-full h-full object-contain no-drag"
-                    style={{ opacity: showOriginal ? 1 : 0 }}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                    }}
+                    draggable={false}
                   />
                 )}
-                {!showOriginal && watermark.enabled && wmDims && previewContainerSize && (
+                {!showOriginal && watermark.enabled && wmDims && (
                   <WatermarkOverlay
                     wm={watermark}
                     previewW={wmDims.width}
                     previewH={wmDims.height}
-                    containerW={previewContainerSize.width}
-                    containerH={previewContainerSize.height}
                   />
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center gap-3 text-zinc-500">
-                <div className="relative w-10 h-10">
-                  <div className="absolute inset-0 rounded-full border-2 border-zinc-600 animate-ping opacity-60" />
-                  <div className="absolute inset-1.5 rounded-full bg-zinc-600 animate-pulse" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center justify-center gap-3 text-zinc-500">
+                  <div className="relative w-10 h-10">
+                    <div className="absolute inset-0 rounded-full border-2 border-zinc-600 animate-ping opacity-60" />
+                    <div className="absolute inset-1.5 rounded-full bg-zinc-600 animate-pulse" />
+                  </div>
                 </div>
               </div>
             )}
-            {loading && displaySrc && (
-              <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
-                {t("previewPanel.rendering")}
-              </div>
-            )}
-            {preview && (
-              <div className="absolute bottom-3 right-3 text-[10px] text-zinc-500 bg-zinc-950/60 px-2 py-1 rounded">
-                {focused.width ?? preview.width} × {focused.height ?? preview.height} · {formatBytes(focused.file_size)}
-              </div>
-            )}
           </>
+        )}
+        {loading && displaySrc && (
+          <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
+            {t("previewPanel.rendering")}
+          </div>
+        )}
+        {preview && (
+          <div className="absolute bottom-3 right-3 text-[10px] text-zinc-500 bg-zinc-950/60 px-2 py-1 rounded">
+            {focused.width ?? preview.width} × {focused.height ?? preview.height} ·{" "}
+            {formatBytes(focused.file_size)}
+          </div>
         )}
       </div>
     </main>
   );
 }
 
-const PADDING = 16;
-
-function buildTransform(wm: WatermarkSettings, baseTranslate: string): string {
-  const parts: string[] = [baseTranslate];
-  if (wm.rotation !== 0) parts.push(`rotate(${wm.rotation}deg)`);
-  if (wm.flipH || wm.flipV) parts.push(`scale(${wm.flipH ? -1 : 1}, ${wm.flipV ? -1 : 1})`);
-  if (wm.italic) parts.push(`skewX(${-wm.italicDegree}deg)`);
-  return parts.join(" ");
-}
-
-function resolvePositionStyle(wm: WatermarkSettings): React.CSSProperties {
-  const { position, offsetX: ox, offsetY: oy } = wm;
-  const p = PADDING;
-  const t = (base: string) => buildTransform(wm, base);
-  switch (position) {
-    case "top-left":     return { top: p + oy,  left: p + ox,                          transform: t("") };
-    case "top-center":   return { top: p + oy,  left: `calc(50% + ${ox}px)`,           transform: t("translateX(-50%)") };
-    case "top-right":    return { top: p + oy,  right: p - ox,                         transform: t("") };
-    case "bottom-left":  return { bottom: p - oy, left: p + ox,                        transform: t("") };
-    case "bottom-center":return { bottom: p - oy, left: `calc(50% + ${ox}px)`,         transform: t("translateX(-50%)") };
-    case "bottom-right": return { bottom: p - oy, right: p - ox,                       transform: t("") };
-    case "left-center":  return { left: p + ox,  top: `calc(50% + ${oy}px)`,           transform: t("translateY(-50%)") };
-    case "right-center": return { right: p - ox, top: `calc(50% + ${oy}px)`,           transform: t("translateY(-50%)") };
-    default:             return { top: `calc(50% + ${oy}px)`, left: `calc(50% + ${ox}px)`, transform: t("translate(-50%, -50%)") };
-  }
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha.toFixed(4)})`;
-}
+const WM_OVERLAY_MAX_EDGE = 2560;
 
 function WatermarkOverlay({
   wm,
   previewW,
   previewH,
-  containerW,
-  containerH,
 }: {
   wm: WatermarkSettings;
   previewW: number;
   previewH: number;
-  containerW: number;
-  containerH: number;
 }) {
-  const shadow = wm.shadowEnabled
-    ? `${wm.shadowOffsetX}px ${wm.shadowOffsetY}px ${wm.shadowBlur}px ${hexToRgba(wm.shadowColor, wm.opacity)}`
-    : undefined;
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
 
-  const posStyle = resolvePositionStyle(wm);
+  useEffect(() => {
+    let cancelled = false;
+    const overlayScale = Math.min(1, WM_OVERLAY_MAX_EDGE / Math.max(previewW, previewH));
+    const overlayW = Math.round(previewW * overlayScale);
+    const overlayH = Math.round(previewH * overlayScale);
+    renderWatermarkLayer(wm, overlayW, overlayH, 1).then((result) => {
+      if (!cancelled) setDataUrl(`data:image/png;base64,${result.data}`);
+    });
+    return () => { cancelled = true; };
+  }, [wm, previewW, previewH]);
 
-  // 计算 object-contain 后图片实际显示区域，消除黑边偏移
-  const imageAspect = previewW / previewH;
-  const containerAspect = containerW / containerH;
-  let scale: number;
-  let offsetX = 0;
-  let offsetY = 0;
-  if (containerAspect > imageAspect) {
-    // 左右有黑边
-    scale = containerH / previewH;
-    offsetX = (containerW - previewW * scale) / 2;
-  } else {
-    // 上下有黑边
-    scale = containerW / previewW;
-    offsetY = (containerH - previewH * scale) / 2;
-  }
-
+  if (!dataUrl) return null;
   return (
-    <div style={{ position: "absolute", top: offsetY, left: offsetX, width: previewW, height: previewH, transformOrigin: "top left", transform: `scale(${scale})`, pointerEvents: "none" }}>
-      <div style={{ position: "absolute", ...posStyle, fontFamily: wm.fontFamily, fontSize: wm.fontSize, fontWeight: wm.bold ? "bold" : "normal", color: hexToRgba(wm.color, wm.opacity), textShadow: shadow, whiteSpace: "nowrap", lineHeight: 1, userSelect: "none", WebkitTextStroke: wm.strokeEnabled ? `${wm.strokeWidth}px ${hexToRgba(wm.strokeColor, wm.opacity)}` : undefined, paintOrder: wm.strokeEnabled ? "fill stroke" : undefined }}>
-        {wm.text}
-      </div>
-    </div>
+    <img
+      src={dataUrl}
+      alt=""
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: previewW,
+        height: previewH,
+        pointerEvents: "none",
+      }}
+    />
   );
 }

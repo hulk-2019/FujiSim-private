@@ -101,6 +101,7 @@ export function WatermarkTab() {
   const { t } = useTranslation();
   const wm = useStore((s) => s.watermark);
   const setWatermark = useStore((s) => s.setWatermark);
+  const previewSize = useStore((s) => s.previewSize);
   const userFonts = useStore((s) => s.userFonts);
   const addUserFont = useStore((s) => s.addUserFont);
   const removeUserFont = useStore((s) => s.removeUserFont);
@@ -382,17 +383,24 @@ export function WatermarkTab() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-1 w-24 mx-auto">
-            {[
-              { onClick: () => setWatermark({ offsetX: wm.offsetX - wm.nudgeStep, offsetY: wm.offsetY - wm.nudgeStep }), Icon: ArrowUpLeft },
-              { onClick: () => setWatermark({ offsetY: wm.offsetY - wm.nudgeStep }),                                      Icon: ChevronUp },
-              { onClick: () => setWatermark({ offsetX: wm.offsetX + wm.nudgeStep, offsetY: wm.offsetY - wm.nudgeStep }), Icon: ArrowUpRight },
-              { onClick: () => setWatermark({ offsetX: wm.offsetX - wm.nudgeStep }),                                      Icon: ChevronLeft },
-              { onClick: () => setWatermark({ offsetX: 0, offsetY: 0 }), Icon: null, title: t("watermark.resetOffset") },
-              { onClick: () => setWatermark({ offsetX: wm.offsetX + wm.nudgeStep }),                                      Icon: ChevronRight },
-              { onClick: () => setWatermark({ offsetX: wm.offsetX - wm.nudgeStep, offsetY: wm.offsetY + wm.nudgeStep }), Icon: ArrowDownLeft },
-              { onClick: () => setWatermark({ offsetY: wm.offsetY + wm.nudgeStep }),                                      Icon: ChevronDown },
-              { onClick: () => setWatermark({ offsetX: wm.offsetX + wm.nudgeStep, offsetY: wm.offsetY + wm.nudgeStep }), Icon: ArrowDownRight },
-            ].map((btn, i) => (
+            {(() => {
+              const maxX = previewSize ? Math.floor(previewSize.width / 2) : 9999;
+              const maxY = previewSize ? Math.floor(previewSize.height / 2) : 9999;
+              const cx = (dx: number) => Math.max(-maxX, Math.min(maxX, wm.offsetX + dx));
+              const cy = (dy: number) => Math.max(-maxY, Math.min(maxY, wm.offsetY + dy));
+              const s = wm.nudgeStep;
+              return [
+                { onClick: () => setWatermark({ offsetX: cx(-s), offsetY: cy(-s) }), Icon: ArrowUpLeft },
+                { onClick: () => setWatermark({ offsetY: cy(-s) }),                  Icon: ChevronUp },
+                { onClick: () => setWatermark({ offsetX: cx(+s), offsetY: cy(-s) }), Icon: ArrowUpRight },
+                { onClick: () => setWatermark({ offsetX: cx(-s) }),                  Icon: ChevronLeft },
+                { onClick: () => setWatermark({ offsetX: 0, offsetY: 0 }), Icon: null, title: t("watermark.resetOffset") },
+                { onClick: () => setWatermark({ offsetX: cx(+s) }),                  Icon: ChevronRight },
+                { onClick: () => setWatermark({ offsetX: cx(-s), offsetY: cy(+s) }), Icon: ArrowDownLeft },
+                { onClick: () => setWatermark({ offsetY: cy(+s) }),                  Icon: ChevronDown },
+                { onClick: () => setWatermark({ offsetX: cx(+s), offsetY: cy(+s) }), Icon: ArrowDownRight },
+              ];
+            })().map((btn, i) => (
               <button key={i} type="button" title={"title" in btn ? btn.title : undefined} onClick={btn.onClick}
                 className="flex items-center justify-center h-6 rounded border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 text-[9px]">
                 {btn.Icon ? <btn.Icon size={12} /> : "⊙"}

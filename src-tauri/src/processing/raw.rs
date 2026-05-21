@@ -167,11 +167,10 @@ pub fn decode_raw_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> 
     decode_raw_rgb16_from_bytes(&data, None)
 }
 
-/// 预览专用解码：根据目标长边 `max_edge` 动态决定是否启用 LibRaw half_size 模式。
-/// 当原始尺寸 / 2 仍大于 `max_edge` 时启用，约快 4x；否则全分辨率解码避免降质。
-pub fn decode_raw_rgb16_for_preview(path: &Path, max_edge: u32) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+/// 预览专用解码：max_edge 为 None 时全分辨率解码；有值时若原始长边/2 仍大于目标则启用 half_size（约快 4x）。
+pub fn decode_raw_rgb16_for_preview(path: &Path, max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     let data = std::fs::read(path)?;
-    decode_raw_rgb16_from_bytes(&data, Some(max_edge))
+    decode_raw_rgb16_from_bytes(&data, max_edge)
 }
 
 fn decode_raw_rgb16_from_bytes(data: &[u8], max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
