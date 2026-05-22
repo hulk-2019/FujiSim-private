@@ -109,7 +109,15 @@ export class PointCollection {
         p.y >= this._min.y && p.y <= this._max.y
       ) {
         const pt = this._points[index];
-        if (!pt.xLocked) pt.x = p.x;
+
+        // Prevent x from crossing or touching neighboring points (keep 1px min gap)
+        let newX = p.x;
+        const left = index > 0 ? this._points[index - 1] : null;
+        const right = index < this._points.length - 1 ? this._points[index + 1] : null;
+        if (left && newX <= left.x) newX = left.x + 1;
+        if (right && newX >= right.x) newX = right.x - 1;
+
+        if (!pt.xLocked) pt.x = newX;
         if (!pt.yLocked) pt.y = p.y;
 
         this._sortPoints();

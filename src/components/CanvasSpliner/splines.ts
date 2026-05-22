@@ -101,16 +101,44 @@ export class MonotonicCubicSpline {
   private _computeTangents(): number[] {
     const n = this.xs.length;
     const delta: number[] = [];
+    const hs: number[] = [];
     const m: number[] = new Array(n).fill(0);
 
     for (let i = 0; i < n - 1; i++) {
-      delta[i] = (this.ys[i + 1] - this.ys[i]) / (this.xs[i + 1] - this.xs[i]);
+      hs[i] = this.xs[i + 1] - this.xs[i];
+      delta[i] = (this.ys[i + 1] - this.ys[i]) / hs[i];
     }
 
-    m[0] = delta[0];
+    // Interior tangents: weighted harmonic-style average (Fritsch-Carlson)
     for (let i = 1; i < n - 1; i++) m[i] = (delta[i - 1] + delta[i]) / 2;
-    m[n - 1] = delta[n - 2];
 
+    // Endpoint tangents: three-point one-sided estimate (Fritsch-Butland), with monotonicity guards.
+    if (n >= 3) {
+      // Left endpoint
+      const m0 = ((2 * hs[0] + hs[1]) * delta[0] - hs[0] * delta[1]) / (hs[0] + hs[1]);
+      if (Math.sign(m0) !== Math.sign(delta[0])) {
+        m[0] = 0;
+      } else if (Math.sign(delta[0]) !== Math.sign(delta[1]) && Math.abs(m0) > 3 * Math.abs(delta[0])) {
+        m[0] = 3 * delta[0];
+      } else {
+        m[0] = m0;
+      }
+      // Right endpoint
+      const mn = ((2 * hs[n - 2] + hs[n - 3]) * delta[n - 2] - hs[n - 2] * delta[n - 3]) / (hs[n - 2] + hs[n - 3]);
+      if (Math.sign(mn) !== Math.sign(delta[n - 2])) {
+        m[n - 1] = 0;
+      } else if (Math.sign(delta[n - 2]) !== Math.sign(delta[n - 3]) && Math.abs(mn) > 3 * Math.abs(delta[n - 2])) {
+        m[n - 1] = 3 * delta[n - 2];
+      } else {
+        m[n - 1] = mn;
+      }
+    } else {
+      // Only 2 points — straight line
+      m[0] = delta[0];
+      m[n - 1] = delta[0];
+    }
+
+    // Apply monotonicity constraint to all interior segments
     for (let i = 0; i < n - 1; i++) {
       if (delta[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
       const a = m[i] / delta[i];

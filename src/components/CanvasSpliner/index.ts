@@ -109,6 +109,8 @@ export class CanvasSpliner {
     this._canvas.style.display = "block";
     this._canvas.style.width = "100%";
     this._canvas.style.height = "100%";
+    this._canvas.style.userSelect = "none";
+    this._canvas.style.webkitUserSelect = "none";
     this._canvas.onselectstart = () => false;
 
     parentElem.appendChild(this._canvas);
@@ -198,9 +200,11 @@ export class CanvasSpliner {
     const rect = this._canvas!.getBoundingClientRect();
     const scaleX = this._width / rect.width;
     const scaleY = this._height / rect.height;
+    const px = (evt.clientX - rect.left) * scaleX;
+    const py = (evt.clientY - rect.top) * scaleY;
     this._mouse = {
-      x: (evt.clientX - rect.left) * scaleX,
-      y: this._height - (evt.clientY - rect.top) * scaleY,
+      x: Math.max(0, Math.min(this._width, px)),
+      y: Math.max(0, Math.min(this._height, this._height - py)),
     };
   }
 
@@ -260,6 +264,7 @@ export class CanvasSpliner {
   }
 
   private _onCanvasMouseDown(evt: MouseEvent): void {
+    evt.preventDefault();
     this._mouseDown = true;
     this._updateMousePosition(evt);
     if (this._pointHoveredIndex !== -1) {
@@ -278,7 +283,8 @@ export class CanvasSpliner {
     if (this._onEvents.releasePoint && aPointWasGrabbed) this._onEvents.releasePoint(this);
   }
 
-  private _onCanvasMouseDbclick(_evt: MouseEvent): void {
+  private _onCanvasMouseDbclick(evt: MouseEvent): void {
+    evt.preventDefault();
     this._canvas!.focus();
     if (this._pointHoveredIndex === -1) {
       const index = this.add({
