@@ -32,6 +32,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": [
       "libs/libvips.42.dylib",
       "libs/libvips-cpp.42.dylib",
