@@ -19,6 +19,7 @@
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "$DATA/FujiSim/**" }]
     },
-    "shell:default"
+    "shell:default",
+    "updater:default"
   ]
 }
