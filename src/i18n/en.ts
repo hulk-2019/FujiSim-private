@@ -47,6 +47,7 @@ const en = {
       preset: "Presets",
       watermark: "Watermark",
       info: "Info",
+      curves: "Curves",
     },
     filmSimulation: "Film simulation",
     noSimulation: "None",

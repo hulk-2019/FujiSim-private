@@ -1,4 +1,6 @@
 use crate::processing::color;
+use splines::{Interpolation, Key, Spline};
+use crate::processing::pipeline::CurvePoint;
 
 /// 256 项查找表，用于把"输入亮度 0..1"映射到"输出亮度 0..1"。
 ///
@@ -47,6 +49,42 @@ impl ToneCurve {
             let highlight_mask = x.powf(2.0);
             y += highlight * 0.35 * highlight_mask;
 
+            *slot = y.clamp(0.0, 1.0);
+        }
+        ToneCurve { lut }
+    }
+
+    /// Build a ToneCurve LUT from user-supplied control points using CatmullRom spline.
+    /// Points are sorted by x. If fewer than 2 points, returns identity.
+    /// Ghost points are added at both ends to ensure smooth interpolation at boundaries.
+    pub fn from_points(points: &[CurvePoint]) -> Self {
+        if points.len() < 2 {
+            return Self::identity();
+        }
+
+        // Sort by x ascending
+        let mut sorted = points.to_vec();
+        sorted.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Build spline keys; add ghost points at both ends for CatmullRom boundary stability
+        let first = &sorted[0];
+        let last = &sorted[sorted.len() - 1];
+
+        let mut keys: Vec<Key<f32, f32>> = Vec::with_capacity(sorted.len() + 2);
+        // Ghost point before first (same y, slightly before x)
+        keys.push(Key::new(first.x - 0.01, first.y, Interpolation::CatmullRom));
+        for pt in &sorted {
+            keys.push(Key::new(pt.x, pt.y, Interpolation::CatmullRom));
+        }
+        // Ghost point after last (same y, slightly after x)
+        keys.push(Key::new(last.x + 0.01, last.y, Interpolation::CatmullRom));
+
+        let spline = Spline::from_vec(keys);
+
+        let mut lut = [0.0f32; 256];
+        for (i, slot) in lut.iter_mut().enumerate() {
+            let x = i as f32 / 255.0;
+            let y = spline.clamped_sample(x).unwrap_or(x);
             *slot = y.clamp(0.0, 1.0);
         }
         ToneCurve { lut }

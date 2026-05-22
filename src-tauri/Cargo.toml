@@ -42,6 +42,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 rand = "0.8"
+splines = "5.0.0"
 trash = "5"
 indexmap = "2"
 

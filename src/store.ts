@@ -51,6 +51,7 @@ export const DEFAULT_FILTER: FilterSettings = {
   wb_shift_r: 0,
   wb_shift_b: 0,
   lut_file_path: null,
+  tone_curve: null,
 };
 
 /**

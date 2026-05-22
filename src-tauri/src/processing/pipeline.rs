@@ -11,6 +11,20 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurvePoint {
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToneCurvePoints {
+    pub rgb: Vec<CurvePoint>,
+    pub r: Vec<CurvePoint>,
+    pub g: Vec<CurvePoint>,
+    pub b: Vec<CurvePoint>,
+}
+
 /// 一组完整的色彩参数，等同于"用户当前在 UI 上看到的滤镜设置"。
 ///
 /// 字段命名与前端 [`FilterSettings`](../../../src/types.ts) 保持一致，
@@ -40,6 +54,8 @@ pub struct FilterSettings {
     #[serde(default)]
     pub wb_shift_b: i32,
     #[serde(default)]
+    pub tone_curve: Option<ToneCurvePoints>,
+    #[serde(default)]
     pub lut_file_path: Option<PathBuf>,
 }
 
@@ -57,6 +73,9 @@ impl FilterSettings {
             && self.wb_shift_b == 0
             && matches!(self.grain_effect.as_deref(), None | Some("None"))
             && matches!(self.color_chrome_effect.as_deref(), None | Some("None"))
+            && self.tone_curve.as_ref().map_or(true, |tc| {
+                tc.rgb.is_empty() && tc.r.is_empty() && tc.g.is_empty() && tc.b.is_empty()
+            })
     }
 }
 
@@ -74,6 +93,7 @@ impl Default for FilterSettings {
             sharpness: 0.0,
             wb_shift_r: 0,
             wb_shift_b: 0,
+            tone_curve: None,
             lut_file_path: None,
         }
     }
@@ -119,6 +139,20 @@ pub fn process_image(
     let (rc, gc, bc) =
         curves::build_per_channel_curves(&curve, profile.r_tilt, profile.g_tilt, profile.b_tilt);
 
+    // Pre-build user curve LUTs (once, before pixel loop)
+    let user_rgb_curve = settings.tone_curve.as_ref()
+        .filter(|tc| !tc.rgb.is_empty())
+        .map(|tc| ToneCurve::from_points(&tc.rgb));
+    let user_r_curve = settings.tone_curve.as_ref()
+        .filter(|tc| !tc.r.is_empty())
+        .map(|tc| ToneCurve::from_points(&tc.r));
+    let user_g_curve = settings.tone_curve.as_ref()
+        .filter(|tc| !tc.g.is_empty())
+        .map(|tc| ToneCurve::from_points(&tc.g));
+    let user_b_curve = settings.tone_curve.as_ref()
+        .filter(|tc| !tc.b.is_empty())
+        .map(|tc| ToneCurve::from_points(&tc.b));
+
     // Color Chrome 在 HSL 空间根据现有饱和度做"再升一档"
     let chrome_strength = match settings.color_chrome_effect.as_deref().unwrap_or("None") {
         "Weak" => 0.15,
@@ -146,6 +180,16 @@ pub fn process_image(
             r = rc.apply(r);
             g = gc.apply(g);
             b = bc.apply(b);
+
+            // [2b] User point curves (applied on top of Fuji preset curves)
+            if let Some(ref uc) = user_rgb_curve {
+                r = uc.apply(r);
+                g = uc.apply(g);
+                b = uc.apply(b);
+            }
+            if let Some(ref uc) = user_r_curve { r = uc.apply(r); }
+            if let Some(ref uc) = user_g_curve { g = uc.apply(g); }
+            if let Some(ref uc) = user_b_curve { b = uc.apply(b); }
 
             // [3] Split Toning：根据亮度把像素分到"高光端"或"阴影端"，分别乘以预设里的染色系数
             let l = color::luminance(r, g, b);

@@ -68,6 +68,15 @@ export type NewFilterPreset = Omit<FilterPreset, "id" | "created_at" | "is_built
   is_builtin: boolean;
 };
 
+export type CurvePoint = { x: number; y: number };
+
+export type ToneCurvePoints = {
+  rgb: CurvePoint[];
+  r: CurvePoint[];
+  g: CurvePoint[];
+  b: CurvePoint[];
+};
+
 /** 用户当前在 UI 上看到的滤镜参数。每次调整滑块都会 patch 这个对象 */
 export type FilterSettings = {
   base_simulation: string;
@@ -82,6 +91,7 @@ export type FilterSettings = {
   wb_shift_r: number;
   wb_shift_b: number;
   lut_file_path?: string | null;
+  tone_curve?: ToneCurvePoints | null;
 };
 
 /** 资产列表查询条件，所有字段可选，前端按需带 */

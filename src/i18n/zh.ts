@@ -47,6 +47,7 @@ const zh = {
       preset: "预设",
       watermark: "水印",
       info: "信息",
+      curves: "曲线",
     },
     filmSimulation: "胶片模拟",
     noSimulation: "无",

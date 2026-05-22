@@ -34,6 +34,8 @@ import { cn, formatBytes, shortDate } from "@/lib/utils";
 import { Label, SliderRow } from "@/components/ui/form";
 import { WatermarkTab } from "@/components/WatermarkTab";
 import { useTranslation } from "react-i18next";
+import { CurvesEditor } from "@/components/CurvesEditor";
+import type { ToneCurvePoints } from "@/types";
 
 const GRAIN_EFFECTS = ["None", "Weak", "Medium", "Strong"];
 const GRAIN_SIZES = ["Small", "Large"];
@@ -261,6 +263,14 @@ export function FilterPanel() {
           <SliderRow label={t("filterPanel.wbShiftR")}    value={filter.wb_shift_r}        min={-9} max={9} step={1}    display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_r: v })} />
           <SliderRow label={t("filterPanel.wbShiftB")}    value={filter.wb_shift_b}        min={-9} max={9} step={1}    display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_b: v })} />
 
+          <div>
+            <Label>{t("filterPanel.tabs.curves")}</Label>
+            <CurvesEditor
+              value={filter.tone_curve}
+              onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
+            />
+          </div>
+
           <div className="flex gap-2 pt-4 border-t border-zinc-800/60 mt-4">
             <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
             <Button size="sm" variant="default" onClick={() => setSaveOpen(true)} className="flex-1">
@@ -343,6 +353,7 @@ export function FilterPanel() {
             </div>
           )}
         </TabsContent>
+
       </Tabs>
 
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
