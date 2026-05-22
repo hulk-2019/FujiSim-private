@@ -11,6 +11,7 @@ pub mod tasks;
 pub mod user_fonts;
 pub mod user_luts;
 pub mod watermark_presets;
+pub mod app_settings;
 
 /// 创建（或打开）SQLite 数据库连接池。
 ///
@@ -143,6 +144,18 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         let _ = sqlx::query("ALTER TABLE batch_tasks DROP COLUMN asset_ids_json")
             .execute(pool).await;
     }
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key        TEXT PRIMARY KEY NOT NULL,
+            value      TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
