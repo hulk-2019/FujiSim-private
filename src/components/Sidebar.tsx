@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Search, RotateCcw, Sun, Moon, Eraser, Settings, Globe } from "lucide-react";
+import { Search, RotateCcw, Settings } from "lucide-react";
 import { type BatchProgress } from "@/api";
 import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { ExportTasksPopover } from "@/components/ExportTasksPopover";
-import { ClearCacheDialog } from "@/components/ClearCacheDialog";
+import { SettingsDialog } from "@/components/Settings";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useTranslation } from "react-i18next";
 
 export function Sidebar() {
@@ -22,12 +16,9 @@ export function Sidebar() {
   const query = useStore((s) => s.query);
   const setQuery = useStore((s) => s.setQuery);
   const selectedIds = useStore((s) => s.selectedIds);
-  const theme = useStore((s) => s.theme);
-  const toggleTheme = useStore((s) => s.toggleTheme);
-  const toggleLanguage = useStore((s) => s.toggleLanguage);
 
   const [searchText, setSearchText] = useState("");
-  const [clearCacheOpen, setClearCacheOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,30 +130,18 @@ export function Sidebar() {
       <div className="ml-auto flex items-center gap-2">
         <ExportTasksPopover />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-8 w-8 flex-shrink-0" title={t("sidebar.settings")}>
-              <Settings size={14} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={toggleTheme}>
-              {theme === "dark" ? <Sun size={14} className="mr-2" /> : <Moon size={14} className="mr-2" />}
-              {t("sidebar.toggleTheme")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={toggleLanguage}>
-              <Globe size={14} className="mr-2" />
-              {t("sidebar.toggleLanguage")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setClearCacheOpen(true)}>
-              <Eraser size={14} className="mr-2" />
-              {t("sidebar.clearCache")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 flex-shrink-0"
+          title={t("sidebar.settings")}
+          onClick={() => setSettingsOpen(true)}
+        >
+          <Settings size={14} />
+        </Button>
       </div>
 
-      <ClearCacheDialog open={clearCacheOpen} onOpenChange={setClearCacheOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </aside>
   );
 }
