@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, Database, RefreshCw, Info } from "lucide-reac
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { GeneralTab } from "./tabs/GeneralTab";
+import { CacheTab } from "./tabs/CacheTab";
 
 type TabKey = "general" | "cache" | "update" | "about";
 
@@ -47,7 +48,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </nav>
           <div className="flex-1 p-6 overflow-y-auto">
             {active === "general" && <GeneralTab />}
-            {active === "cache" && <PlaceholderTab name="Cache" />}
+            {active === "cache" && <CacheTab />}
             {active === "update" && <PlaceholderTab name="Update" />}
             {active === "about" && <PlaceholderTab name="About" />}
           </div>
