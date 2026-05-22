@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { GeneralTab } from "./tabs/GeneralTab";
 import { CacheTab } from "./tabs/CacheTab";
+import { AboutTab } from "./tabs/AboutTab";
 
 type TabKey = "general" | "cache" | "update" | "about";
 
@@ -50,7 +51,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             {active === "general" && <GeneralTab />}
             {active === "cache" && <CacheTab />}
             {active === "update" && <PlaceholderTab name="Update" />}
-            {active === "about" && <PlaceholderTab name="About" />}
+            {active === "about" && <AboutTab />}
           </div>
         </div>
       </DialogContent>
