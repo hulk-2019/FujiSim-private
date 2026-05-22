@@ -64,12 +64,6 @@ export const DEFAULT_FILTER: FilterSettings = {
  *   减少不必要的重渲染。
  */
 type AppState = {
-  // ===== UI 状态 =====
-  theme: "light" | "dark";
-  toggleTheme: () => void;
-  language: "zh" | "en";
-  toggleLanguage: () => void;
-
   // ===== 资产列表与查询 =====
   assets: (Asset | undefined)[];
   totalCount: number;
@@ -171,25 +165,6 @@ type AppState = {
 };
 
 export const useStore = create<AppState>((set, get) => ({
-  theme: (localStorage.getItem("fujisim-theme") as "light" | "dark") || "light",
-  toggleTheme: () => {
-    const newTheme = get().theme === "light" ? "dark" : "light";
-    localStorage.setItem("fujisim-theme", newTheme);
-    if (newTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-    set({ theme: newTheme });
-  },
-  language: (localStorage.getItem("fujisim-language") as "zh" | "en") || "zh",
-  toggleLanguage: () => {
-    const newLang = get().language === "zh" ? "en" : "zh";
-    localStorage.setItem("fujisim-language", newLang);
-    set({ language: newLang });
-    import("@/i18n").then(({ default: i18n }) => i18n.changeLanguage(newLang));
-  },
-
   assets: [],
   totalCount: 0,
   isLoadingPage: new Set<number>(),

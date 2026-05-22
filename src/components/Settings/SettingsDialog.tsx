@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Settings as SettingsIcon, Database, RefreshCw, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { GeneralTab } from "./tabs/GeneralTab";
 
 type TabKey = "general" | "cache" | "update" | "about";
 
@@ -45,7 +46,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             ))}
           </nav>
           <div className="flex-1 p-6 overflow-y-auto">
-            {active === "general" && <PlaceholderTab name="General" />}
+            {active === "general" && <GeneralTab />}
             {active === "cache" && <PlaceholderTab name="Cache" />}
             {active === "update" && <PlaceholderTab name="Update" />}
             {active === "about" && <PlaceholderTab name="About" />}

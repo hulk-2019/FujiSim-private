@@ -15,6 +15,22 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
+    api.getSetting("ui.theme").then((raw) => {
+      if (raw && JSON.parse(raw) === "dark") {
+        document.documentElement.classList.add("dark");
+      }
+    }).catch(() => {});
+    api.getSetting("ui.language").then((raw) => {
+      if (raw) {
+        const lang = JSON.parse(raw);
+        if (lang === "en" || lang === "zh") {
+          import("@/i18n").then(({ default: i18n }) => i18n.changeLanguage(lang));
+        }
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts, refreshAlbums, setCoverDir } = useStore.getState();
     refreshAssets();
     refreshFacets();

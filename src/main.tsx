@@ -7,13 +7,6 @@ import { loadPersistedFonts } from "./lib/fontManager";
 import { useStore } from "./store";
 import { api } from "./api";
 
-const initialTheme = localStorage.getItem("fujisim-theme") || "light";
-if (initialTheme === "dark") {
-  document.documentElement.classList.add("dark");
-} else {
-  document.documentElement.classList.remove("dark");
-}
-
 const loadFonts = () =>
   loadPersistedFonts().then((fonts) => {
     if (fonts.length > 0) useStore.setState({ userFonts: fonts });
