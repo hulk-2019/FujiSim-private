@@ -255,6 +255,56 @@ const zh = {
     confirmDeleteEmpty: "确认删除此空文件夹？",
     noFolders: "还没有文件夹，点击右上角 + 新建",
   },
+  settings: {
+    title: "设置",
+    tabs: {
+      general: "通用",
+      cache: "缓存",
+      update: "更新",
+      about: "关于",
+    },
+    general: {
+      theme: "主题",
+      themeLight: "浅色",
+      themeDark: "深色",
+      language: "语言",
+      chinese: "中文",
+      english: "English",
+    },
+    update: {
+      currentVersion: "当前版本",
+      lastCheck: "最后检查",
+      lastCheckNever: "从未检查",
+      checkNow: "立即检查更新",
+      autoCheck: "启动时自动检查更新",
+      confirmInstall: "下载更新前询问",
+      skippedVersions: "已跳过的版本",
+      cancelSkip: "取消跳过",
+      noSkipped: "暂无跳过的版本",
+      states: {
+        idle: "未检查",
+        checking: "检查中...",
+        available: "发现新版本 {{version}}",
+        downloading: "下载中 {{progress}}%",
+        ready: "下载完成，请重启应用",
+        upToDate: "已是最新版本",
+        error: "检查失败：{{message}}",
+      },
+      actions: {
+        download: "下载并安装",
+        install: "立即重启应用",
+        skip: "跳过此版本",
+        later: "稍后",
+      },
+    },
+    about: {
+      version: "版本",
+      website: "官网",
+      websiteUrl: "https://static.ai520.wiki",
+      license: "许可证",
+      licenseValue: "MIT",
+    },
+  },
 } as const;
 
 export default zh;

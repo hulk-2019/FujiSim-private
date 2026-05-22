@@ -255,6 +255,56 @@ const en = {
     confirmDeleteEmpty: "Delete this empty folder?",
     noFolders: "No folders yet. Click + to create one.",
   },
+  settings: {
+    title: "Settings",
+    tabs: {
+      general: "General",
+      cache: "Cache",
+      update: "Updates",
+      about: "About",
+    },
+    general: {
+      theme: "Theme",
+      themeLight: "Light",
+      themeDark: "Dark",
+      language: "Language",
+      chinese: "中文",
+      english: "English",
+    },
+    update: {
+      currentVersion: "Current version",
+      lastCheck: "Last checked",
+      lastCheckNever: "Never",
+      checkNow: "Check for updates",
+      autoCheck: "Check for updates on startup",
+      confirmInstall: "Ask before installing updates",
+      skippedVersions: "Skipped versions",
+      cancelSkip: "Unskip",
+      noSkipped: "No skipped versions",
+      states: {
+        idle: "Idle",
+        checking: "Checking...",
+        available: "New version {{version}} available",
+        downloading: "Downloading {{progress}}%",
+        ready: "Download complete, please restart",
+        upToDate: "Up to date",
+        error: "Check failed: {{message}}",
+      },
+      actions: {
+        download: "Download and install",
+        install: "Restart now",
+        skip: "Skip this version",
+        later: "Later",
+      },
+    },
+    about: {
+      version: "Version",
+      website: "Website",
+      websiteUrl: "https://static.ai520.wiki",
+      license: "License",
+      licenseValue: "MIT",
+    },
+  },
 } as const;
 
 export default en;
