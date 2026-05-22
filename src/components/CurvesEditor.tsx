@@ -55,7 +55,7 @@ function buildSpliner(
       safe: isEndpoint,
       axisLocked: isEndpoint,
       anchor,
-    }, false);
+    }, false, true);
   }
   spliner.draw();
   return spliner;
@@ -84,6 +84,51 @@ export function CurvesEditor({
   useEffect(() => { channelRef.current = activeChannel; }, [activeChannel]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
+  // Sync spliner state with the current channel's points whenever value changes.
+  // This handles external resets (e.g. resetFilter) that wipe tone_curve to null,
+  // or preset application that loads new curves.
+  useEffect(() => {
+    const s = splinerRef.current;
+    if (!s) return;
+    const channelPts = value?.[activeChannel] ?? [];
+    const sorted = [...channelPts].sort((a, b) => a.x - b.x);
+    const ptsToLoad = sorted.length > 0 ? sorted : DEFAULT_POINTS;
+
+    // Skip the sync if the spliner already shows these exact points — this
+    // prevents the loop where commit → store update → effect → resetPoints.
+    const current = s.getControlPoints();
+    if (current.length === ptsToLoad.length) {
+      let same = true;
+      for (let i = 0; i < current.length; i++) {
+        if (
+          Math.abs(current[i].x - ptsToLoad[i].x) > 0.001 ||
+          Math.abs(current[i].y - ptsToLoad[i].y) > 0.001
+        ) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+
+    s.resetPoints(
+      ptsToLoad.map((pt, i) => {
+        const isFirst = i === 0;
+        const isLast = i === ptsToLoad.length - 1;
+        const isEndpoint = isFirst || isLast;
+        const anchor = isFirst ? { x: 0, y: 0 } : isLast ? { x: 1, y: 1 } : undefined;
+        return {
+          x: pt.x,
+          y: pt.y,
+          xLocked: false,
+          safe: isEndpoint,
+          axisLocked: isEndpoint,
+          anchor,
+        };
+      })
+    );
+  }, [value, activeChannel]);
+
   // Self-healing: redraw on every React render. Cheap (single canvas op),
   // and guarantees the canvas content is in sync regardless of cause —
   // backing-store eviction, HMR, layout collapse, etc.
@@ -93,7 +138,6 @@ export function CurvesEditor({
     if (s && container) {
       const canvas = (s as any)._canvas as HTMLCanvasElement | null;
       if (canvas && !container.contains(canvas)) {
-        console.warn("[CurvesEditor] canvas detached — re-attaching");
         container.appendChild(canvas);
       }
       s.draw();
@@ -111,12 +155,6 @@ export function CurvesEditor({
     let currentSize = 0;
 
     function init(size: number) {
-      console.log("[CurvesEditor] init", {
-        size,
-        prevSize: currentSize,
-        channel: channelRef.current,
-        hadSpliner: !!spliner,
-      });
       if (spliner) { spliner.destroy(); spliner = null; }
       currentSize = size;
 
@@ -131,15 +169,10 @@ export function CurvesEditor({
           newPts.length === 2 &&
           newPts[0].x === 0 && newPts[0].y === 0 &&
           newPts[1].x === 1 && newPts[1].y === 1;
-        // Validate before committing — anything weird gets logged
         const invalid = newPts.some(
           (p) => !isFinite(p.x) || !isFinite(p.y) || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1
         );
-        if (invalid) {
-          console.error("[CurvesEditor] commit aborted: invalid points", newPts);
-          return;
-        }
-        console.log("[CurvesEditor] commit", { channel: channelRef.current, newPts, isIdentity });
+        if (invalid) return;
         onChangeRef.current({ ...cur, [channelRef.current]: isIdentity ? [] : newPts });
       };
 
@@ -156,11 +189,6 @@ export function CurvesEditor({
       // Only rebuild on significant size change (>2px). Sub-pixel jitter during
       // a drag would otherwise destroy/recreate the spliner mid-interaction.
       if (size > 0 && Math.abs(size - currentSize) > 2) {
-        console.log("[CurvesEditor] ResizeObserver triggers init", {
-          size,
-          prevSize: currentSize,
-          diff: size - currentSize,
-        });
         init(size);
       }
     });

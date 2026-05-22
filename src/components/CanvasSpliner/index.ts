@@ -109,14 +109,6 @@ export class CanvasSpliner {
     existingCanvases.forEach((c) => c.remove());
 
     this._canvas = document.createElement("canvas");
-    (this._canvas as HTMLCanvasElement & { __splinerId?: string }).__splinerId =
-      Math.random().toString(36).slice(2, 7);
-    console.log("[CanvasSpliner] new canvas", {
-      id: (this._canvas as HTMLCanvasElement & { __splinerId?: string }).__splinerId,
-      removedGhosts: existingCanvases.length,
-      width,
-      height,
-    });
     this._canvas.width = width;
     this._canvas.height = height;
     this._canvas.setAttribute("tabIndex", "1");
@@ -278,32 +270,18 @@ export class CanvasSpliner {
           target.y = anchor.y;
           this._grabPointStart.lockedAxis = "y";
         }
-        console.log("[CanvasSpliner] axis snap", {
-          mouse: this._mouse,
-          anchor,
-          distToVert,
-          distToHoriz,
-          prev,
-          snapToVertical,
-          target,
-        });
       }
 
       // Defensive: skip invalid updates that would break spline math
       if (!isFinite(target.x) || !isFinite(target.y)) {
-        console.error("[CanvasSpliner] mousemove aborted: non-finite target", target);
         return;
       }
 
-      const prevIdx = this._pointGrabbedIndex;
       this._pointGrabbedIndex = this._pointCollection.updatePoint(
         this._pointGrabbedIndex,
         target
       );
       this._pointHoveredIndex = this._pointGrabbedIndex;
-      if (prevIdx !== this._pointGrabbedIndex) {
-        console.log("[CanvasSpliner] grabbed idx changed", { prev: prevIdx, now: this._pointGrabbedIndex });
-      }
     }
 
     if (this._pointHoveredIndex !== -1 || this._pointGrabbedIndex !== -1) {
@@ -326,20 +304,12 @@ export class CanvasSpliner {
     evt.preventDefault();
     this._mouseDown = true;
     this._updateMousePosition(evt);
-    console.log("[CanvasSpliner] mousedown", {
-      mouse: this._mouse,
-      hoveredIdx: this._pointHoveredIndex,
-    });
     if (this._pointHoveredIndex !== -1) {
       this._pointGrabbedIndex = this._pointHoveredIndex;
       const pt = this._pointCollection.getPoint(this._pointHoveredIndex);
       this._grabPointStart = pt
         ? { x: pt.x, y: pt.y, axisLocked: pt.axisLocked, anchor: pt.anchor }
         : null;
-      console.log("[CanvasSpliner] grab start", {
-        idx: this._pointGrabbedIndex,
-        pt: pt ? { x: pt.x, y: pt.y, axisLocked: pt.axisLocked, anchor: pt.anchor } : null,
-      });
     }
   }
 
@@ -381,19 +351,22 @@ export class CanvasSpliner {
     if (evt.key === "d") this.remove(this._pointHoveredIndex);
   }
 
-  add(pt: { x: number; y: number; xLocked?: boolean; yLocked?: boolean; safe?: boolean; axisLocked?: boolean; anchor?: { x: number; y: number } }, draw = true): number | null {
+  add(
+    pt: { x: number; y: number; xLocked?: boolean; yLocked?: boolean; safe?: boolean; axisLocked?: boolean; anchor?: { x: number; y: number } },
+    draw = true,
+    silent = false
+  ): number | null {
     let index: number | null = null;
     if ("x" in pt && "y" in pt) {
       pt.x *= this._width;
       pt.y *= this._height;
-      // anchor is also normalized — denormalize to pixel coords
       if (pt.anchor) {
         pt.anchor = { x: pt.anchor.x * this._width, y: pt.anchor.y * this._height };
       }
       index = this._pointCollection.add(pt);
     }
     if (draw) this.draw();
-    if (this._onEvents.pointAdded) this._onEvents.pointAdded(this);
+    if (!silent && this._onEvents.pointAdded) this._onEvents.pointAdded(this);
     return index;
   }
 
@@ -407,39 +380,22 @@ export class CanvasSpliner {
   resetPoints(pts: Array<{ x: number; y: number; xLocked?: boolean; yLocked?: boolean; safe?: boolean; axisLocked?: boolean; anchor?: { x: number; y: number } }>): void {
     this._pointCollection.clear();
     for (const pt of pts) {
-      this.add({ ...pt }, false);
+      // silent: do not fire pointAdded — resetPoints is for syncing from external state,
+      // firing events here would create a feedback loop with React effects.
+      this.add({ ...pt }, false, true);
     }
     this.draw();
   }
 
   draw(): void {
-    if (!this._ctx) {
-      console.warn("[CanvasSpliner] draw skipped: no ctx");
-      return;
-    }
-    // Detect if canvas is detached from DOM — that would explain "blank" rendering
-    if (this._canvas && !this._canvas.isConnected) {
-      console.error("[CanvasSpliner] draw on DETACHED canvas!", {
-        parent: this._canvas.parentNode,
-      });
-    }
+    if (!this._ctx) return;
     try {
       this._ctx.clearRect(0, 0, this._width, this._height);
       this._fillBackground();
       this._drawGrid();
       this._drawData();
-    } catch (e) {
-      const xs = this._pointCollection.getXseries();
-      const ys = this._pointCollection.getYseries();
-      console.error("[CanvasSpliner] draw failed", {
-        err: e,
-        stack: (e as Error)?.stack,
-        xSeries: [...xs],
-        ySeries: [...ys],
-        width: this._width,
-        height: this._height,
-        screenRatio: this._screenRatio,
-      });
+    } catch {
+      // Swallow rendering errors to keep the canvas responsive.
     }
   }
 
@@ -488,41 +444,21 @@ export class CanvasSpliner {
   }
 
   private _drawData(curve = true, control = true): void {
-    if (!this._ctx) {
-      console.warn("[CanvasSpliner] _drawData skipped: no ctx");
-      return;
-    }
+    if (!this._ctx) return;
     const xSeries = this._pointCollection.getXseries();
     const ySeries = this._pointCollection.getYseries();
     const w = this._width;
     const h = this._height;
 
-    console.log("[CanvasSpliner] _drawData", {
-      xSeries: [...xSeries],
-      ySeries: [...ySeries],
-      w, h,
-      grabbedIdx: this._pointGrabbedIndex,
-      hoveredIdx: this._pointHoveredIndex,
-    });
-
-    if (!xSeries.length) {
-      console.warn("[CanvasSpliner] _drawData skipped: empty xSeries");
-      return;
-    }
+    if (!xSeries.length) return;
 
     // Sanity check — any NaN or non-finite values would crash the spline math
     for (let i = 0; i < xSeries.length; i++) {
-      if (!isFinite(xSeries[i]) || !isFinite(ySeries[i])) {
-        console.error("[CanvasSpliner] _drawData aborted: invalid point", i, xSeries[i], ySeries[i]);
-        return;
-      }
+      if (!isFinite(xSeries[i]) || !isFinite(ySeries[i])) return;
     }
     // Check x's are strictly increasing
     for (let i = 1; i < xSeries.length; i++) {
-      if (xSeries[i] <= xSeries[i - 1]) {
-        console.error("[CanvasSpliner] _drawData aborted: non-increasing x at", i, xSeries[i - 1], "→", xSeries[i]);
-        return;
-      }
+      if (xSeries[i] <= xSeries[i - 1]) return;
     }
 
     if (curve) {
@@ -608,11 +544,6 @@ export class CanvasSpliner {
 
   /** Remove all event listeners attached to the canvas (call before unmounting). */
   destroy(): void {
-    console.log("[CanvasSpliner] destroy", {
-      grabbedIdx: this._pointGrabbedIndex,
-      mouseDown: this._mouseDown,
-      stack: new Error().stack?.split("\n").slice(2, 6).join("\n"),
-    });
     if (!this._canvas) return;
     if (this._boundMouseUp) {
       window.removeEventListener("mouseup", this._boundMouseUp);
