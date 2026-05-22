@@ -37,6 +37,8 @@ export class CanvasSpliner {
   private _curveThickness: number;
   private _backgroundColor: string | false;
   private _mouse: { x: number; y: number } | null;
+  /** Stable bound handler for window mouseup — needed so destroy() can remove it. */
+  private _boundMouseUp: ((e: MouseEvent) => void) | null = null;
   private _pointHoveredIndex: number;
   private _pointGrabbedIndex: number;
   private _mouseDown: boolean;
@@ -46,7 +48,7 @@ export class CanvasSpliner {
   private _width: number;
   private _height: number;
   /** Point position at drag start, for axisLocked total-displacement calculation. */
-  private _grabPointStart: { x: number; y: number; axisLocked?: boolean; anchor?: { x: number; y: number } } | null = null;
+  private _grabPointStart: { x: number; y: number; axisLocked?: boolean; anchor?: { x: number; y: number }; lockedAxis?: "x" | "y" } | null = null;
   private _splineConstructor: typeof splines.CubicSpline | typeof splines.MonotonicCubicSpline = splines.CubicSpline;
   private _pointCollection: PointCollection = new PointCollection();
   private _xSeriesInterpolated: Float32Array = new Float32Array(0);
@@ -99,7 +101,22 @@ export class CanvasSpliner {
 
     if (!parentElem) return;
 
+    // Clear any leftover canvas from a previous spliner that may have been
+    // attached to the same container (e.g. StrictMode double-mount or
+    // unclean teardown). Without this, the visible canvas may be a "ghost"
+    // from a destroyed spliner that no longer receives draws.
+    const existingCanvases = parentElem.querySelectorAll("canvas");
+    existingCanvases.forEach((c) => c.remove());
+
     this._canvas = document.createElement("canvas");
+    (this._canvas as HTMLCanvasElement & { __splinerId?: string }).__splinerId =
+      Math.random().toString(36).slice(2, 7);
+    console.log("[CanvasSpliner] new canvas", {
+      id: (this._canvas as HTMLCanvasElement & { __splinerId?: string }).__splinerId,
+      removedGhosts: existingCanvases.length,
+      width,
+      height,
+    });
     this._canvas.width = width;
     this._canvas.height = height;
     this._canvas.setAttribute("tabIndex", "1");
@@ -118,9 +135,11 @@ export class CanvasSpliner {
     this._ctx = this._canvas.getContext("2d");
     this._ctx!.scale(this._screenRatio, this._screenRatio);
 
+    // Bind handlers once and store, so removeEventListener can find them in destroy().
+    this._boundMouseUp = this._onCanvasMouseUp.bind(this);
     this._canvas.addEventListener("mousemove", this._onCanvasMouseMove.bind(this), false);
     this._canvas.addEventListener("mousedown", this._onCanvasMouseDown.bind(this), false);
-    window.addEventListener("mouseup", this._onCanvasMouseUp.bind(this), false);
+    window.addEventListener("mouseup", this._boundMouseUp, false);
     this._canvas.addEventListener("dblclick", this._onCanvasMouseDbclick.bind(this), false);
     this._canvas.addEventListener("mouseleave", this._onCanvasMouseLeave.bind(this), false);
     this._canvas.addEventListener("mouseenter", this._onCanvasMouseEnter.bind(this), false);
@@ -215,7 +234,11 @@ export class CanvasSpliner {
     if (!closestPointInfo) return;
 
     if (this._pointGrabbedIndex === -1) {
-      if (closestPointInfo.distance <= this._controlPointRadius * 2) {
+      // Hit area is much larger than the rendered point radius, so users can grab
+      // even when the cursor isn't precisely on the dot — especially at canvas corners
+      // where only a quarter of the visible point is reachable.
+      const hitRadius = Math.max(this._controlPointRadius * 4, 16);
+      if (closestPointInfo.distance <= hitRadius) {
         this._pointHoveredIndex = closestPointInfo.index;
       } else {
         const mustRedraw = this._pointHoveredIndex !== -1;
@@ -227,24 +250,60 @@ export class CanvasSpliner {
 
       if (this._grabPointStart?.axisLocked && this._grabPointStart.anchor) {
         const anchor = this._grabPointStart.anchor;
-        // Axis decision: based on which edge the mouse is closer to (anchor.x edge or anchor.y edge)
-        // Distance from cursor to vertical edge (x = anchor.x) vs horizontal edge (y = anchor.y)
-        const distToVerticalEdge = Math.abs(target.x - anchor.x);
-        const distToHorizontalEdge = Math.abs(target.y - anchor.y);
-        if (distToVerticalEdge <= distToHorizontalEdge) {
-          // Closer to vertical edge → snap onto it (lock x to anchor.x), free y
-          target.x = anchor.x;
+        // Distance from cursor to each anchor edge (in canvas pixels)
+        const distToVert = Math.abs(target.x - anchor.x);   // distance to vertical edge x=anchor.x
+        const distToHoriz = Math.abs(target.y - anchor.y);  // distance to horizontal edge y=anchor.y
+
+        // Hysteresis: prefer to stay on the previously-snapped edge unless the other is clearly closer.
+        // This prevents jitter near the diagonal but still allows smooth switching.
+        const HYSTERESIS = 12;
+        const prev = this._grabPointStart.lockedAxis;
+
+        let snapToVertical: boolean;
+        if (prev === "x") {
+          // Was on vertical edge — switch only if horizontal edge is meaningfully closer
+          snapToVertical = distToVert <= distToHoriz + HYSTERESIS;
+        } else if (prev === "y") {
+          // Was on horizontal edge — switch only if vertical edge is meaningfully closer
+          snapToVertical = distToVert + HYSTERESIS < distToHoriz;
         } else {
-          // Closer to horizontal edge → snap onto it (lock y to anchor.y), free x
-          target.y = anchor.y;
+          // First decision: pick the closer edge
+          snapToVertical = distToVert <= distToHoriz;
         }
+
+        if (snapToVertical) {
+          target.x = anchor.x;
+          this._grabPointStart.lockedAxis = "x";
+        } else {
+          target.y = anchor.y;
+          this._grabPointStart.lockedAxis = "y";
+        }
+        console.log("[CanvasSpliner] axis snap", {
+          mouse: this._mouse,
+          anchor,
+          distToVert,
+          distToHoriz,
+          prev,
+          snapToVertical,
+          target,
+        });
       }
 
+      // Defensive: skip invalid updates that would break spline math
+      if (!isFinite(target.x) || !isFinite(target.y)) {
+        console.error("[CanvasSpliner] mousemove aborted: non-finite target", target);
+        return;
+      }
+
+      const prevIdx = this._pointGrabbedIndex;
       this._pointGrabbedIndex = this._pointCollection.updatePoint(
         this._pointGrabbedIndex,
         target
       );
       this._pointHoveredIndex = this._pointGrabbedIndex;
+      if (prevIdx !== this._pointGrabbedIndex) {
+        console.log("[CanvasSpliner] grabbed idx changed", { prev: prevIdx, now: this._pointGrabbedIndex });
+      }
     }
 
     if (this._pointHoveredIndex !== -1 || this._pointGrabbedIndex !== -1) {
@@ -267,10 +326,20 @@ export class CanvasSpliner {
     evt.preventDefault();
     this._mouseDown = true;
     this._updateMousePosition(evt);
+    console.log("[CanvasSpliner] mousedown", {
+      mouse: this._mouse,
+      hoveredIdx: this._pointHoveredIndex,
+    });
     if (this._pointHoveredIndex !== -1) {
       this._pointGrabbedIndex = this._pointHoveredIndex;
       const pt = this._pointCollection.getPoint(this._pointHoveredIndex);
-      this._grabPointStart = pt ? { x: pt.x, y: pt.y, axisLocked: pt.axisLocked, anchor: pt.anchor } : null;
+      this._grabPointStart = pt
+        ? { x: pt.x, y: pt.y, axisLocked: pt.axisLocked, anchor: pt.anchor }
+        : null;
+      console.log("[CanvasSpliner] grab start", {
+        idx: this._pointGrabbedIndex,
+        pt: pt ? { x: pt.x, y: pt.y, axisLocked: pt.axisLocked, anchor: pt.anchor } : null,
+      });
     }
   }
 
@@ -344,11 +413,34 @@ export class CanvasSpliner {
   }
 
   draw(): void {
-    if (!this._ctx) return;
-    this._ctx.clearRect(0, 0, this._width, this._height);
-    this._fillBackground();
-    this._drawGrid();
-    this._drawData();
+    if (!this._ctx) {
+      console.warn("[CanvasSpliner] draw skipped: no ctx");
+      return;
+    }
+    // Detect if canvas is detached from DOM — that would explain "blank" rendering
+    if (this._canvas && !this._canvas.isConnected) {
+      console.error("[CanvasSpliner] draw on DETACHED canvas!", {
+        parent: this._canvas.parentNode,
+      });
+    }
+    try {
+      this._ctx.clearRect(0, 0, this._width, this._height);
+      this._fillBackground();
+      this._drawGrid();
+      this._drawData();
+    } catch (e) {
+      const xs = this._pointCollection.getXseries();
+      const ys = this._pointCollection.getYseries();
+      console.error("[CanvasSpliner] draw failed", {
+        err: e,
+        stack: (e as Error)?.stack,
+        xSeries: [...xs],
+        ySeries: [...ys],
+        width: this._width,
+        height: this._height,
+        screenRatio: this._screenRatio,
+      });
+    }
   }
 
   private _fillBackground(): void {
@@ -396,13 +488,42 @@ export class CanvasSpliner {
   }
 
   private _drawData(curve = true, control = true): void {
-    if (!this._ctx) return;
+    if (!this._ctx) {
+      console.warn("[CanvasSpliner] _drawData skipped: no ctx");
+      return;
+    }
     const xSeries = this._pointCollection.getXseries();
     const ySeries = this._pointCollection.getYseries();
     const w = this._width;
     const h = this._height;
 
-    if (!xSeries.length) return;
+    console.log("[CanvasSpliner] _drawData", {
+      xSeries: [...xSeries],
+      ySeries: [...ySeries],
+      w, h,
+      grabbedIdx: this._pointGrabbedIndex,
+      hoveredIdx: this._pointHoveredIndex,
+    });
+
+    if (!xSeries.length) {
+      console.warn("[CanvasSpliner] _drawData skipped: empty xSeries");
+      return;
+    }
+
+    // Sanity check — any NaN or non-finite values would crash the spline math
+    for (let i = 0; i < xSeries.length; i++) {
+      if (!isFinite(xSeries[i]) || !isFinite(ySeries[i])) {
+        console.error("[CanvasSpliner] _drawData aborted: invalid point", i, xSeries[i], ySeries[i]);
+        return;
+      }
+    }
+    // Check x's are strictly increasing
+    for (let i = 1; i < xSeries.length; i++) {
+      if (xSeries[i] <= xSeries[i - 1]) {
+        console.error("[CanvasSpliner] _drawData aborted: non-increasing x at", i, xSeries[i - 1], "→", xSeries[i]);
+        return;
+      }
+    }
 
     if (curve) {
       const toX = (x: number) => x / this._screenRatio;
@@ -487,8 +608,16 @@ export class CanvasSpliner {
 
   /** Remove all event listeners attached to the canvas (call before unmounting). */
   destroy(): void {
+    console.log("[CanvasSpliner] destroy", {
+      grabbedIdx: this._pointGrabbedIndex,
+      mouseDown: this._mouseDown,
+      stack: new Error().stack?.split("\n").slice(2, 6).join("\n"),
+    });
     if (!this._canvas) return;
-    window.removeEventListener("mouseup", this._onCanvasMouseUp.bind(this));
+    if (this._boundMouseUp) {
+      window.removeEventListener("mouseup", this._boundMouseUp);
+      this._boundMouseUp = null;
+    }
     this._canvas.remove();
     this._canvas = null;
     this._ctx = null;

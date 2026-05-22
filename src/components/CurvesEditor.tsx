@@ -76,7 +76,6 @@ export function CurvesEditor({
   const [activeChannel, setActiveChannel] = useState<Channel>("rgb");
   const containerRef = useRef<HTMLDivElement>(null);
   const splinerRef = useRef<CanvasSpliner | null>(null);
-  const sizeRef = useRef(0);
   const valueRef = useRef(value);
   const channelRef = useRef(activeChannel);
   const onChangeRef = useRef(onChange);
@@ -85,16 +84,41 @@ export function CurvesEditor({
   useEffect(() => { channelRef.current = activeChannel; }, [activeChannel]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
+  // Self-healing: redraw on every React render. Cheap (single canvas op),
+  // and guarantees the canvas content is in sync regardless of cause —
+  // backing-store eviction, HMR, layout collapse, etc.
+  useEffect(() => {
+    const s = splinerRef.current;
+    const container = containerRef.current;
+    if (s && container) {
+      const canvas = (s as any)._canvas as HTMLCanvasElement | null;
+      if (canvas && !container.contains(canvas)) {
+        console.warn("[CurvesEditor] canvas detached — re-attaching");
+        container.appendChild(canvas);
+      }
+      s.draw();
+    }
+  });
+
   // Build spliner once container size is known, rebuild on channel change
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     let spliner: CanvasSpliner | null = null;
+    // Effect-local size — guarantees a fresh effect always initializes,
+    // even if a previous effect (e.g. from StrictMode remount) wrote sizeRef.
+    let currentSize = 0;
 
     function init(size: number) {
+      console.log("[CurvesEditor] init", {
+        size,
+        prevSize: currentSize,
+        channel: channelRef.current,
+        hadSpliner: !!spliner,
+      });
       if (spliner) { spliner.destroy(); spliner = null; }
-      sizeRef.current = size;
+      currentSize = size;
 
       const pts = pointsToNormalized(valueRef.current?.[channelRef.current] ?? []);
       spliner = buildSpliner(container!, size, channelRef.current, pts);
@@ -107,6 +131,15 @@ export function CurvesEditor({
           newPts.length === 2 &&
           newPts[0].x === 0 && newPts[0].y === 0 &&
           newPts[1].x === 1 && newPts[1].y === 1;
+        // Validate before committing — anything weird gets logged
+        const invalid = newPts.some(
+          (p) => !isFinite(p.x) || !isFinite(p.y) || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1
+        );
+        if (invalid) {
+          console.error("[CurvesEditor] commit aborted: invalid points", newPts);
+          return;
+        }
+        console.log("[CurvesEditor] commit", { channel: channelRef.current, newPts, isIdentity });
         onChangeRef.current({ ...cur, [channelRef.current]: isIdentity ? [] : newPts });
       };
 
@@ -120,7 +153,14 @@ export function CurvesEditor({
       const entry = entries[0];
       if (!entry) return;
       const size = Math.round(entry.contentRect.width);
-      if (size > 0 && size !== sizeRef.current) {
+      // Only rebuild on significant size change (>2px). Sub-pixel jitter during
+      // a drag would otherwise destroy/recreate the spliner mid-interaction.
+      if (size > 0 && Math.abs(size - currentSize) > 2) {
+        console.log("[CurvesEditor] ResizeObserver triggers init", {
+          size,
+          prevSize: currentSize,
+          diff: size - currentSize,
+        });
         init(size);
       }
     });
@@ -130,8 +170,17 @@ export function CurvesEditor({
     const initialSize = Math.round(container.getBoundingClientRect().width);
     if (initialSize > 0) init(initialSize);
 
+    // Browser may discard canvas backing store on visibility/focus changes
+    // (especially on macOS with battery saver). Force a redraw when we're
+    // shown again so the curve doesn't appear blank.
+    const redraw = () => splinerRef.current?.draw();
+    document.addEventListener("visibilitychange", redraw);
+    window.addEventListener("focus", redraw);
+
     return () => {
       ro.disconnect();
+      document.removeEventListener("visibilitychange", redraw);
+      window.removeEventListener("focus", redraw);
       if (spliner) { spliner.destroy(); spliner = null; }
       splinerRef.current = null;
     };

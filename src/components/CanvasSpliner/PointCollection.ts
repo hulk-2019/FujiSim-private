@@ -110,8 +110,11 @@ export class PointCollection {
       ) {
         const pt = this._points[index];
 
-        // Prevent x from crossing or touching neighboring points (keep 1px min gap)
         let newX = p.x;
+        // Always enforce a minimum 1px x-gap between neighboring points,
+        // including endpoints. Two points sharing the same x would make
+        // delta = (y1 - y0) / 0 = Infinity, breaking the spline math and
+        // producing NaN bezier control points (silent rendering failure).
         const left = index > 0 ? this._points[index - 1] : null;
         const right = index < this._points.length - 1 ? this._points[index + 1] : null;
         if (left && newX <= left.x) newX = left.x + 1;

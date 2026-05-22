@@ -33,7 +33,13 @@
       "mcp__plugin_context7_context7__query-docs",
       "Bash(brew install *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(cat /Users/ry2019/.npm/_logs/2026-05-21T06_51_51_630Z-debug-0.log 2>/dev/null | tail -20 || ls /Users/ry2019/private/FujiSim/ | head -5)",
+      "Read(//Users/ry2019/.npm/_logs/**)",
+      "Bash(npm install *)",
+      "Bash(npm --version)",
+      "Bash(node -e ' *)",
+      "WebFetch(domain:use-gesture.netlify.app)"
     ]
   }
 }
