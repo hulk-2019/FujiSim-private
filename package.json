@@ -13,7 +13,12 @@
     "build:mac-arm": "rm -rf src-tauri/target/aarch64-apple-darwin/release/bundle && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build --target aarch64-apple-darwin --bundles dmg",
     "build:mac-x64": "rm -rf src-tauri/target/x86_64-apple-darwin/release/bundle && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build --target x86_64-apple-darwin --bundles dmg",
     "build:win": "rm -rf src-tauri/target/x86_64-pc-windows-msvc/release/bundle && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build --target x86_64-pc-windows-msvc",
-    "gen:keypair": "echo '⚠️  此命令将覆盖现有密钥！老用户将无法收到新更新。' && pnpm tauri signer generate -w ~/.tauri/fujisim.key && echo '✅ 已生成。请立即将 ~/.tauri/fujisim.key{,.pub} 备份到离线介质（U 盘 / 1Password）'"
+    "gen:keypair": "echo '⚠️  此命令将覆盖现有密钥！老用户将无法收到新更新。' && pnpm tauri signer generate -w ~/.tauri/fujisim.key && echo '✅ 已生成。请立即将 ~/.tauri/fujisim.key{,.pub} 备份到离线介质（U 盘 / 1Password）'",
+    "version:sync": "node scripts/bump-version.mjs",
+    "prebuild:mac": "pnpm version:sync",
+    "prebuild:mac-arm": "pnpm version:sync",
+    "prebuild:mac-x64": "pnpm version:sync",
+    "prebuild:win": "pnpm version:sync"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
