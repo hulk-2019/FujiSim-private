@@ -111,6 +111,11 @@ pub fn run() {
             ipc::import_fonts,
             ipc::list_user_fonts,
             ipc::delete_user_font,
+            // ===== 应用设置 =====
+            ipc::get_setting,
+            ipc::set_setting,
+            ipc::delete_setting,
+            ipc::get_all_settings,
         ])
         .run(tauri::generate_context!())
         .expect("FujiSim 运行时启动失败");
