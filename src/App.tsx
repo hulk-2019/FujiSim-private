@@ -7,6 +7,7 @@ import { PreviewPanel } from "@/components/PreviewPanel";
 import { FilterPanel } from "@/components/FilterPanel";
 import { ExportDialog } from "@/components/ExportDialog";
 import { Toaster } from "@/components/ui/toast";
+import { UpdaterBootstrap } from "@/components/UpdaterBootstrap";
 import { useStore } from "@/store";
 import { api } from "@/api";
 
@@ -91,6 +92,7 @@ export default function App() {
 
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
       <Toaster />
+      <UpdaterBootstrap />
     </div>
   );
 }
