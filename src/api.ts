@@ -146,6 +146,16 @@ export const api = {
     invoke<WatermarkPreset>("update_watermark_preset", { id, name, settingsJson }),
   deleteWatermarkPreset: (id: number) =>
     invoke<void>("delete_watermark_preset", { id }),
+
+  // ===== 应用设置 =====
+  /** 取单个设置值，未设置返回 null */
+  getSetting: (key: string) => invoke<string | null>("get_setting", { key }),
+  /** 写入或更新设置值。value 必须是字符串，复杂类型由调用方 JSON.stringify */
+  setSetting: (key: string, value: string) => invoke<void>("set_setting", { key, value }),
+  /** 删除某项设置 */
+  deleteSetting: (key: string) => invoke<void>("delete_setting", { key }),
+  /** 一次性获取所有设置，启动时调用 */
+  getAllSettings: () => invoke<Record<string, string>>("get_all_settings"),
 };
 
 export type { BatchProgress };
