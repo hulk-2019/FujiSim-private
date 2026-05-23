@@ -288,6 +288,35 @@ const zh = {
     sortName: "名称",
     noProjects: "还没有项目，点击 + 新建",
   },
+  editor: {
+    reset: "重置效果",
+    showOriginal: "显示原图",
+    hideOriginal: "显示效果",
+    export: "导出",
+    noFocused: "未选中图片",
+    emptyFolder: "该文件夹为空",
+    import: "导入",
+    presetList: {
+      builtin: "推荐",
+      mine: "我的",
+      searchPlaceholder: "搜索预设",
+    },
+    strip: {
+      selectedCountOfTotal: "已选 {{n}} / 共 {{m}}",
+      single: "单视图",
+      compare: "对比视图",
+    },
+    sections: {
+      basic: "基础",
+      light: "光线",
+      color: "色彩",
+      effects: "效果",
+      detail: "细节",
+      curves: "曲线",
+      watermark: "水印",
+      info: "信息",
+    },
+  },
   settings: {
     title: "设置",
     tabs: {

@@ -288,6 +288,35 @@ const en = {
     sortName: "Name",
     noProjects: "No projects yet. Click + to create one.",
   },
+  editor: {
+    reset: "Reset",
+    showOriginal: "Show Original",
+    hideOriginal: "Show Edited",
+    export: "Export",
+    noFocused: "No image selected",
+    emptyFolder: "This folder is empty",
+    import: "Import",
+    presetList: {
+      builtin: "Recommended",
+      mine: "Mine",
+      searchPlaceholder: "Search presets",
+    },
+    strip: {
+      selectedCountOfTotal: "{{n}} of {{m}}",
+      single: "Single",
+      compare: "Compare",
+    },
+    sections: {
+      basic: "Basic",
+      light: "Light",
+      color: "Color",
+      effects: "Effects",
+      detail: "Detail",
+      curves: "Curves",
+      watermark: "Watermark",
+      info: "Info",
+    },
+  },
   settings: {
     title: "Settings",
     tabs: {
