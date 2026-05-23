@@ -16,7 +16,13 @@ const MIN_SCALE_FACTOR = 0.5;  // 相对 fit scale 的最小倍率
 const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
 const FIT_FILL = 0.8;
 
-export function PreviewPanel({ onExport }: { onExport: () => void }) {
+interface PreviewPanelProps {
+  onExport?: () => void;
+  showOriginal: boolean;
+  onShowOriginalChange?: (v: boolean) => void;
+}
+
+export function PreviewPanel({ onExport, showOriginal, onShowOriginalChange }: PreviewPanelProps) {
   const { t } = useTranslation();
   const focusedId = useStore((s) => s.focusedId);
   const assets = useStore((s) => s.assets);
@@ -32,7 +38,6 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showOriginal, setShowOriginal] = useState(false);
   const [rawOriginalSrc, setRawOriginalSrc] = useState<string | null>(null);
   const currentTokenRef = useRef(0);
 
@@ -267,9 +272,9 @@ export function PreviewPanel({ onExport }: { onExport: () => void }) {
         <Button
           variant="ghost"
           size="sm"
-          onMouseDown={() => setShowOriginal(true)}
-          onMouseUp={() => setShowOriginal(false)}
-          onMouseLeave={() => setShowOriginal(false)}
+          onMouseDown={() => onShowOriginalChange?.(true)}
+          onMouseUp={() => onShowOriginalChange?.(false)}
+          onMouseLeave={() => onShowOriginalChange?.(false)}
         >
           {showOriginal ? <EyeOff size={12} /> : <Eye size={12} />}{" "}
           {t("previewPanel.holdToCompare")}
