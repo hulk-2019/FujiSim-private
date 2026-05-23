@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Save, Trash2, Info, FolderOpen, Files, ChevronDown } from "lucide-react";
+import { Save, Info, FolderOpen, Files, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,18 +19,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useStore, DEFAULT_FILTER } from "@/store";
+import { Section } from "@/components/ui/section";
+import { useStore } from "@/store";
 import { api } from "@/api";
-import type { FilterPreset } from "@/types";
 import { PASS_THROUGH_SIM } from "@/types";
-import { cn, formatBytes, shortDate } from "@/lib/utils";
+import { formatBytes, shortDate } from "@/lib/utils";
 import { Label, SliderRow } from "@/components/ui/form";
 import { WatermarkTab } from "@/components/WatermarkTab";
 import { useTranslation } from "react-i18next";
@@ -49,9 +48,7 @@ export function FilterPanel() {
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
   const resetFilter = useStore((s) => s.resetFilter);
-  const presets = useStore((s) => s.presets);
   const refreshPresets = useStore((s) => s.refreshPresets);
-  const applyPreset = useStore((s) => s.applyPreset);
   const fujiSimulations = useStore((s) => s.fujiSimulations);
   const userLuts = useStore((s) => s.userLuts);
   const refreshUserLuts = useStore((s) => s.refreshUserLuts);
@@ -116,15 +113,6 @@ export function FilterPanel() {
     }
   }
 
-  async function removeUserLut(id: number) {
-    const target = userLuts.find((l) => l.id === id);
-    await api.deleteUserLut(id);
-    if (target && filter.lut_file_path === target.file_path) {
-      setFilter({ base_simulation: DEFAULT_FILTER.base_simulation, lut_file_path: null });
-    }
-    await refreshUserLuts();
-  }
-
   async function saveAsPreset() {
     if (!saveName.trim()) return;
     await api.savePreset({
@@ -148,82 +136,88 @@ export function FilterPanel() {
     await refreshPresets();
   }
 
-  async function removePreset(p: FilterPreset) {
-    if (p.is_builtin) return;
-    await api.deletePreset(p.id);
-    await refreshPresets();
-  }
-
   const grainEffectLabel = (v: string) => t(`filterPanel.strengthLabels.${v.toLowerCase()}` as any, { defaultValue: v });
   const grainSizeLabel   = (v: string) => t(`filterPanel.sizeLabels.${v.toLowerCase()}` as any, { defaultValue: v });
 
   return (
     <aside className="w-full h-full bg-transparent flex flex-col text-sm overflow-hidden">
-      <Tabs defaultValue="adjust" className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-3 pt-3">
-          <TabsList className="w-full grid grid-cols-4">
-            <TabsTrigger value="adjust">{t("filterPanel.tabs.adjust")}</TabsTrigger>
-            <TabsTrigger value="presets">{t("filterPanel.tabs.preset")}</TabsTrigger>
-            <TabsTrigger value="watermark">{t("filterPanel.tabs.watermark")}</TabsTrigger>
-            <TabsTrigger value="info">{t("filterPanel.tabs.info")}</TabsTrigger>
-          </TabsList>
-        </div>
+      <div className="flex-1 overflow-y-auto">
 
-        <TabsContent value="adjust" className="flex-1 overflow-y-auto px-4 pb-6 mt-4 space-y-6">
+        <Section title={t("editor.sections.basic")}>
+          <div className="flex items-center justify-between mb-1">
+            <Label>{t("filterPanel.filmSimulation")}</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={importingLut}
+                  className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-200 disabled:opacity-50"
+                >
+                  {importingLut ? t("filterPanel.importing") : t("filterPanel.importLut")}
+                  <ChevronDown size={10} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={importLuts}>
+                  <Files size={13} />
+                  {t("filterPanel.importFiles")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={importLutsFromDir}>
+                  <FolderOpen size={13} />
+                  {t("filterPanel.importDir")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <Select value={selectedValue} onValueChange={handleSimulationChange}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>{t("filterPanel.systemPresets")}</SelectLabel>
+                <SelectItem value={`${FUJI_PREFIX}Pass-Through`}>{t("filterPanel.noSimulation")}</SelectItem>
+                {fujiSimulations.map((s) => (
+                  <SelectItem key={s} value={`${FUJI_PREFIX}${s}`}>{s}</SelectItem>
+                ))}
+              </SelectGroup>
+              {userLuts.length > 0 && (
+                <>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel>{t("filterPanel.userPresets")}</SelectLabel>
+                    {userLuts.map((l) => (
+                      <SelectItem key={l.id} value={`${LUT_PREFIX}${l.id}`}>{l.name}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </>
+              )}
+            </SelectContent>
+          </Select>
+          {filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path && (
+            <p className="mt-1 text-[10px] text-zinc-500">{t("filterPanel.lutAppliedNotice")}</p>
+          )}
+        </Section>
+
+        <Section title={t("editor.sections.light")}>
+          <SliderRow label={t("filterPanel.highlight")} value={filter.highlight_tone} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ highlight_tone: v })} />
+          <SliderRow label={t("filterPanel.shadow")}    value={filter.shadow_tone}    min={-1} max={1} step={0.05} onChange={(v) => setFilter({ shadow_tone: v })} />
+        </Section>
+
+        <Section title={t("editor.sections.color")}>
+          <SliderRow label={t("filterPanel.saturation")} value={filter.color_saturation} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ color_saturation: v })} />
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <Label>{t("filterPanel.filmSimulation")}</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={importingLut}
-                    className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-200 disabled:opacity-50"
-                  >
-                    {importingLut ? t("filterPanel.importing") : t("filterPanel.importLut")}
-                    <ChevronDown size={10} />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={importLuts}>
-                    <Files size={13} />
-                    {t("filterPanel.importFiles")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={importLutsFromDir}>
-                    <FolderOpen size={13} />
-                    {t("filterPanel.importDir")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <Select value={selectedValue} onValueChange={handleSimulationChange}>
+            <Label>{t("filterPanel.colorEffect")}</Label>
+            <Select value={filter.color_chrome_effect ?? "None"} onValueChange={(v) => setFilter({ color_chrome_effect: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>{t("filterPanel.systemPresets")}</SelectLabel>
-                  <SelectItem value={`${FUJI_PREFIX}Pass-Through`}>{t("filterPanel.noSimulation")}</SelectItem>
-                  {fujiSimulations.map((s) => (
-                    <SelectItem key={s} value={`${FUJI_PREFIX}${s}`}>{s}</SelectItem>
-                  ))}
-                </SelectGroup>
-                {userLuts.length > 0 && (
-                  <>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel>{t("filterPanel.userPresets")}</SelectLabel>
-                      {userLuts.map((l) => (
-                        <SelectItem key={l.id} value={`${LUT_PREFIX}${l.id}`}>{l.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </>
-                )}
+                {CHROME_EFFECTS.map((g) => <SelectItem key={g} value={g}>{grainEffectLabel(g)}</SelectItem>)}
               </SelectContent>
             </Select>
-            {filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path && (
-              <p className="mt-1 text-[10px] text-zinc-500">{t("filterPanel.lutAppliedNotice")}</p>
-            )}
           </div>
+          <SliderRow label={t("filterPanel.wbShiftR")} value={filter.wb_shift_r} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_r: v })} />
+          <SliderRow label={t("filterPanel.wbShiftB")} value={filter.wb_shift_b} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_b: v })} />
+        </Section>
 
+        <Section title={t("editor.sections.effects")}>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label>{t("filterPanel.grainStrength")}</Label>
@@ -244,100 +238,42 @@ export function FilterPanel() {
               </Select>
             </div>
           </div>
+          <SliderRow label={t("filterPanel.clarity")} value={filter.clarity} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ clarity: v })} />
+        </Section>
 
-          <div>
-            <Label>{t("filterPanel.colorEffect")}</Label>
-            <Select value={filter.color_chrome_effect ?? "None"} onValueChange={(v) => setFilter({ color_chrome_effect: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CHROME_EFFECTS.map((g) => <SelectItem key={g} value={g}>{grainEffectLabel(g)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+        <Section title={t("editor.sections.detail")}>
+          <SliderRow label={t("filterPanel.sharpness")} value={filter.sharpness} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ sharpness: v })} />
+        </Section>
 
-          <SliderRow label={t("filterPanel.highlight")}   value={filter.highlight_tone}    min={-1} max={1} step={0.05} onChange={(v) => setFilter({ highlight_tone: v })} />
-          <SliderRow label={t("filterPanel.shadow")}      value={filter.shadow_tone}       min={-1} max={1} step={0.05} onChange={(v) => setFilter({ shadow_tone: v })} />
-          <SliderRow label={t("filterPanel.saturation")}  value={filter.color_saturation}  min={-1} max={1} step={0.05} onChange={(v) => setFilter({ color_saturation: v })} />
-          <SliderRow label={t("filterPanel.clarity")}     value={filter.clarity}           min={-1} max={1} step={0.05} onChange={(v) => setFilter({ clarity: v })} />
-          <SliderRow label={t("filterPanel.sharpness")}   value={filter.sharpness}         min={-1} max={1} step={0.05} onChange={(v) => setFilter({ sharpness: v })} />
-          <SliderRow label={t("filterPanel.wbShiftR")}    value={filter.wb_shift_r}        min={-9} max={9} step={1}    display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_r: v })} />
-          <SliderRow label={t("filterPanel.wbShiftB")}    value={filter.wb_shift_b}        min={-9} max={9} step={1}    display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_b: v })} />
+        <Section title={t("editor.sections.curves")} defaultOpen={false}>
+          <CurvesEditor
+            value={filter.tone_curve}
+            onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
+          />
+        </Section>
 
-          <div>
-            <Label>{t("filterPanel.tabs.curves")}</Label>
-            <CurvesEditor
-              value={filter.tone_curve}
-              onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-4 border-t border-zinc-800/60 mt-4">
-            <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
-            <Button size="sm" variant="default" onClick={() => setSaveOpen(true)} className="flex-1">
-              <Save size={12} /> {t("filterPanel.saveAsPreset")}
-            </Button>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="presets" className="flex-1 overflow-y-auto px-3 pb-4 mt-3 space-y-3">
-          <div className="space-y-1">
-            <p className="px-1 text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">{t("filterPanel.systemPresets")}</p>
-            {presets.filter((p) => p.is_builtin).map((p) => (
-              <PresetRow key={p.id} preset={p} active={filter.base_simulation === p.base_simulation} onApply={() => applyPreset(p)} />
-            ))}
-          </div>
-          <div className="space-y-1">
-            <p className="px-1 text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">{t("filterPanel.userPresets")}</p>
-            {presets.filter((p) => !p.is_builtin).length === 0 && userLuts.length === 0 && (
-              <p className="px-1 text-[11px] text-zinc-600">{t("filterPanel.noPresets")}</p>
-            )}
-            {presets.filter((p) => !p.is_builtin).map((p) => (
-              <PresetRow key={p.id} preset={p} active={false} onApply={() => applyPreset(p)} onDelete={() => removePreset(p)} />
-            ))}
-            {userLuts.map((l) => (
-              <div
-                key={`lut-${l.id}`}
-                className={cn(
-                  "group flex items-center gap-2 rounded-md border border-zinc-800 px-2 py-1.5 hover:border-zinc-600 cursor-pointer",
-                  filter.lut_file_path === l.file_path && "border-emerald-700",
-                )}
-                onClick={() => handleSimulationChange(`${LUT_PREFIX}${l.id}`)}
-              >
-                <div className="w-3 h-3 rounded-sm bg-sky-500" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-zinc-100 truncate">{l.name}</p>
-                  <p className="text-[10px] text-zinc-500 truncate">3D LUT</p>
-                </div>
-                <button className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400" onClick={(e) => { e.stopPropagation(); removeUserLut(l.id); }}>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="watermark" className="flex-1 overflow-y-auto px-4 pb-6 mt-4">
+        <Section title={t("editor.sections.watermark")} defaultOpen={false}>
           <WatermarkTab />
-        </TabsContent>
+        </Section>
 
-        <TabsContent value="info" className="flex-1 overflow-y-auto px-4 pb-6 mt-4 space-y-4 text-xs">
+        <Section title={t("editor.sections.info")} defaultOpen={false}>
           {focused ? (
-            <div className="space-y-4">
+            <div className="space-y-4 text-xs">
               <div className="space-y-1 pb-4 border-b border-zinc-800/60">
                 <p className="text-zinc-200 font-medium break-all">{focused.file_name}</p>
                 <p className="text-zinc-500 break-all">{focused.file_path}</p>
               </div>
               <div className="grid grid-cols-2 gap-y-3 gap-x-2">
                 {([
-                  ["metaCamera",  focused.camera_model],
-                  ["metaLens",    focused.lens_model],
-                  ["metaAperture",focused.f_number != null ? `f/${focused.f_number.toFixed(1)}` : null],
-                  ["metaShutter", focused.shutter_speed ? `${focused.shutter_speed}s` : null],
-                  ["metaFocal",   focused.focal_length != null ? `${focused.focal_length}mm` : null],
-                  ["metaDate",    shortDate(focused.date_taken)],
-                  ["metaSize",    formatBytes(focused.file_size)],
-                  ["metaRating",  `${focused.star_rating} ${t("filterPanel.ratingSuffix")}`],
-                  ["metaType",    focused.file_type || (focused.is_raw ? "RAW" : t("filterPanel.metaType"))],
+                  ["metaCamera",   focused.camera_model],
+                  ["metaLens",     focused.lens_model],
+                  ["metaAperture", focused.f_number != null ? `f/${focused.f_number.toFixed(1)}` : null],
+                  ["metaShutter",  focused.shutter_speed ? `${focused.shutter_speed}s` : null],
+                  ["metaFocal",    focused.focal_length != null ? `${focused.focal_length}mm` : null],
+                  ["metaDate",     shortDate(focused.date_taken)],
+                  ["metaSize",     formatBytes(focused.file_size)],
+                  ["metaRating",   `${focused.star_rating} ${t("filterPanel.ratingSuffix")}`],
+                  ["metaType",     focused.file_type || (focused.is_raw ? "RAW" : t("filterPanel.metaType"))],
                 ] as [string, string | null | undefined][]).map(([key, val]) => (
                   <div key={key} className="space-y-1 min-w-0">
                     <span className="text-zinc-500">{t(`filterPanel.${key}` as any)}</span>
@@ -352,9 +288,15 @@ export function FilterPanel() {
               <p>{t("filterPanel.noSelection")}</p>
             </div>
           )}
-        </TabsContent>
+        </Section>
 
-      </Tabs>
+        <div className="flex gap-2 px-4 py-3 border-t border-zinc-800/60">
+          <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
+          <Button size="sm" variant="default" onClick={() => setSaveOpen(true)} className="flex-1">
+            <Save size={12} /> {t("filterPanel.saveAsPreset")}
+          </Button>
+        </div>
+      </div>
 
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent>
@@ -375,30 +317,3 @@ export function FilterPanel() {
     </aside>
   );
 }
-
-function PresetRow({ preset, active, onApply, onDelete }: { preset: FilterPreset; active: boolean; onApply: () => void; onDelete?: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 rounded-md border border-zinc-800 px-2 py-1.5 hover:border-zinc-600 cursor-pointer",
-        active && preset.is_builtin && "border-emerald-700",
-      )}
-      onClick={onApply}
-    >
-      <div className={cn("w-3 h-3 rounded-sm", preset.is_builtin ? "bg-emerald-500" : "bg-amber-500")} />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-zinc-100 truncate">{preset.name}</p>
-        <p className="text-[10px] text-zinc-500 truncate">
-          {preset.is_builtin ? t("filterPanel.lutSource.builtin") : t("filterPanel.lutSource.custom")} · {preset.base_simulation}
-        </p>
-      </div>
-      {onDelete && (
-        <button className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-          <Trash2 size={12} />
-        </button>
-      )}
-    </div>
-  );
-}
-
