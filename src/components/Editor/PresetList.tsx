@@ -64,19 +64,23 @@ export function PresetList() {
 }
 
 export function PresetCard({ preset, active, onApply }: { preset: FilterPreset; active: boolean; onApply: () => void }) {
+  const { t } = useTranslation();
+  const displayName = preset.is_builtin
+    ? t(`editor.presetNames.${preset.name}` as any, { defaultValue: preset.name })
+    : preset.name;
   return (
     <button
       type="button"
       onClick={onApply}
+      title={displayName}
       className={cn(
-        "w-full text-left rounded-md border px-2 py-2 text-xs transition-colors",
+        "w-full text-left rounded-md border px-2 py-1.5 text-xs transition-colors",
         active
           ? "border-blue-500 bg-blue-500/10 text-zinc-100"
           : "border-zinc-800 hover:border-zinc-600 text-zinc-300",
       )}
     >
-      <p className="font-medium truncate">{preset.name}</p>
-      <p className="text-[10px] text-zinc-500 truncate mt-0.5">{preset.base_simulation}</p>
+      <p className="truncate">{displayName}</p>
     </button>
   );
 }

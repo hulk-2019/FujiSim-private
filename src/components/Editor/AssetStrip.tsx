@@ -1,12 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { ImageIcon } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import type { Asset } from "@/types";
+
+const THUMB_W = 80;
+const GAP = 8;
+const SLOT = THUMB_W + GAP;
+const PAGE = 60;
 
 export function AssetStrip() {
   const { t } = useTranslation();
@@ -19,10 +25,40 @@ export function AssetStrip() {
   const toggleSelect = useStore((s) => s.toggleSelect);
   const selectRange = useStore((s) => s.selectRange);
   const focusAsset = useStore((s) => s.focusAsset);
+  const loadPage = useStore((s) => s.loadPage);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
+
+  const count = totalCount;
+
+  const virtualizer = useVirtualizer({
+    horizontal: true,
+    count,
+    getScrollElement: () => scrollerRef.current,
+    estimateSize: () => SLOT,
+    overscan: 8,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+
+  // 滚动到尚未加载的窗口时触发分页加载（按 PAGE 对齐 offset）
+  const pendingPages = useMemo(() => {
+    const set = new Set<number>();
+    for (const v of virtualItems) {
+      if (assets[v.index] === undefined) {
+        set.add(Math.floor(v.index / PAGE) * PAGE);
+      }
+    }
+    return set;
+  }, [virtualItems, assets]);
+
+  useEffect(() => {
+    pendingPages.forEach((offset) => {
+      loadPage(offset);
+    });
+  }, [pendingPages, loadPage]);
 
   function handleClick(asset: Asset, e: React.MouseEvent) {
     if (e.shiftKey) selectRange(asset.id);
@@ -30,6 +66,7 @@ export function AssetStrip() {
     focusAsset(asset.id);
   }
 
+  // 鼠标滚轮纵向滚动映射为横向滚动
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -79,23 +116,39 @@ export function AssetStrip() {
             {t("editor.emptyFolder")}
           </div>
         ) : (
-          <div className="h-full flex items-center gap-2 px-3">
-            {assets.map((a, i) =>
-              a ? (
-                <Thumb
-                  key={a.id}
-                  asset={a}
-                  selected={selectedIds.has(a.id)}
-                  focused={focusedId === a.id}
-                  onClick={(e) => handleClick(a, e)}
-                />
-              ) : (
+          <div
+            className="relative h-full"
+            style={{ width: virtualizer.getTotalSize() + 16 }}
+          >
+            {virtualItems.map((v) => {
+              const a = assets[v.index];
+              const left = v.start + 8; // 左侧 8px padding
+              return (
                 <div
-                  key={`ph-${i}`}
-                  className="w-20 h-20 flex-shrink-0 rounded-md bg-zinc-900/60 animate-pulse"
-                />
-              ),
-            )}
+                  key={v.key}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left,
+                    width: THUMB_W,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  {a ? (
+                    <Thumb
+                      asset={a}
+                      selected={selectedIds.has(a.id)}
+                      focused={focusedId === a.id}
+                      onClick={(e) => handleClick(a, e)}
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-md bg-zinc-900/60 animate-pulse" />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

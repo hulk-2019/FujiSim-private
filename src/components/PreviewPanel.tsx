@@ -390,10 +390,20 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
             {t("previewPanel.rendering")}
           </div>
         )}
-        {preview && (
+        {focused.is_raw && !rawOriginalSrc && !error && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="flex flex-col items-center justify-center gap-3 text-zinc-400 bg-zinc-950/60 rounded-md px-4 py-3">
+              <div className="relative w-10 h-10">
+                <div className="absolute inset-0 rounded-full border-2 border-zinc-500 animate-ping opacity-60" />
+                <div className="absolute inset-1.5 rounded-full bg-zinc-500 animate-pulse" />
+              </div>
+              <span className="text-xs">{t("previewPanel.loadingOriginal")}</span>
+            </div>
+          </div>
+        )}
+        {focused.width && focused.height && displaySrc && (
           <div className="absolute bottom-3 right-3 text-[10px] text-zinc-500 bg-zinc-950/60 px-2 py-1 rounded">
-            {focused.width ?? preview.width} × {focused.height ?? preview.height} ·{" "}
-            {formatBytes(focused.file_size)}
+            {focused.width} × {focused.height} · {formatBytes(focused.file_size)}
           </div>
         )}
       </div>

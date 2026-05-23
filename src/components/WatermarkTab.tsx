@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/store";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Input } from "@/components/ui/input";
@@ -120,9 +120,11 @@ export function WatermarkTab() {
     "sans-serif": "Arial, sans-serif",
     "monospace":  "'Courier New', Courier, monospace",
   };
-  if (GENERIC_FALLBACK[wm.fontFamily]) {
-    setWatermark({ fontFamily: GENERIC_FALLBACK[wm.fontFamily] });
-  }
+  useEffect(() => {
+    const next = GENERIC_FALLBACK[wm.fontFamily];
+    if (next) setWatermark({ fontFamily: next });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wm.fontFamily]);
 
   const [selectValue, setSelectValue] = useState("");
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
@@ -202,11 +204,12 @@ export function WatermarkTab() {
   }));
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-zinc-300 font-semibold">{t("watermark.enable")}</span>
-        <ToggleSwitch checked={wm.enabled} onChange={(v) => setWatermark({ enabled: v })} />
-      </div>
+    <div className="h-full flex flex-col">
+      <div className="flex-1 overflow-y-auto px-3 pt-3 pb-4 space-y-6">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-300 font-semibold">{t("watermark.enable")}</span>
+          <ToggleSwitch checked={wm.enabled} onChange={(v) => setWatermark({ enabled: v })} />
+        </div>
 
       <div>
         <Label>{t("watermark.stylePreset")}</Label>
@@ -413,8 +416,9 @@ export function WatermarkTab() {
           </div>
         </div>
       </div>
+      </div>
 
-      <div className="flex gap-1.5 pt-3 border-t border-zinc-800/60">
+      <div className="flex gap-1.5 px-3 py-3 border-t border-zinc-800/60 flex-shrink-0">
         <button type="button" onClick={handleSave}
           className="flex-1 h-8 px-2 text-xs rounded border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800">
           {t("common.save")}
