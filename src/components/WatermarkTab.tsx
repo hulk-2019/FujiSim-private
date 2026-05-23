@@ -19,6 +19,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { fontFamilyName } from "@/lib/fontManager";
 import { Label, SliderRow, ToggleSwitch } from "@/components/ui/form";
 import type { UserFont, WatermarkPosition, WatermarkPreset } from "@/types";
@@ -205,7 +206,8 @@ export function WatermarkTab() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto px-3 pt-3 pb-4 space-y-6">
+      <ScrollArea className="flex-1">
+        <div className="px-3 pt-3 pb-4 space-y-6">
         <div className="flex items-center justify-between">
           <span className="text-xs text-zinc-300 font-semibold">{t("watermark.enable")}</span>
           <ToggleSwitch checked={wm.enabled} onChange={(v) => setWatermark({ enabled: v })} />
@@ -416,7 +418,8 @@ export function WatermarkTab() {
           </div>
         </div>
       </div>
-      </div>
+        </div>
+      </ScrollArea>
 
       <div className="flex gap-1.5 px-3 py-3 border-t border-zinc-800/60 flex-shrink-0">
         <button type="button" onClick={handleSave}

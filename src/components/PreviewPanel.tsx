@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { ImageIcon } from "lucide-react";
 import { useGesture } from "@use-gesture/react";
@@ -13,6 +13,7 @@ let previewTokenCounter = 0;
 
 const MIN_SCALE = 0.05;        // 绝对最小缩放比例 5%
 const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
+const MAX_SCALE_ABSOLUTE = 4;  // 绝对最大缩放（400%），保证小图也能放到 4x
 const FIT_FILL = 0.8;
 
 export interface PreviewPanelHandle {
@@ -107,34 +108,29 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     onScaleChange?.(scale, fitScaleRef.current);
   }, [scale, onScaleChange]);
 
-  // 切换素材时重置，用 rAF 确保 viewport 尺寸已稳定
-  useEffect(() => {
+  // 切换素材时重置 fit。用 useLayoutEffect 保证在浏览器 paint 之前同步完成布局，
+  // 否则会先以「旧 scale + 新图」画一帧，视觉上像放大然后缩小。
+  useLayoutEffect(() => {
     hasFitRef.current = false;
     setImgVisible(false);
-    let cancelled = false;
 
-    requestAnimationFrame(() => {
-      if (cancelled) return;
-      const vp = viewportRef.current;
-      const imgW = focused?.width;
-      const imgH = focused?.height;
-      if (!vp || vp.clientWidth === 0 || vp.clientHeight === 0 || !imgW || !imgH) {
-        // EXIF 没尺寸时不要锁死 fitScale=1，留给 img onLoad → resetToFit 用 naturalWidth 兜底
-        fitScaleRef.current = 1;
-        return;
-      }
-      const vpW = vp.clientWidth;
-      const vpH = vp.clientHeight;
-      const fit = Math.min(vpW / imgW, vpH / imgH) * FIT_FILL;
-      fitScaleRef.current = fit;
-      setContainerW(imgW);
-      setContainerH(imgH);
-      setScale(fit);
-      setTx((vpW - imgW * fit) / 2);
-      setTy((vpH - imgH * fit) / 2);
-    });
-
-    return () => { cancelled = true; };
+    const vp = viewportRef.current;
+    const imgW = focused?.width;
+    const imgH = focused?.height;
+    if (!vp || vp.clientWidth === 0 || vp.clientHeight === 0 || !imgW || !imgH) {
+      // EXIF 没尺寸时不锁死 fitScale=1，留给 img onLoad → resetToFit 用 naturalWidth 兜底
+      fitScaleRef.current = 1;
+      return;
+    }
+    const vpW = vp.clientWidth;
+    const vpH = vp.clientHeight;
+    const fit = Math.min(vpW / imgW, vpH / imgH) * FIT_FILL;
+    fitScaleRef.current = fit;
+    setContainerW(imgW);
+    setContainerH(imgH);
+    setScale(fit);
+    setTx((vpW - imgW * fit) / 2);
+    setTy((vpH - imgH * fit) / 2);
   }, [focused?.id, focused?.width, focused?.height]);
 
   // 切换图片时获取原图，与 filter 变化解耦
@@ -265,7 +261,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         setScale((prevScale) => {
           const fitScale = fitScaleRef.current;
           const factor = Math.pow(0.999, dy);
-          const next = Math.max(MIN_SCALE, Math.min(fitScale * MAX_SCALE_FACTOR, prevScale * factor));
+          // 上限取 fit*10 与绝对 400% 的较大者，保证小图也能放到 4x
+          const maxScale = Math.max(fitScale * MAX_SCALE_FACTOR, MAX_SCALE_ABSOLUTE);
+          const next = Math.max(MIN_SCALE, Math.min(maxScale, prevScale * factor));
           const ratio = next / prevScale;
           setTx((prevTx) => mouseX - ratio * (mouseX - prevTx));
           setTy((prevTy) => mouseY - ratio * (mouseY - prevTy));

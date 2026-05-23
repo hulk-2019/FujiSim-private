@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Section } from "@/components/ui/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStore } from "@/store";
 import { api } from "@/api";
 import { PASS_THROUGH_SIM } from "@/types";
@@ -151,7 +152,8 @@ export function FilterPanel() {
         </TabsList>
 
         <TabsContent value="adjust" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-          <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="flex-1">
+            <div className="px-0 py-0">
             <Section title={t("editor.sections.basic")}>
           <div className="flex items-center justify-between mb-1">
             <Label>{t("filterPanel.filmSimulation")}</Label>
@@ -260,7 +262,8 @@ export function FilterPanel() {
                 onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
               />
             </Section>
-          </div>
+            </div>
+          </ScrollArea>
 
           <div className="flex gap-2 px-3 py-3 border-t border-zinc-800/60">
             <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
