@@ -46,7 +46,7 @@ export function EditorPage() {
 
       <PresetList />
 
-      <div className="w-[340px] flex-shrink-0 flex flex-col bg-zinc-950/50 border-l border-zinc-800/60 overflow-hidden">
+      <div className="w-[380px] flex-shrink-0 flex flex-col bg-zinc-950/50 border-l border-zinc-800/60 overflow-hidden">
         <FilterPanel />
       </div>
 
