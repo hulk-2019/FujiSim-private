@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ImageIcon, Eye, EyeOff } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { useGesture } from "@use-gesture/react";
 import { api } from "@/api";
 import type { WatermarkSettings } from "@/types";
 import { useStore } from "@/store";
-import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { renderWatermarkLayer } from "@/lib/watermarkCanvas";
@@ -16,13 +15,20 @@ const MIN_SCALE_FACTOR = 0.5;  // 相对 fit scale 的最小倍率
 const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
 const FIT_FILL = 0.8;
 
-interface PreviewPanelProps {
-  onExport?: () => void;
-  showOriginal: boolean;
-  onShowOriginalChange?: (v: boolean) => void;
+export interface PreviewPanelHandle {
+  fitToView: () => void;
+  setZoomLevel: (scale: number) => void;
 }
 
-export function PreviewPanel({ onExport, showOriginal, onShowOriginalChange }: PreviewPanelProps) {
+interface PreviewPanelProps {
+  showOriginal: boolean;
+  onScaleChange?: (scale: number, fitScale: number) => void;
+}
+
+export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(function PreviewPanel(
+  { showOriginal, onScaleChange },
+  ref,
+) {
   const { t } = useTranslation();
   const focusedId = useStore((s) => s.focusedId);
   const assets = useStore((s) => s.assets);
@@ -72,6 +78,31 @@ export function PreviewPanel({ onExport, showOriginal, onShowOriginalChange }: P
     setTy((vpH - imgH * fit) / 2);
     setImgVisible(true);
   }, [focused?.width, focused?.height]);
+
+  // 以视口中心为锚切换到指定 scale
+  const setZoomLevel = useCallback((next: number) => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const vpW = vp.clientWidth;
+    const vpH = vp.clientHeight;
+    setScale((prev) => {
+      if (prev <= 0) return next;
+      const ratio = next / prev;
+      setTx((prevTx) => vpW / 2 - ratio * (vpW / 2 - prevTx));
+      setTy((prevTy) => vpH / 2 - ratio * (vpH / 2 - prevTy));
+      return next;
+    });
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    fitToView: resetToFit,
+    setZoomLevel,
+  }), [resetToFit, setZoomLevel]);
+
+  // scale / fit 变化时上报
+  useEffect(() => {
+    onScaleChange?.(scale, fitScaleRef.current);
+  }, [scale, onScaleChange]);
 
   // 切换素材时重置，用 rAF 确保 viewport 尺寸已稳定
   useEffect(() => {
@@ -265,24 +296,6 @@ export function PreviewPanel({ onExport, showOriginal, onShowOriginalChange }: P
 
   return (
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
-      <div className="border-b border-zinc-800/60 px-4 py-2 flex items-center gap-3 text-xs bg-zinc-950/40">
-        <div className="flex-1 min-w-0">
-          <p className="text-zinc-100 truncate text-sm">{focused.file_name}</p>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onMouseDown={() => onShowOriginalChange?.(true)}
-          onMouseUp={() => onShowOriginalChange?.(false)}
-          onMouseLeave={() => onShowOriginalChange?.(false)}
-        >
-          {showOriginal ? <EyeOff size={12} /> : <Eye size={12} />}{" "}
-          {t("previewPanel.holdToCompare")}
-        </Button>
-        <Button onClick={onExport} size="sm">
-          {t("previewPanel.export")}
-        </Button>
-      </div>
       <div
         ref={viewportRef}
         className="flex-1 relative overflow-hidden bg-zinc-950/20 cursor-grab active:cursor-grabbing"
@@ -386,7 +399,7 @@ export function PreviewPanel({ onExport, showOriginal, onShowOriginalChange }: P
       </div>
     </main>
   );
-}
+});
 
 function WatermarkOverlay({
   wm,

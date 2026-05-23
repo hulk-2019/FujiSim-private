@@ -293,9 +293,15 @@ const zh = {
     showOriginal: "显示原图",
     hideOriginal: "显示效果",
     export: "导出",
+    preset: "预设",
+    togglePresetList: "显示/隐藏预设列表",
     noFocused: "未选中图片",
     emptyFolder: "该文件夹为空",
     import: "导入",
+    zoom: {
+      label: "缩放",
+      fit: "合适",
+    },
     presetList: {
       builtin: "推荐",
       mine: "我的",

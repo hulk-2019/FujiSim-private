@@ -12,7 +12,6 @@ export function PresetList() {
   const presets = useStore((s) => s.presets);
   const filter = useStore((s) => s.filter);
   const applyPreset = useStore((s) => s.applyPreset);
-  const currentFolderName = useStore((s) => s.currentFolderName);
 
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"builtin" | "mine">("builtin");
@@ -28,10 +27,6 @@ export function PresetList() {
 
   return (
     <aside className="w-[220px] flex-shrink-0 flex flex-col bg-zinc-950 border-l border-zinc-800/60 overflow-hidden">
-      <div className="h-10 flex-shrink-0 flex items-center px-3 border-b border-zinc-800/60">
-        <span className="text-sm text-zinc-200 truncate">{currentFolderName ?? ""}</span>
-      </div>
-
       <Tabs value={tab} onValueChange={(v) => setTab(v as "builtin" | "mine")} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-2 pt-2">
           <TabsList className="w-full grid grid-cols-2">

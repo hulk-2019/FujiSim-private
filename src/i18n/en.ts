@@ -293,9 +293,15 @@ const en = {
     showOriginal: "Show Original",
     hideOriginal: "Show Edited",
     export: "Export",
+    preset: "Presets",
+    togglePresetList: "Toggle preset list",
     noFocused: "No image selected",
     emptyFolder: "This folder is empty",
     import: "Import",
+    zoom: {
+      label: "Zoom",
+      fit: "Fit",
+    },
     presetList: {
       builtin: "Recommended",
       mine: "Mine",

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { PreviewPanel } from "@/components/PreviewPanel";
+import { PreviewPanel, type PreviewPanelHandle } from "@/components/PreviewPanel";
 import { FilterPanel } from "@/components/FilterPanel";
 import { ExportDialog } from "@/components/ExportDialog";
 import { PresetList } from "@/components/Editor/PresetList";
@@ -15,6 +15,10 @@ export function EditorPage() {
   const albums = useStore((s) => s.albums);
   const [exportOpen, setExportOpen] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [showPresetList, setShowPresetList] = useState(true);
+  const [scale, setScale] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
+  const previewRef = useRef<PreviewPanelHandle>(null);
 
   useEffect(() => {
     if (!folderId) return;
@@ -27,24 +31,40 @@ export function EditorPage() {
     };
   }, [folderId]);
 
+  const handleScaleChange = useCallback((s: number, fit: number) => {
+    setScale(s);
+    setFitScale(fit);
+  }, []);
+
   return (
     <div className="flex-1 flex min-h-0 bg-zinc-950 overflow-hidden">
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <EditorToolbar
           showOriginal={showOriginal}
-          onToggleShowOriginal={() => setShowOriginal((v) => !v)}
+          onShowOriginalChange={setShowOriginal}
           onExport={() => setExportOpen(true)}
+          scale={scale}
+          fitScale={fitScale}
+          onZoomFit={() => previewRef.current?.fitToView()}
+          onZoomTo={(s) => previewRef.current?.setZoomLevel(s)}
+          showPresetList={showPresetList}
+          onTogglePresetList={() => setShowPresetList((v) => !v)}
         />
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <PreviewPanel
-            showOriginal={showOriginal}
-            onShowOriginalChange={setShowOriginal}
-          />
-        </div>
-        <AssetStrip />
-      </div>
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <PreviewPanel
+                ref={previewRef}
+                showOriginal={showOriginal}
+                onScaleChange={handleScaleChange}
+              />
+            </div>
+            <AssetStrip />
+          </div>
 
-      <PresetList />
+          {showPresetList && <PresetList />}
+        </div>
+      </div>
 
       <div className="w-[380px] flex-shrink-0 flex flex-col bg-zinc-950/50 border-l border-zinc-800/60 overflow-hidden">
         <FilterPanel />
