@@ -1,11 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Search, RotateCcw, Settings } from "lucide-react";
-import { type BatchProgress } from "@/api";
+import { useMemo, useState } from "react";
+import { Search, RotateCcw } from "lucide-react";
 import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
-import { ExportTasksPopover } from "@/components/ExportTasksPopover";
-import { SettingsDialog } from "@/components/Settings";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTranslation } from "react-i18next";
@@ -18,28 +14,9 @@ export function Sidebar() {
   const selectedIds = useStore((s) => s.selectedIds);
 
   const [searchText, setSearchText] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: UnlistenFn | undefined;
-    listen<BatchProgress>("export:progress", (e) => {
-      useStore.getState().setProgress(e.payload);
-    }).then((u) => {
-      if (cancelled) {
-        u();
-      } else {
-        unlisten = u;
-      }
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
 
   const ids = useMemo(() => Array.from(selectedIds), [selectedIds]);
-  void ids; // retained for future batch ops
+  void ids;
 
   return (
     <aside className="w-full px-4 py-2 bg-transparent flex items-center flex-wrap gap-3 text-sm relative z-10">
@@ -126,22 +103,6 @@ export function Sidebar() {
           <RotateCcw size={14} />
         </Button>
       </div>
-
-      <div className="ml-auto flex items-center gap-2">
-        <ExportTasksPopover />
-
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 flex-shrink-0"
-          title={t("sidebar.settings")}
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings size={14} />
-        </Button>
-      </div>
-
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </aside>
   );
 }

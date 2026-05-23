@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] input,
+[data-tauri-drag-region] [role="button"] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 :root {
   --primary: 37 99 235; /* blue-600 */
   --primary-foreground: 255 255 255;

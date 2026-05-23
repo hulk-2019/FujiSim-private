@@ -1,14 +1,26 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { listen } from "@tauri-apps/api/event";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { NavSidebar } from "@/components/NavSidebar";
+import { TitleBar } from "@/components/TitleBar";
 import { ProjectsPage } from "@/pages/ProjectsPage";
 import { EditorPage } from "@/pages/EditorPage";
 import { TrashPage } from "@/pages/TrashPage";
 import { Toaster } from "@/components/ui/toast";
 import { UpdaterBootstrap } from "@/components/UpdaterBootstrap";
 import { useStore } from "@/store";
-import { api } from "@/api";
+import { api, type BatchProgress } from "@/api";
+
+function HomeLayout() {
+  return (
+    <div className="flex-1 flex min-h-0 overflow-hidden">
+      <NavSidebar />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Outlet />
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   useEffect(() => {
@@ -37,6 +49,21 @@ export default function App() {
     refreshAlbums();
     refreshAlbumSummaries();
     api.getCoverDir().then(setCoverDir).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: UnlistenFn | undefined;
+    listen<BatchProgress>("export:progress", (e) => {
+      useStore.getState().setProgress(e.payload);
+    }).then((u) => {
+      if (cancelled) u();
+      else unlisten = u;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -70,16 +97,16 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="h-full w-full flex bg-zinc-950 text-zinc-200">
-        <NavSidebar />
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <Routes>
-            <Route path="/" element={<Navigate to="/projects" replace />} />
+      <div className="h-full w-full flex flex-col bg-zinc-950 text-zinc-200">
+        <TitleBar />
+        <Routes>
+          <Route path="/" element={<Navigate to="/projects" replace />} />
+          <Route element={<HomeLayout />}>
             <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/:folderId" element={<EditorPage />} />
             <Route path="/trash" element={<TrashPage />} />
-          </Routes>
-        </div>
+          </Route>
+          <Route path="/projects/:folderId" element={<EditorPage />} />
+        </Routes>
       </div>
       <Toaster />
       <UpdaterBootstrap />
