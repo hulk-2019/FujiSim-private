@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, MoreHorizontal } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -30,6 +30,11 @@ export function ProjectsPage() {
   const [renameTarget, setRenameTarget] = useState<AlbumSummary | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameError, setRenameError] = useState("");
+
+  // 进入页面时刷新一次，避免从编辑器导入素材后回来看到的是导入前的快照
+  useEffect(() => {
+    refreshAlbumSummaries();
+  }, [refreshAlbumSummaries]);
 
   async function handleCreate() {
     const name = newName.trim();

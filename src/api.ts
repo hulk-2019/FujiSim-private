@@ -80,7 +80,7 @@ export const api = {
     invoke<void>("album_remove", { albumId, assetIds }),
 
   getAlbumSummaries: () => invoke<AlbumSummary[]>("get_album_summaries"),
-  listTrashAlbums: () => invoke<Album[]>("list_trash_albums"),
+  listTrashAlbums: () => invoke<AlbumSummary[]>("list_trash_albums"),
   restoreAlbum: (id: number) => invoke<void>("restore_album", { id }),
   purgeAlbum: (id: number) => invoke<void>("purge_album", { id }),
   purgeAllTrash: () => invoke<void>("purge_all_trash"),

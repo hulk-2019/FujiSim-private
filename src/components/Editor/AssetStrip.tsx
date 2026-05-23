@@ -1,18 +1,49 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ImageIcon } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import {
+  ImageIcon,
+  Plus,
+  Filter,
+  ArrowUpDown,
+  Star,
+  RotateCcw,
+  FolderOpen,
+  Files,
+  Check,
+} from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { api } from "@/api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import type { Asset } from "@/types";
+import type { Asset, AssetQuery } from "@/types";
 
 const THUMB_W = 80;
 const GAP = 8;
 const SLOT = THUMB_W + GAP;
 const PAGE = 60;
+
+const IMAGE_EXT = [
+  "jpg", "jpeg", "png", "tif", "tiff", "webp", "heic", "heif",
+  "arw", "cr2", "cr3", "nef", "nrw", "raf", "rw2", "dng",
+  "orf", "pef", "srw", "rwl", "sr2",
+];
+
+const SORT_FIELDS: NonNullable<AssetQuery["sort_by"]>[] = [
+  "date_taken",
+  "created_at",
+  "star_rating",
+  "file_name",
+  "iso",
+];
 
 export function AssetStrip() {
   const { t } = useTranslation();
@@ -22,14 +53,27 @@ export function AssetStrip() {
   const totalCount = useStore((s) => s.totalCount);
   const query = useStore((s) => s.query);
   const setQuery = useStore((s) => s.setQuery);
+  const importing = useStore((s) => s.importing);
+  const setImporting = useStore((s) => s.setImporting);
+  const refreshAssets = useStore((s) => s.refreshAssets);
+  const refreshFacets = useStore((s) => s.refreshFacets);
+  const refreshAlbumSummaries = useStore((s) => s.refreshAlbumSummaries);
   const toggleSelect = useStore((s) => s.toggleSelect);
   const selectRange = useStore((s) => s.selectRange);
   const focusAsset = useStore((s) => s.focusAsset);
   const loadPage = useStore((s) => s.loadPage);
+  const patchAsset = useStore((s) => s.patchAsset);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  const focused = assets.find((a) => a?.id === focusedId) ?? null;
+  const focused = useMemo(
+    () => assets.find((a) => a?.id === focusedId) ?? null,
+    [assets, focusedId],
+  );
+
+  const hasFilter =
+    !!query.search ||
+    (query.min_rating ?? 0) > 0;
 
   const count = totalCount;
 
@@ -43,7 +87,6 @@ export function AssetStrip() {
 
   const virtualItems = virtualizer.getVirtualItems();
 
-  // 滚动到尚未加载的窗口时触发分页加载（按 PAGE 对齐 offset）
   const pendingPages = useMemo(() => {
     const set = new Set<number>();
     for (const v of virtualItems) {
@@ -66,7 +109,6 @@ export function AssetStrip() {
     focusAsset(asset.id);
   }
 
-  // 鼠标滚轮纵向滚动映射为横向滚动
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -79,35 +121,136 @@ export function AssetStrip() {
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  async function pickAndImport() {
+    const selected = await openDialog({ directory: true, multiple: false });
+    if (!selected || typeof selected !== "string") return;
+    setImporting(true);
+    try {
+      const report = await api.importDirectory(selected, query.album_id ?? null);
+      setImporting(false, { inserted: report.inserted, scanned: report.scanned });
+      await Promise.all([refreshAssets(), refreshFacets(), refreshAlbumSummaries()]);
+    } catch {
+      setImporting(false);
+    }
+  }
+
+  async function pickFilesAndImport() {
+    const selected = await openDialog({
+      multiple: true,
+      filters: [{ name: "Images", extensions: IMAGE_EXT }],
+    });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    if (paths.length === 0) return;
+    setImporting(true);
+    try {
+      const report = await api.importFiles(paths, query.album_id ?? null);
+      setImporting(false, { inserted: report.inserted, scanned: report.scanned });
+      await Promise.all([refreshAssets(), refreshFacets(), refreshAlbumSummaries()]);
+    } catch {
+      setImporting(false);
+    }
+  }
+
+  async function rateFocused(rating: number) {
+    if (!focused) return;
+    const next = focused.star_rating === rating ? 0 : rating;
+    await api.setRating(focused.id, next).catch(() => {});
+    patchAsset({ ...focused, star_rating: next });
+  }
+
   return (
-    <div className="h-[140px] flex-shrink-0 flex flex-col border-t border-zinc-800/60 bg-zinc-950/50 overflow-hidden">
-      <div className="h-8 flex-shrink-0 flex items-center gap-3 px-3 text-xs text-zinc-400">
-        <Select
-          value={String(query.min_rating ?? 0)}
-          onValueChange={(v) => setQuery({ min_rating: Number(v) || null })}
+    <div className="h-[160px] flex-shrink-0 flex flex-col border-t border-zinc-800/60 bg-zinc-950/50 overflow-hidden">
+      <div className="h-9 flex-shrink-0 flex items-center gap-1 px-3 text-xs text-zinc-400 border-b border-zinc-800/60">
+        {/* 导入 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={importing}
+              className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-zinc-800/60 text-zinc-300 disabled:opacity-50"
+              title={t("sidebar.import")}
+            >
+              <Plus size={14} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={pickAndImport}>
+              <FolderOpen size={13} />
+              {t("sidebar.importDir")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={pickFilesAndImport}>
+              <Files size={13} />
+              {t("sidebar.importFiles")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* 筛选（关键词 + 星级） */}
+        <FilterMenu
+          hasFilter={hasFilter}
+          search={query.search ?? ""}
+          minRating={query.min_rating ?? 0}
+          onChange={(patch) => setQuery(patch)}
+        />
+
+        {/* 排序 */}
+        <SortMenu
+          sortBy={query.sort_by ?? "date_taken"}
+          sortDir={query.sort_dir ?? "desc"}
+          onChange={(patch) => setQuery(patch)}
+        />
+
+        {/* 重置筛选 + 排序 */}
+        <button
+          type="button"
+          onClick={() =>
+            setQuery({
+              search: null,
+              min_rating: null,
+              camera_model: null,
+              sort_by: "date_taken",
+              sort_dir: "desc",
+            })
+          }
+          className="h-7 w-7 inline-flex items-center justify-center rounded text-zinc-400 hover:bg-zinc-800/60"
+          title={t("sidebar.resetFilters")}
         >
-          <SelectTrigger className="h-6 w-28 text-[11px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="0">{t("sidebar.allRatings")}</SelectItem>
-            <SelectItem value="1">{t("sidebar.ratingGte1")}</SelectItem>
-            <SelectItem value="2">{t("sidebar.ratingGte2")}</SelectItem>
-            <SelectItem value="3">{t("sidebar.ratingGte3")}</SelectItem>
-            <SelectItem value="4">{t("sidebar.ratingGte4")}</SelectItem>
-            <SelectItem value="5">{t("sidebar.rating5")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <span className="truncate flex-1">{focused?.file_name ?? ""}</span>
-        <span className="flex-shrink-0">
+          <RotateCcw size={12} />
+        </button>
+
+        {/* 中间：评星（针对 focused 素材） */}
+        <div className="flex-1 min-w-0 flex items-center justify-center">
+          <div
+            className="flex items-center gap-0.5"
+            title={t("editor.strip.ratingFor")}
+          >
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                disabled={!focused}
+                onClick={() => rateFocused(n)}
+                className="p-0.5 disabled:opacity-30 disabled:cursor-not-allowed text-zinc-600 hover:text-amber-300"
+              >
+                <Star
+                  size={13}
+                  className={cn(
+                    "transition-colors",
+                    focused && n <= focused.star_rating
+                      ? "text-amber-400 fill-amber-400"
+                      : "fill-none",
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 右侧：选中计数 */}
+        <span className="flex-shrink-0 text-[11px] text-zinc-400">
           {t("editor.strip.selectedCountOfTotal", { n: selectedIds.size, m: totalCount })}
         </span>
-        <Button size="sm" variant="ghost" className="h-6 text-[11px]">
-          {t("editor.strip.single")}
-        </Button>
-        <Button size="sm" variant="ghost" className="h-6 text-[11px]" disabled>
-          {t("editor.strip.compare")}
-        </Button>
       </div>
 
       <div ref={scrollerRef} className="flex-1 overflow-x-auto overflow-y-hidden">
@@ -122,7 +265,7 @@ export function AssetStrip() {
           >
             {virtualItems.map((v) => {
               const a = assets[v.index];
-              const left = v.start + 8; // 左侧 8px padding
+              const left = v.start + 8;
               return (
                 <div
                   key={v.key}
@@ -156,6 +299,162 @@ export function AssetStrip() {
   );
 }
 
+function FilterMenu({
+  hasFilter,
+  search,
+  minRating,
+  onChange,
+}: {
+  hasFilter: boolean;
+  search: string;
+  minRating: number;
+  onChange: (patch: AssetQuery) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(search);
+
+  useEffect(() => {
+    if (open) setText(search);
+  }, [open, search]);
+
+  function commitSearch() {
+    onChange({ search: text.trim() || null });
+  }
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "h-7 px-2 inline-flex items-center gap-1 rounded text-[11px] hover:bg-zinc-800/60",
+            hasFilter ? "text-amber-300" : "text-zinc-400",
+          )}
+          title={t("editor.strip.filterTitle")}
+        >
+          <Filter size={12} />
+          {hasFilter ? t("editor.strip.filterActive") : t("editor.strip.filterEmpty")}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64 p-3 space-y-3">
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+            {t("editor.strip.keyword")}
+          </div>
+          <Input
+            value={text}
+            placeholder={t("editor.strip.keywordPlaceholder")}
+            className="h-7 text-[11px]"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                commitSearch();
+                setOpen(false);
+              }
+            }}
+            onBlur={commitSearch}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+            {t("editor.strip.rating")}
+          </div>
+          <div className="flex items-center gap-1">
+            {[0, 1, 2, 3, 4, 5].map((n) => {
+              const active = minRating === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onChange({ min_rating: n === 0 ? null : n })}
+                  className={cn(
+                    "h-6 min-w-[28px] px-1.5 rounded text-[11px] border transition-colors",
+                    active
+                      ? "bg-amber-400/20 border-amber-400/60 text-amber-200"
+                      : "border-zinc-800 text-zinc-400 hover:bg-zinc-800/60",
+                  )}
+                >
+                  {n === 0 ? t("sidebar.allRatings") : `≥${n}`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SortMenu({
+  sortBy,
+  sortDir,
+  onChange,
+}: {
+  sortBy: NonNullable<AssetQuery["sort_by"]>;
+  sortDir: NonNullable<AssetQuery["sort_dir"]>;
+  onChange: (patch: AssetQuery) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="h-7 px-2 inline-flex items-center gap-1 rounded text-[11px] text-zinc-400 hover:bg-zinc-800/60"
+          title={t("editor.strip.sortField")}
+        >
+          <ArrowUpDown size={12} />
+          {t(`editor.strip.sortFields.${sortBy}` as any, { defaultValue: sortBy })}
+          <span className="text-zinc-500">{sortDir === "asc" ? "↑" : "↓"}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52 p-1">
+        <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500">
+          {t("editor.strip.sortField")}
+        </div>
+        {SORT_FIELDS.map((f) => {
+          const active = sortBy === f;
+          return (
+            <DropdownMenuItem
+              key={f}
+              onSelect={(e) => {
+                e.preventDefault();
+                onChange({ sort_by: f });
+              }}
+              className="text-[11px] justify-between"
+            >
+              <span>{t(`editor.strip.sortFields.${f}` as any, { defaultValue: f })}</span>
+              {active && <Check size={12} className="text-amber-300" />}
+            </DropdownMenuItem>
+          );
+        })}
+        <div className="my-1 h-px bg-zinc-800" />
+        <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500">
+          {t("editor.strip.sortDir")}
+        </div>
+        {(["desc", "asc"] as const).map((d) => {
+          const active = sortDir === d;
+          return (
+            <DropdownMenuItem
+              key={d}
+              onSelect={(e) => {
+                e.preventDefault();
+                onChange({ sort_dir: d });
+              }}
+              className="text-[11px] justify-between"
+            >
+              <span>{t(`editor.strip.sortDir${d === "asc" ? "Asc" : "Desc"}` as any)}</span>
+              {active && <Check size={12} className="text-amber-300" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function Thumb({
   asset,
   selected,
@@ -167,7 +466,15 @@ function Thumb({
   focused: boolean;
   onClick: (e: React.MouseEvent) => void;
 }) {
-  const src = asset.cover_path ? convertFileSrc(asset.cover_path) : null;
+  const src = (() => {
+    try {
+      if (!asset.is_raw) return convertFileSrc(asset.file_path);
+      if (asset.cover_path) return convertFileSrc(asset.cover_path);
+      return null;
+    } catch {
+      return null;
+    }
+  })();
   return (
     <button
       type="button"

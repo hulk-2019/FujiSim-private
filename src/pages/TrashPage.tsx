@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
-import type { Album } from "@/types";
+import type { AlbumSummary } from "@/types";
 
 function daysLeft(deletedAt: string | null): number {
   if (!deletedAt) return 30;
@@ -169,7 +170,7 @@ export function TrashPage() {
 }
 
 interface TrashCardProps {
-  album: Album;
+  album: AlbumSummary;
   selected: boolean;
   onToggle: () => void;
   daysLeftValue: number;
@@ -182,6 +183,7 @@ export function TrashCard({
   daysLeftValue,
 }: TrashCardProps) {
   const { t } = useTranslation();
+  const covers = album.cover_paths.slice(0, 4);
   return (
     <div
       onClick={onToggle}
@@ -189,8 +191,18 @@ export function TrashCard({
         selected ? "border-blue-500" : "border-transparent hover:border-zinc-700"
       }`}
     >
-      <div className="aspect-[4/3] bg-zinc-800 flex items-center justify-center text-zinc-600 text-xs">
-        {t("trash.totalCount", { count: 0 })}
+      <div className="grid grid-cols-2 aspect-[4/3]">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="bg-zinc-800 overflow-hidden">
+            {covers[i] ? (
+              <img
+                src={convertFileSrc(covers[i])}
+                className="w-full h-full object-cover"
+                alt=""
+              />
+            ) : null}
+          </div>
+        ))}
       </div>
       <div className="px-3 py-2">
         <p className="text-sm font-medium text-zinc-100 truncate">{album.name}</p>

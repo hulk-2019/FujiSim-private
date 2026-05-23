@@ -11,7 +11,7 @@ import { renderWatermarkLayer } from "@/lib/watermarkCanvas";
 
 let previewTokenCounter = 0;
 
-const MIN_SCALE_FACTOR = 0.5;  // 相对 fit scale 的最小倍率
+const MIN_SCALE = 0.05;        // 绝对最小缩放比例 5%
 const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
 const FIT_FILL = 0.8;
 
@@ -62,10 +62,13 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const fitScaleRef = useRef(1);
 
   // 重置到 fit 状态：容器为图片原始尺寸，scale 缩放到占 viewport 80% 并居中
+  // 优先用 store 里的 focused 尺寸（DB EXIF），缺失时回退到已加载 img 的 naturalWidth/Height，
+  // 避免某些 RAW 没写标准 EXIF 尺寸字段时 fit 早退导致面板不可见。
   const resetToFit = useCallback(() => {
     const vp = viewportRef.current;
-    const imgW = focused?.width;
-    const imgH = focused?.height;
+    const img = imgRef.current;
+    const imgW = focused?.width || img?.naturalWidth || 0;
+    const imgH = focused?.height || img?.naturalHeight || 0;
     if (!vp || !imgW || !imgH) return;
     const vpW = vp.clientWidth;
     const vpH = vp.clientHeight;
@@ -116,10 +119,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       const imgW = focused?.width;
       const imgH = focused?.height;
       if (!vp || vp.clientWidth === 0 || vp.clientHeight === 0 || !imgW || !imgH) {
+        // EXIF 没尺寸时不要锁死 fitScale=1，留给 img onLoad → resetToFit 用 naturalWidth 兜底
         fitScaleRef.current = 1;
-        setScale(1);
-        setTx(0);
-        setTy(0);
         return;
       }
       const vpW = vp.clientWidth;
@@ -137,19 +138,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   }, [focused?.id, focused?.width, focused?.height]);
 
   // 切换图片时获取原图，与 filter 变化解耦
-  useEffect(() => {
-    if (!focused?.is_raw) {
-      setRawOriginalSrc(null);
-      return;
-    }
-    let cancelled = false;
-    const token = currentTokenRef.current;
-    api.getRawOriginal(focused.id, token).then((path) => {
-      if (!cancelled) setRawOriginalSrc(convertFileSrc(path));
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [focused?.id, focused?.is_raw]);
-
+  // 注意：本 effect 必须放在下面 getPreview effect 之后声明 / 之后执行，
+  // 这样 currentTokenRef 已经被 getPreview effect 递增，二者使用同一个 token，
+  // 避免 backend.preview_token 在 RAW 解码途中被 getPreview 覆盖导致 preview_cancelled。
   useEffect(() => {
     if (!focused) {
       setPreview(null);
@@ -226,6 +217,41 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     return () => clearTimeout(handle);
   }, [focused?.id, filter]);
 
+  // 切换素材时拉取 RAW 嵌入原图。声明顺序故意放在 getPreview effect 之后，
+  // 这样 currentTokenRef 已是最新 token，避免与 getPreview 在 backend 端的
+  // preview_token 上互相覆盖。失败时尝试用最新 token 再请求一次。
+  useEffect(() => {
+    if (!focused?.is_raw) {
+      setRawOriginalSrc(null);
+      return;
+    }
+    // 切到新 RAW 时先清空旧 URL，否则 loading 占位条件 (!rawOriginalSrc) 一直为 false，
+    // 用户会在加载新图期间看到旧图，loading 动画也不会显示。
+    setRawOriginalSrc(null);
+    let cancelled = false;
+    const tryFetch = async (token: number, attempt: number) => {
+      try {
+        const path = await api.getRawOriginal(focused.id, token);
+        if (cancelled) return;
+        setRawOriginalSrc(convertFileSrc(path));
+      } catch (e) {
+        if (cancelled) return;
+        const msg = String(e);
+        if (msg.includes("preview_cancelled") && attempt < 1) {
+          await new Promise((r) => setTimeout(r, 300));
+          if (cancelled) return;
+          tryFetch(currentTokenRef.current, attempt + 1);
+          return;
+        }
+        if (!msg.includes("preview_cancelled")) {
+          setError(msg);
+        }
+      }
+    };
+    tryFetch(currentTokenRef.current, 0);
+    return () => { cancelled = true; };
+  }, [focused?.id, focused?.is_raw]);
+
   const bind = useGesture(
     {
       onWheel: ({ delta: [, dy], event }) => {
@@ -239,7 +265,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         setScale((prevScale) => {
           const fitScale = fitScaleRef.current;
           const factor = Math.pow(0.999, dy);
-          const next = Math.max(fitScale * MIN_SCALE_FACTOR, Math.min(fitScale * MAX_SCALE_FACTOR, prevScale * factor));
+          const next = Math.max(MIN_SCALE, Math.min(fitScale * MAX_SCALE_FACTOR, prevScale * factor));
           const ratio = next / prevScale;
           setTx((prevTx) => mouseX - ratio * (mouseX - prevTx));
           setTy((prevTy) => mouseY - ratio * (mouseY - prevTy));
@@ -326,6 +352,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
               >
                 {displaySrc && (
                   <img
+                    key={displaySrc}
                     ref={imgRef}
                     src={displaySrc}
                     alt="preview"
@@ -338,7 +365,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                       WebkitTouchCallout: "none",
                     }}
                     draggable={false}
-                    onLoad={() => {
+                    onLoad={(e) => {
+                      const el = e.currentTarget as HTMLImageElement;
+                      console.log("[PreviewPanel] onLoad", el.src, el.naturalWidth, "x", el.naturalHeight);
                       if (previewSrc || rawOriginalSrc) {
                         if (!hasFitRef.current) {
                           hasFitRef.current = true;
@@ -349,6 +378,14 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                       } else {
                         setImgVisible(true);
                       }
+                    }}
+                    onError={(e) => {
+                      // asset:// 协议加载失败时浏览器默认静默；这里把错误冒出来，
+                      // 否则 imgVisible 永远是 false，整个面板卡在不可见状态。
+                      const failedSrc = (e.currentTarget as HTMLImageElement).src;
+                      console.error("[PreviewPanel] image load failed:", failedSrc);
+                      setError(t("previewPanel.loadFailed"));
+                      setImgVisible(true);
                     }}
                   />
                 )}
@@ -390,18 +427,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
             {t("previewPanel.rendering")}
           </div>
         )}
-        {focused.is_raw && !rawOriginalSrc && !error && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="flex flex-col items-center justify-center gap-3 text-zinc-400 bg-zinc-950/60 rounded-md px-4 py-3">
-              <div className="relative w-10 h-10">
-                <div className="absolute inset-0 rounded-full border-2 border-zinc-500 animate-ping opacity-60" />
-                <div className="absolute inset-1.5 rounded-full bg-zinc-500 animate-pulse" />
-              </div>
-              <span className="text-xs">{t("previewPanel.loadingOriginal")}</span>
+        {!!focused.is_raw && !rawOriginalSrc && !error && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <div className="relative w-10 h-10">
+              <div className="absolute inset-0 rounded-full border-2 border-zinc-300 animate-ping opacity-70" />
+              <div className="absolute inset-1.5 rounded-full bg-zinc-300 animate-pulse" />
             </div>
           </div>
         )}
-        {focused.width && focused.height && displaySrc && (
+        {!!focused.width && !!focused.height && displaySrc && (
           <div className="absolute bottom-3 right-3 text-[10px] text-zinc-500 bg-zinc-950/60 px-2 py-1 rounded">
             {focused.width} × {focused.height} · {formatBytes(focused.file_size)}
           </div>

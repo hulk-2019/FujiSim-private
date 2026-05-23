@@ -1374,6 +1374,15 @@ pub async fn get_album_summaries(
     state: State<'_, SharedState>,
 ) -> Result<Vec<AlbumSummary>> {
     let albums = albums::list(&state.pool).await?;
+    build_album_summaries(&state.pool, albums).await
+}
+
+/// 给定一组 album，批量查询每个相册的资产数量和前 4 张封面（按拍摄时间倒序），
+/// 组装成 [`AlbumSummary`] 列表。get_album_summaries 和 list_trash_albums 共用。
+async fn build_album_summaries(
+    pool: &sqlx::SqlitePool,
+    albums: Vec<albums::Album>,
+) -> Result<Vec<AlbumSummary>> {
     if albums.is_empty() {
         return Ok(vec![]);
     }
@@ -1382,7 +1391,7 @@ pub async fn get_album_summaries(
     let totals: Vec<(i64, i64)> = sqlx::query_as(
         "SELECT album_id, COUNT(*) as cnt FROM album_assets GROUP BY album_id",
     )
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await?;
     let total_map: std::collections::HashMap<i64, i64> =
         totals.into_iter().collect();
@@ -1396,7 +1405,7 @@ pub async fn get_album_summaries(
             JOIN assets a ON a.id = aa.asset_id \
         ) WHERE rn <= 4",
     )
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await?;
 
     let mut cover_map: std::collections::HashMap<i64, Vec<String>> =
@@ -1421,15 +1430,15 @@ pub async fn get_album_summaries(
             }
         })
         .collect();
-
     Ok(summaries)
 }
 
 #[tauri::command]
 pub async fn list_trash_albums(
     state: State<'_, SharedState>,
-) -> Result<Vec<albums::Album>> {
-    albums::list_trash(&state.pool).await
+) -> Result<Vec<AlbumSummary>> {
+    let albums = albums::list_trash(&state.pool).await?;
+    build_album_summaries(&state.pool, albums).await
 }
 
 #[tauri::command]

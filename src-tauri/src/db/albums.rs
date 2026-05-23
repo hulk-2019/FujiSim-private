@@ -154,17 +154,60 @@ pub async fn restore(pool: &SqlitePool, id: i64) -> Result<()> {
     Ok(())
 }
 
+/// 永久清除单个回收站相册：先删掉只属于本相册的 assets 行（孤儿清理），
+/// 再删 album。物理文件不动，与 [`purge_all`] 行为一致。
+/// 仍属于其他相册的 asset 会保留。
 pub async fn purge(pool: &SqlitePool, id: i64) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        r#"
+        DELETE FROM assets
+        WHERE id IN (
+            SELECT aa.asset_id FROM album_assets aa
+            WHERE aa.album_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM album_assets aa2
+                WHERE aa2.asset_id = aa.asset_id AND aa2.album_id <> ?
+              )
+        )
+        "#,
+    )
+    .bind(id)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM albums WHERE id = ? AND is_deleted = 1")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 
+/// 永久清空回收站：删掉所有「只属于回收站相册」的 assets 行，再批量删 albums。
+/// 在多相册场景下，仍被未删除相册引用的 asset 会保留。
 pub async fn purge_all(pool: &SqlitePool) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        r#"
+        DELETE FROM assets
+        WHERE id IN (
+            SELECT aa.asset_id FROM album_assets aa
+            JOIN albums a ON a.id = aa.album_id
+            WHERE a.is_deleted = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM album_assets aa2
+                JOIN albums a2 ON a2.id = aa2.album_id
+                WHERE aa2.asset_id = aa.asset_id AND a2.is_deleted = 0
+              )
+        )
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM albums WHERE is_deleted = 1")
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }

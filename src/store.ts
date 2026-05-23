@@ -97,7 +97,7 @@ type AppState = {
   fujiSimulations: string[];
   albums: Album[];
   albumSummaries: AlbumSummary[];
-  trashedAlbums: Album[];
+  trashedAlbums: AlbumSummary[];
   refreshAlbumSummaries: () => Promise<void>;
   refreshTrash: () => Promise<void>;
   restoreAlbum: (id: number) => Promise<void>;
