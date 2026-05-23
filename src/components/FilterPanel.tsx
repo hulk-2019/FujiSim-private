@@ -146,25 +146,25 @@ export function FilterPanel() {
         <TabsList className="flex flex-col h-full w-11 flex-shrink-0 items-stretch gap-1 rounded-none bg-zinc-900/50 border-l border-zinc-800/60 p-1">
           <TabsTrigger
             value="adjust"
-            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] rotate-180 text-[11px] tracking-wider"
+            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] text-[11px] tracking-wider"
           >
             {t("filterPanel.tabs.adjust")}
           </TabsTrigger>
           <TabsTrigger
             value="watermark"
-            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] rotate-180 text-[11px] tracking-wider"
+            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] text-[11px] tracking-wider"
           >
             {t("filterPanel.tabs.watermark")}
           </TabsTrigger>
           <TabsTrigger
             value="info"
-            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] rotate-180 text-[11px] tracking-wider"
+            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] text-[11px] tracking-wider"
           >
             {t("filterPanel.tabs.info")}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="adjust" className="flex-1 flex flex-col overflow-hidden mt-0">
+        <TabsContent value="adjust" className="flex-1 min-w-0 flex flex-col overflow-hidden mt-0">
           <div className="flex-1 overflow-y-auto">
 
             <Section title={t("editor.sections.basic")}>
@@ -285,11 +285,11 @@ export function FilterPanel() {
           </div>
         </TabsContent>
 
-        <TabsContent value="watermark" className="flex-1 overflow-y-auto px-4 pb-6 mt-0">
+        <TabsContent value="watermark" className="flex-1 min-w-0 overflow-y-auto px-4 pb-6 mt-0">
           <WatermarkTab />
         </TabsContent>
 
-        <TabsContent value="info" className="flex-1 overflow-y-auto px-4 pb-6 mt-0">
+        <TabsContent value="info" className="flex-1 min-w-0 overflow-y-auto px-4 pb-6 mt-0">
           {focused ? (
             <div className="space-y-4 text-xs">
               <div className="space-y-1 pb-4 border-b border-zinc-800/60">
