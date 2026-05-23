@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Save, Info, FolderOpen, Files, ChevronDown, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, type LucideIcon } from "lucide-react";
+import { Save, Info, FolderOpen, Files, ChevronDown, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, SlidersHorizontal, Stamp, ScrollText, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -145,24 +145,9 @@ export function FilterPanel() {
     <aside className="w-full h-full bg-transparent flex text-sm overflow-hidden">
       <Tabs defaultValue="adjust" className="flex-1 flex flex-row-reverse overflow-hidden">
         <TabsList className="flex flex-col h-full w-11 flex-shrink-0 items-stretch gap-1 rounded-none bg-zinc-900/50 border-l border-zinc-800/60 p-1">
-          <TabsTrigger
-            value="adjust"
-            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] text-[11px] tracking-wider"
-          >
-            {t("filterPanel.tabs.adjust")}
-          </TabsTrigger>
-          <TabsTrigger
-            value="watermark"
-            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] text-[11px] tracking-wider"
-          >
-            {t("filterPanel.tabs.watermark")}
-          </TabsTrigger>
-          <TabsTrigger
-            value="info"
-            className="h-auto w-full flex-col gap-1 py-3 px-1 [writing-mode:vertical-rl] text-[11px] tracking-wider"
-          >
-            {t("filterPanel.tabs.info")}
-          </TabsTrigger>
+          <SideTabTrigger value="adjust" label={t("filterPanel.tabs.adjust")} icon={<SlidersHorizontal size={16} />} />
+          <SideTabTrigger value="watermark" label={t("filterPanel.tabs.watermark")} icon={<Stamp size={16} />} />
+          <SideTabTrigger value="info" label={t("filterPanel.tabs.info")} icon={<ScrollText size={16} />} />
         </TabsList>
 
         <TabsContent value="adjust" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
@@ -294,16 +279,20 @@ export function FilterPanel() {
             <div className="space-y-4 text-xs pt-3">
               <div className="rounded-md border border-zinc-800/80 bg-zinc-900/40 p-3 flex gap-3">
                 <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden bg-zinc-900 border border-zinc-800/60 flex items-center justify-center">
-                  {focused.cover_path ? (
-                    <img
-                      src={convertFileSrc(focused.cover_path)}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                  ) : (
-                    <ImageIcon size={20} className="text-zinc-700" />
-                  )}
+                  {(() => {
+                    const thumbSrc = focused.cover_path
+                      ?? (!focused.is_raw ? focused.file_path : null);
+                    return thumbSrc ? (
+                      <img
+                        src={convertFileSrc(thumbSrc)}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                    ) : (
+                      <ImageIcon size={20} className="text-zinc-700" />
+                    );
+                  })()}
                 </div>
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-zinc-100 font-medium truncate" title={focused.file_name}>{focused.file_name}</p>
@@ -369,6 +358,24 @@ export function FilterPanel() {
         </DialogContent>
       </Dialog>
     </aside>
+  );
+}
+
+function SideTabTrigger({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+  return (
+    <TabsTrigger
+      value={value}
+      aria-label={label}
+      className="group relative h-9 w-full p-0 flex items-center justify-center"
+    >
+      {icon}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-zinc-900 text-zinc-100 text-xs px-2 py-1 shadow-lg border border-zinc-700/60 opacity-0 translate-x-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 z-50"
+      >
+        {label}
+      </span>
+    </TabsTrigger>
   );
 }
 
