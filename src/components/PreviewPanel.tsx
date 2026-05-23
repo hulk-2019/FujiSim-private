@@ -315,10 +315,14 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 
   const displaySrc = previewSrc ?? placeholderSrc;
 
-  const wmDims: { width: number; height: number } | null =
-    focused.width && focused.height
-      ? { width: focused.width, height: focused.height }
-      : null;
+  const wmDims: { width: number; height: number } | null = (() => {
+    if (focused.width && focused.height) return { width: focused.width, height: focused.height };
+    if (preview?.width && preview?.height) return { width: preview.width, height: preview.height };
+    const nw = imgRef.current?.naturalWidth;
+    const nh = imgRef.current?.naturalHeight;
+    if (nw && nh) return { width: nw, height: nh };
+    return null;
+  })();
 
   return (
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">

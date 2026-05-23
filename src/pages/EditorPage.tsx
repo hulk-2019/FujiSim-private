@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { PreviewPanel, type PreviewPanelHandle } from "@/components/PreviewPanel";
 import { FilterPanel } from "@/components/FilterPanel";
-import { ExportDialog } from "@/components/ExportDialog";
 import { PresetList } from "@/components/Editor/PresetList";
 import { EditorToolbar } from "@/components/Editor/EditorToolbar";
 import { AssetStrip } from "@/components/Editor/AssetStrip";
@@ -13,7 +12,6 @@ export function EditorPage() {
   const enterFolder = useStore((s) => s.enterFolder);
   const exitFolder = useStore((s) => s.exitFolder);
   const albums = useStore((s) => s.albums);
-  const [exportOpen, setExportOpen] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showPresetList, setShowPresetList] = useState(true);
   const [scale, setScale] = useState(1);
@@ -42,7 +40,6 @@ export function EditorPage() {
         <EditorToolbar
           showOriginal={showOriginal}
           onShowOriginalChange={setShowOriginal}
-          onExport={() => setExportOpen(true)}
           scale={scale}
           fitScale={fitScale}
           onZoomFit={() => previewRef.current?.fitToView()}
@@ -67,8 +64,6 @@ export function EditorPage() {
       <div className="w-[320px] flex-shrink-0 flex flex-col bg-zinc-950/50 border-l border-zinc-800/60 overflow-hidden">
         <FilterPanel />
       </div>
-
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     </div>
   );
 }

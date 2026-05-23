@@ -1,4 +1,4 @@
-import { ArrowLeft, RotateCcw, Eye, EyeOff, Download, ChevronDown, PanelRight, PanelRightClose } from "lucide-react";
+import { ArrowLeft, RotateCcw, Eye, EyeOff, ChevronDown, PanelRight, PanelRightClose } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,6 @@ import { useTranslation } from "react-i18next";
 interface EditorToolbarProps {
   showOriginal: boolean;
   onShowOriginalChange: (v: boolean) => void;
-  onExport: () => void;
   scale: number;
   fitScale: number;
   onZoomFit: () => void;
@@ -27,7 +26,6 @@ const ZOOM_PRESETS = [0.5, 1, 2, 4];
 export function EditorToolbar({
   showOriginal,
   onShowOriginalChange,
-  onExport,
   scale,
   fitScale,
   onZoomFit,
@@ -119,17 +117,6 @@ export function EditorToolbar({
       >
         {showPresetList ? <PanelRightClose size={13} /> : <PanelRight size={13} />}
         {t("editor.preset")}
-      </Button>
-
-      <Button
-        size="sm"
-        variant="default"
-        className="h-7"
-        disabled={disabled}
-        onClick={onExport}
-      >
-        <Download size={13} />
-        {t("editor.export")}
       </Button>
     </div>
   );

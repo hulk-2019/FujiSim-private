@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
-import { Download, X, CheckCircle, AlertCircle, Loader2, RotateCcw, CirclePause, Clock, Ban } from "lucide-react";
+import { Download, X, CheckCircle, AlertCircle, Loader2, RotateCcw, CirclePause, Clock, Ban, Bell } from "lucide-react";
 import { cn, getTaskStatus, TASK_STATUS_COLOR, formatTime } from "@/lib/utils";
 import type { BatchProgress, BatchTask } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -181,7 +181,7 @@ export function ExportTasksPopover() {
         )}
         title={t("exportTasks.title")}
       >
-        <Download size={14} />
+        <Bell size={14} />
         {activeCount > 0 && (
           <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-blue-500 text-[9px] text-white flex items-center justify-center font-bold leading-none ring-2 ring-zinc-950">
             {activeCount}
