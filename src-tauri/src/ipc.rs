@@ -51,6 +51,17 @@ pub struct ImportReport {
     pub skipped: usize,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AlbumSummary {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub is_deleted: i64,
+    pub deleted_at: Option<String>,
+    pub total: i64,
+    pub cover_paths: Vec<String>,
+}
+
 /// 导入指定目录下所有支持的图片到资产库。
 ///
 /// 全程后台执行：扫描走 `spawn_blocking`（阻塞 IO），数据库写入走 sqlx 异步。
@@ -1357,4 +1368,67 @@ pub async fn get_all_settings(
     state: State<'_, SharedState>,
 ) -> Result<std::collections::HashMap<String, String>> {
     crate::db::app_settings::get_all(&state.pool).await
+}
+
+#[tauri::command]
+pub async fn get_album_summaries(
+    state: State<'_, SharedState>,
+) -> Result<Vec<AlbumSummary>> {
+    let albums = albums::list(&state.pool).await?;
+    let mut summaries = Vec::with_capacity(albums.len());
+    for album in albums {
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM album_assets WHERE album_id = ?",
+        )
+        .bind(album.id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+
+        let covers: Vec<String> = sqlx::query_scalar(
+            "SELECT COALESCE(a.cover_path, a.file_path) \
+             FROM album_assets aa \
+             JOIN assets a ON a.id = aa.asset_id \
+             WHERE aa.album_id = ? \
+             ORDER BY a.date_taken DESC \
+             LIMIT 4",
+        )
+        .bind(album.id)
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_default();
+
+        summaries.push(AlbumSummary {
+            id: album.id,
+            name: album.name,
+            created_at: album.created_at,
+            is_deleted: album.is_deleted,
+            deleted_at: album.deleted_at,
+            total,
+            cover_paths: covers,
+        });
+    }
+    Ok(summaries)
+}
+
+#[tauri::command]
+pub async fn list_trash_albums(
+    state: State<'_, SharedState>,
+) -> Result<Vec<albums::Album>> {
+    albums::list_trash(&state.pool).await
+}
+
+#[tauri::command]
+pub async fn restore_album(state: State<'_, SharedState>, id: i64) -> Result<()> {
+    albums::restore(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn purge_album(state: State<'_, SharedState>, id: i64) -> Result<()> {
+    albums::purge(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn purge_all_trash(state: State<'_, SharedState>) -> Result<()> {
+    albums::purge_all(&state.pool).await
 }

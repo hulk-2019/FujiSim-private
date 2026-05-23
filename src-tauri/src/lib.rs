@@ -72,6 +72,11 @@ pub fn run() {
             ipc::move_assets,
             // ===== 虚拟相册 =====
             ipc::list_albums,
+            ipc::get_album_summaries,
+            ipc::list_trash_albums,
+            ipc::restore_album,
+            ipc::purge_album,
+            ipc::purge_all_trash,
             ipc::create_album,
             ipc::delete_album,
             ipc::check_album_name_exists,
