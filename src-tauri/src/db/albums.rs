@@ -11,6 +11,8 @@ pub struct Album {
     pub id: i64,
     pub name: String,
     pub created_at: String,
+    pub is_deleted: i64,
+    pub deleted_at: Option<String>,
 }
 
 /// 创建相册。`name` 字段 UNIQUE，重名会返回 SQL 错误。
@@ -28,17 +30,19 @@ pub async fn create(pool: &SqlitePool, name: &str) -> Result<Album> {
 }
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Album>> {
-    sqlx::query_as::<_, Album>("SELECT * FROM albums ORDER BY name")
+    sqlx::query_as::<_, Album>("SELECT * FROM albums WHERE is_deleted = 0 ORDER BY name")
         .fetch_all(pool)
         .await
         .map_err(Into::into)
 }
 
 pub async fn delete(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query("DELETE FROM albums WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -121,36 +125,46 @@ pub async fn asset_count(pool: &SqlitePool, id: i64) -> Result<i64> {
     Ok(count)
 }
 
-/// 事务内物理删除文件夹：删除所有关联资产文件 → 删除资产记录 → 删除文件夹行。
-/// 任一步失败则回滚。
-pub async fn delete_with_assets(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<Vec<String>> {
-    let mut tx = pool.begin().await?;
-
-    let paths: Vec<(String,)> = sqlx::query_as(
-        "SELECT a.file_path FROM assets a \
-         INNER JOIN album_assets aa ON aa.asset_id = a.id \
-         WHERE aa.album_id = ?",
-    )
-    .bind(id)
-    .fetch_all(&mut *tx)
-    .await?;
-
+pub async fn delete_with_assets(pool: &SqlitePool, id: i64) -> Result<Vec<String>> {
     sqlx::query(
-        "DELETE FROM assets WHERE id IN \
-         (SELECT asset_id FROM album_assets WHERE album_id = ?)",
+        "UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
     )
     .bind(id)
-    .execute(&mut *tx)
+    .execute(pool)
     .await?;
+    Ok(vec![])
+}
 
+pub async fn list_trash(pool: &SqlitePool) -> Result<Vec<Album>> {
+    sqlx::query_as::<_, Album>(
+        "SELECT * FROM albums WHERE is_deleted = 1 ORDER BY deleted_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
+pub async fn restore(pool: &SqlitePool, id: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE albums SET is_deleted = 0, deleted_at = NULL WHERE id = ?",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn purge(pool: &SqlitePool, id: i64) -> Result<()> {
     sqlx::query("DELETE FROM albums WHERE id = ?")
         .bind(id)
-        .execute(&mut *tx)
+        .execute(pool)
         .await?;
+    Ok(())
+}
 
-    tx.commit().await?;
-    Ok(paths.into_iter().map(|(p,)| p).collect())
+pub async fn purge_all(pool: &SqlitePool) -> Result<()> {
+    sqlx::query("DELETE FROM albums WHERE is_deleted = 1")
+        .execute(pool)
+        .await?;
+    Ok(())
 }

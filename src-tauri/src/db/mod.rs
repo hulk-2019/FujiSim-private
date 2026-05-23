@@ -59,6 +59,8 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE assets ADD COLUMN file_mtime INTEGER",
         "ALTER TABLE assets ADD COLUMN preview_path TEXT",
         "ALTER TABLE assets ADD COLUMN cover_path TEXT",
+        "ALTER TABLE albums ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE albums ADD COLUMN deleted_at TEXT",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }
