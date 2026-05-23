@@ -1375,39 +1375,54 @@ pub async fn get_album_summaries(
     state: State<'_, SharedState>,
 ) -> Result<Vec<AlbumSummary>> {
     let albums = albums::list(&state.pool).await?;
-    let mut summaries = Vec::with_capacity(albums.len());
-    for album in albums {
-        let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM album_assets WHERE album_id = ?",
-        )
-        .bind(album.id)
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or(0);
-
-        let covers: Vec<String> = sqlx::query_scalar(
-            "SELECT COALESCE(a.cover_path, a.file_path) \
-             FROM album_assets aa \
-             JOIN assets a ON a.id = aa.asset_id \
-             WHERE aa.album_id = ? \
-             ORDER BY a.date_taken DESC \
-             LIMIT 4",
-        )
-        .bind(album.id)
-        .fetch_all(&state.pool)
-        .await
-        .unwrap_or_default();
-
-        summaries.push(AlbumSummary {
-            id: album.id,
-            name: album.name,
-            created_at: album.created_at,
-            is_deleted: album.is_deleted,
-            deleted_at: album.deleted_at,
-            total,
-            cover_paths: covers,
-        });
+    if albums.is_empty() {
+        return Ok(vec![]);
     }
+
+    // 一次查询所有相册的资产数量
+    let totals: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT album_id, COUNT(*) as cnt FROM album_assets GROUP BY album_id",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let total_map: std::collections::HashMap<i64, i64> =
+        totals.into_iter().map(|(id, cnt)| (id, cnt)).collect();
+
+    // 一次查询所有相册的前4张封面（用 ROW_NUMBER 窗口函数）
+    let cover_rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT album_id, path FROM ( \
+            SELECT aa.album_id, COALESCE(a.cover_path, a.file_path) as path, \
+                   ROW_NUMBER() OVER (PARTITION BY aa.album_id ORDER BY a.date_taken DESC) as rn \
+            FROM album_assets aa \
+            JOIN assets a ON a.id = aa.asset_id \
+        ) WHERE rn <= 4",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut cover_map: std::collections::HashMap<i64, Vec<String>> =
+        std::collections::HashMap::new();
+    for (album_id, path) in cover_rows {
+        cover_map.entry(album_id).or_default().push(path);
+    }
+
+    let summaries = albums
+        .into_iter()
+        .map(|album| {
+            let total = total_map.get(&album.id).copied().unwrap_or(0);
+            let cover_paths = cover_map.remove(&album.id).unwrap_or_default();
+            AlbumSummary {
+                id: album.id,
+                name: album.name,
+                created_at: album.created_at,
+                is_deleted: album.is_deleted,
+                deleted_at: album.deleted_at,
+                total,
+                cover_paths,
+            }
+        })
+        .collect();
+
     Ok(summaries)
 }
 
