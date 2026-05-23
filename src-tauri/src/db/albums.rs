@@ -85,13 +85,13 @@ pub async fn name_exists(
 ) -> Result<bool> {
     let count: (i64,) = match exclude_id {
         Some(eid) => sqlx::query_as(
-            "SELECT COUNT(*) FROM albums WHERE name = ? AND id != ?",
+            "SELECT COUNT(*) FROM albums WHERE name = ? AND id != ? AND is_deleted = 0",
         )
         .bind(name)
         .bind(eid)
         .fetch_one(pool)
         .await?,
-        None => sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = ?")
+        None => sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = ? AND is_deleted = 0")
             .bind(name)
             .fetch_one(pool)
             .await?,
@@ -125,14 +125,14 @@ pub async fn asset_count(pool: &SqlitePool, id: i64) -> Result<i64> {
     Ok(count)
 }
 
-pub async fn delete_with_assets(pool: &SqlitePool, id: i64) -> Result<Vec<String>> {
+pub async fn delete_with_assets(pool: &SqlitePool, id: i64) -> Result<()> {
     sqlx::query(
         "UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
     )
     .bind(id)
     .execute(pool)
     .await?;
-    Ok(vec![])
+    Ok(())
 }
 
 pub async fn list_trash(pool: &SqlitePool) -> Result<Vec<Album>> {
@@ -155,7 +155,7 @@ pub async fn restore(pool: &SqlitePool, id: i64) -> Result<()> {
 }
 
 pub async fn purge(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query("DELETE FROM albums WHERE id = ?")
+    sqlx::query("DELETE FROM albums WHERE id = ? AND is_deleted = 1")
         .bind(id)
         .execute(pool)
         .await?;

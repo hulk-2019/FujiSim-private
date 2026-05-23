@@ -200,7 +200,9 @@ CREATE INDEX IF NOT EXISTS idx_assets_rating ON assets(star_rating);
 CREATE TABLE IF NOT EXISTS albums (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT
 );
 
 -- 相册 ↔ 资产 多对多关联
