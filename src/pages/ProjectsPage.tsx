@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MoreHorizontal } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useStore } from "@/store";
 import { api } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
 import type { AlbumSummary } from "@/types";
 
@@ -30,6 +29,7 @@ export function ProjectsPage() {
   const [renameTarget, setRenameTarget] = useState<AlbumSummary | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameError, setRenameError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<AlbumSummary | null>(null);
 
   // 进入页面时刷新一次，避免从编辑器导入素材后回来看到的是导入前的快照
   useEffect(() => {
@@ -72,6 +72,13 @@ export function ProjectsPage() {
     await Promise.all([refreshAlbums(), refreshAlbumSummaries()]);
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await handleDelete(target);
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-zinc-950">
       <div className="px-6 py-4 border-b border-zinc-800/60 flex items-center justify-between">
@@ -98,7 +105,7 @@ export function ProjectsPage() {
                 setRenameError("");
                 setRenameOpen(true);
               }}
-              onDelete={() => handleDelete(s)}
+              onDelete={() => setDeleteTarget(s)}
               renameLabel={t("projects.rename")}
               deleteLabel={t("projects.delete")}
             />
@@ -167,6 +174,30 @@ export function ProjectsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={deleteTarget != null}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogTitle>
+            {t("projects.confirmDeleteTitle", { name: deleteTarget?.name ?? "" })}
+          </DialogTitle>
+          <DialogDescription>
+            {(deleteTarget?.total ?? 0) > 0
+              ? t("projects.confirmDeleteDesc", { count: deleteTarget?.total ?? 0 })
+              : t("projects.confirmDeleteEmptyDesc")}
+          </DialogDescription>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+              {t("projects.cancel")}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              {t("projects.confirm")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -219,42 +250,40 @@ export function ProjectCard({
           </div>
         ))}
       </div>
-      <div className="px-3 py-2">
-        <p className="text-sm font-medium text-zinc-100 truncate">{summary.name}</p>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          {new Date(summary.created_at).toLocaleDateString("zh-CN")}
-        </p>
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100"
-          >
-            <MoreHorizontal size={13} />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
+      <div className="px-3 py-2 flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-zinc-100 truncate">{summary.name}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            {new Date(summary.created_at).toLocaleDateString("zh-CN")}
+          </p>
+        </div>
+        <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            title={renameLabel}
+            aria-label={renameLabel}
             onClick={(e) => {
               e.stopPropagation();
               onRename();
             }}
+            className="h-7 w-7 inline-flex items-center justify-center rounded text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-100"
           >
-            {renameLabel}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive"
+            <Pencil size={13} />
+          </button>
+          <button
+            type="button"
+            title={deleteLabel}
+            aria-label={deleteLabel}
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
             }}
+            className="h-7 w-7 inline-flex items-center justify-center rounded text-zinc-400 hover:bg-red-500/15 hover:text-red-400"
           >
-            {deleteLabel}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

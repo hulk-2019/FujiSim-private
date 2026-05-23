@@ -59,6 +59,8 @@ export const api = {
     invoke<Asset[]>("rename_assets", { ids, template }),
   moveAssets: (ids: number[], targetDir: string) =>
     invoke<Asset[]>("move_assets", { ids, targetDir }),
+  /** 在系统文件管理器中定位并高亮该文件 */
+  revealInFinder: (path: string) => invoke<void>("reveal_in_finder", { path }),
 
   // ===== 虚拟相册 =====
   listAlbums: () => invoke<Album[]>("list_albums"),

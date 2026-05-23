@@ -67,6 +67,7 @@ pub fn run() {
             ipc::set_rating,
             ipc::set_color_label,
             ipc::delete_assets,
+            ipc::reveal_in_finder,
             ipc::rename_asset,
             ipc::rename_assets,
             ipc::move_assets,

@@ -93,3 +93,34 @@ pub fn move_file(old_path: &Path, target_dir: &Path) -> Result<PathBuf> {
 pub fn move_to_trash(path: &Path) -> Result<()> {
     trash::delete(path).map_err(Into::into)
 }
+
+/// 在系统文件管理器中定位并高亮文件。
+/// macOS: `open -R <path>` 在 Finder 中选中文件
+/// Windows: `explorer /select,<path>` 选中并高亮
+/// Linux: 退化为打开父目录（多数 DE 没有标准的 select-file 协议）
+pub fn reveal_in_file_manager(path: &Path) -> Result<()> {
+    use std::process::Command;
+    if !path.exists() {
+        return Err(AppError::other(format!("path not found: {}", path.display())));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg("-R").arg(path).spawn()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,{}", path.display()))
+            .spawn()?;
+        return Ok(());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| AppError::other("invalid parent"))?;
+        Command::new("xdg-open").arg(parent).spawn()?;
+        Ok(())
+    }
+}

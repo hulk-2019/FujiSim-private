@@ -176,6 +176,14 @@ pub async fn delete_assets(
     Ok(())
 }
 
+/// 在系统文件管理器中定位并高亮指定路径。
+/// macOS Finder / Windows Explorer / Linux 退化为打开父目录。
+#[tauri::command]
+pub async fn reveal_in_finder(path: String) -> Result<()> {
+    let p = PathBuf::from(path);
+    fileops::reveal_in_file_manager(&p)
+}
+
 #[tauri::command]
 pub async fn rename_asset(
     state: State<'_, SharedState>,

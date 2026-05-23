@@ -4,13 +4,10 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   ImageIcon,
   Plus,
-  Filter,
-  ArrowUpDown,
   Star,
   RotateCcw,
   FolderOpen,
   Files,
-  Check,
 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
@@ -21,10 +18,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import type { Asset, AssetQuery } from "@/types";
+import {
+  ThumbContextMenu,
+  ConfirmDeleteDialog,
+  type ThumbMenuState,
+  type ConfirmState,
+} from "./AssetStripContextMenu";
+import { FilterMenu, SortMenu } from "./AssetStripFilters";
 
 const THUMB_W = 80;
 const GAP = 8;
@@ -35,14 +38,6 @@ const IMAGE_EXT = [
   "jpg", "jpeg", "png", "tif", "tiff", "webp", "heic", "heif",
   "arw", "cr2", "cr3", "nef", "nrw", "raf", "rw2", "dng",
   "orf", "pef", "srw", "rwl", "sr2",
-];
-
-const SORT_FIELDS: NonNullable<AssetQuery["sort_by"]>[] = [
-  "date_taken",
-  "created_at",
-  "star_rating",
-  "file_name",
-  "iso",
 ];
 
 export function AssetStrip() {
@@ -70,6 +65,58 @@ export function AssetStrip() {
     () => assets.find((a) => a?.id === focusedId) ?? null,
     [assets, focusedId],
   );
+
+  const [menu, setMenu] = useState<ThumbMenuState | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+
+  function handleContextMenu(asset: Asset, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    // 右键到未选中的缩图：把它单独定为操作目标；右键到已选中的多张里任意一张：保持多选
+    const isMulti = selectedIds.size > 1 && selectedIds.has(asset.id);
+    if (!isMulti && !selectedIds.has(asset.id)) {
+      toggleSelect(asset.id, false);
+      focusAsset(asset.id);
+    }
+    // 视口外溢出时夹一下，避免被边缘裁掉
+    const MARGIN = 8;
+    const x = Math.min(e.clientX, window.innerWidth - 200 - MARGIN);
+    const y = Math.min(e.clientY, window.innerHeight - 180 - MARGIN);
+    setMenu({ x, y, assetId: asset.id, multi: isMulti });
+  }
+
+  function requestDelete(kind: "db" | "disk", multi: boolean) {
+    if (!menu) return;
+    const ids = multi
+      ? Array.from(selectedIds)
+      : [menu.assetId];
+    if (ids.length === 0) return;
+    setConfirm({ kind, ids });
+  }
+
+  async function performDelete() {
+    if (!confirm) return;
+    const { ids, kind } = confirm;
+    setConfirm(null);
+    try {
+      // kind=db: 仅删除表中数据，不动磁盘文件；kind=disk: 文件入回收站 + 删除记录
+      await api.deleteAssets(ids, kind === "disk");
+      await Promise.all([refreshAssets(), refreshFacets(), refreshAlbumSummaries()]);
+    } catch (e) {
+      console.error("[AssetStrip] delete failed:", e);
+    }
+  }
+
+  async function revealCurrent() {
+    if (!menu) return;
+    const a = assets.find((x) => x?.id === menu.assetId);
+    if (!a) return;
+    try {
+      await api.revealInFinder(a.file_path);
+    } catch (e) {
+      console.error("[AssetStrip] reveal failed:", e);
+    }
+  }
 
   const hasFilter =
     !!query.search ||
@@ -285,6 +332,7 @@ export function AssetStrip() {
                       selected={selectedIds.has(a.id)}
                       focused={focusedId === a.id}
                       onClick={(e) => handleClick(a, e)}
+                      onContextMenu={(e) => handleContextMenu(a, e)}
                     />
                   ) : (
                     <div className="w-20 h-20 rounded-md bg-zinc-900/60 animate-pulse" />
@@ -295,176 +343,36 @@ export function AssetStrip() {
           </div>
         )}
       </div>
+
+      <ThumbContextMenu
+        state={menu}
+        onClose={() => setMenu(null)}
+        onRequestDelete={requestDelete}
+        onReveal={revealCurrent}
+      />
+      <ConfirmDeleteDialog
+        state={confirm}
+        onCancel={() => setConfirm(null)}
+        onConfirm={performDelete}
+      />
     </div>
   );
 }
 
-function FilterMenu({
-  hasFilter,
-  search,
-  minRating,
-  onChange,
-}: {
-  hasFilter: boolean;
-  search: string;
-  minRating: number;
-  onChange: (patch: AssetQuery) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState(search);
 
-  useEffect(() => {
-    if (open) setText(search);
-  }, [open, search]);
-
-  function commitSearch() {
-    onChange({ search: text.trim() || null });
-  }
-
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "h-7 px-2 inline-flex items-center gap-1 rounded text-[11px] hover:bg-zinc-800/60",
-            hasFilter ? "text-amber-300" : "text-zinc-400",
-          )}
-          title={t("editor.strip.filterTitle")}
-        >
-          <Filter size={12} />
-          {hasFilter ? t("editor.strip.filterActive") : t("editor.strip.filterEmpty")}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64 p-3 space-y-3">
-        <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-            {t("editor.strip.keyword")}
-          </div>
-          <Input
-            value={text}
-            placeholder={t("editor.strip.keywordPlaceholder")}
-            className="h-7 text-[11px]"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                commitSearch();
-                setOpen(false);
-              }
-            }}
-            onBlur={commitSearch}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-            {t("editor.strip.rating")}
-          </div>
-          <div className="flex items-center gap-1">
-            {[0, 1, 2, 3, 4, 5].map((n) => {
-              const active = minRating === n;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => onChange({ min_rating: n === 0 ? null : n })}
-                  className={cn(
-                    "h-6 min-w-[28px] px-1.5 rounded text-[11px] border transition-colors",
-                    active
-                      ? "bg-amber-400/20 border-amber-400/60 text-amber-200"
-                      : "border-zinc-800 text-zinc-400 hover:bg-zinc-800/60",
-                  )}
-                >
-                  {n === 0 ? t("sidebar.allRatings") : `≥${n}`}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function SortMenu({
-  sortBy,
-  sortDir,
-  onChange,
-}: {
-  sortBy: NonNullable<AssetQuery["sort_by"]>;
-  sortDir: NonNullable<AssetQuery["sort_dir"]>;
-  onChange: (patch: AssetQuery) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="h-7 px-2 inline-flex items-center gap-1 rounded text-[11px] text-zinc-400 hover:bg-zinc-800/60"
-          title={t("editor.strip.sortField")}
-        >
-          <ArrowUpDown size={12} />
-          {t(`editor.strip.sortFields.${sortBy}` as any, { defaultValue: sortBy })}
-          <span className="text-zinc-500">{sortDir === "asc" ? "↑" : "↓"}</span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52 p-1">
-        <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500">
-          {t("editor.strip.sortField")}
-        </div>
-        {SORT_FIELDS.map((f) => {
-          const active = sortBy === f;
-          return (
-            <DropdownMenuItem
-              key={f}
-              onSelect={(e) => {
-                e.preventDefault();
-                onChange({ sort_by: f });
-              }}
-              className="text-[11px] justify-between"
-            >
-              <span>{t(`editor.strip.sortFields.${f}` as any, { defaultValue: f })}</span>
-              {active && <Check size={12} className="text-amber-300" />}
-            </DropdownMenuItem>
-          );
-        })}
-        <div className="my-1 h-px bg-zinc-800" />
-        <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500">
-          {t("editor.strip.sortDir")}
-        </div>
-        {(["desc", "asc"] as const).map((d) => {
-          const active = sortDir === d;
-          return (
-            <DropdownMenuItem
-              key={d}
-              onSelect={(e) => {
-                e.preventDefault();
-                onChange({ sort_dir: d });
-              }}
-              className="text-[11px] justify-between"
-            >
-              <span>{t(`editor.strip.sortDir${d === "asc" ? "Asc" : "Desc"}` as any)}</span>
-              {active && <Check size={12} className="text-amber-300" />}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 function Thumb({
   asset,
   selected,
   focused,
   onClick,
+  onContextMenu,
 }: {
   asset: Asset;
   selected: boolean;
   focused: boolean;
   onClick: (e: React.MouseEvent) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const src = (() => {
     try {
@@ -479,6 +387,7 @@ function Thumb({
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContextMenu}
       className={cn(
         "w-20 h-20 flex-shrink-0 rounded-md overflow-hidden border-2 bg-zinc-900 transition-colors",
         focused
