@@ -29,8 +29,6 @@ export function EditorPage() {
 
   return (
     <div className="flex-1 flex min-h-0 bg-zinc-950 overflow-hidden">
-      <PresetList />
-
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <EditorToolbar
           showOriginal={showOriginal}
@@ -45,6 +43,8 @@ export function EditorPage() {
         </div>
         <AssetStrip />
       </div>
+
+      <PresetList />
 
       <div className="w-[340px] flex-shrink-0 flex flex-col bg-zinc-950/50 border-l border-zinc-800/60 overflow-hidden">
         <FilterPanel />

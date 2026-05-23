@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useStore } from "@/store";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -11,7 +9,6 @@ import type { FilterPreset } from "@/types";
 
 export function PresetList() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const presets = useStore((s) => s.presets);
   const filter = useStore((s) => s.filter);
   const applyPreset = useStore((s) => s.applyPreset);
@@ -30,16 +27,8 @@ export function PresetList() {
   }, [presets, tab, search]);
 
   return (
-    <aside className="w-[220px] flex-shrink-0 flex flex-col bg-zinc-950 border-r border-zinc-800/60 overflow-hidden">
-      <div className="h-10 flex-shrink-0 flex items-center gap-2 px-2 border-b border-zinc-800/60">
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 flex-shrink-0"
-          onClick={() => navigate("/projects")}
-        >
-          <ArrowLeft size={14} />
-        </Button>
+    <aside className="w-[220px] flex-shrink-0 flex flex-col bg-zinc-950 border-l border-zinc-800/60 overflow-hidden">
+      <div className="h-10 flex-shrink-0 flex items-center px-3 border-b border-zinc-800/60">
         <span className="text-sm text-zinc-200 truncate">{currentFolderName ?? ""}</span>
       </div>
 

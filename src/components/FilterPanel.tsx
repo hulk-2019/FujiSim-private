@@ -26,6 +26,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Section } from "@/components/ui/section";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStore } from "@/store";
 import { api } from "@/api";
 import { PASS_THROUGH_SIM } from "@/types";
@@ -141,9 +142,19 @@ export function FilterPanel() {
 
   return (
     <aside className="w-full h-full bg-transparent flex flex-col text-sm overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
+      <Tabs defaultValue="adjust" className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-3 pt-3">
+          <TabsList className="w-full grid grid-cols-3">
+            <TabsTrigger value="adjust">{t("filterPanel.tabs.adjust")}</TabsTrigger>
+            <TabsTrigger value="watermark">{t("filterPanel.tabs.watermark")}</TabsTrigger>
+            <TabsTrigger value="info">{t("filterPanel.tabs.info")}</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <Section title={t("editor.sections.basic")}>
+        <TabsContent value="adjust" className="flex-1 flex flex-col overflow-hidden mt-3">
+          <div className="flex-1 overflow-y-auto">
+
+            <Section title={t("editor.sections.basic")}>
           <div className="flex items-center justify-between mb-1">
             <Label>{t("filterPanel.filmSimulation")}</Label>
             <DropdownMenu>
@@ -245,18 +256,27 @@ export function FilterPanel() {
           <SliderRow label={t("filterPanel.sharpness")} value={filter.sharpness} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ sharpness: v })} />
         </Section>
 
-        <Section title={t("editor.sections.curves")} defaultOpen={false}>
-          <CurvesEditor
-            value={filter.tone_curve}
-            onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
-          />
-        </Section>
+            <Section title={t("editor.sections.curves")} defaultOpen={false}>
+              <CurvesEditor
+                value={filter.tone_curve}
+                onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
+              />
+            </Section>
+          </div>
 
-        <Section title={t("editor.sections.watermark")} defaultOpen={false}>
+          <div className="flex gap-2 px-4 py-3 border-t border-zinc-800/60">
+            <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
+            <Button size="sm" variant="default" onClick={() => setSaveOpen(true)} className="flex-1">
+              <Save size={12} /> {t("filterPanel.saveAsPreset")}
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="watermark" className="flex-1 overflow-y-auto px-4 pb-6 mt-3">
           <WatermarkTab />
-        </Section>
+        </TabsContent>
 
-        <Section title={t("editor.sections.info")} defaultOpen={false}>
+        <TabsContent value="info" className="flex-1 overflow-y-auto px-4 pb-6 mt-3">
           {focused ? (
             <div className="space-y-4 text-xs">
               <div className="space-y-1 pb-4 border-b border-zinc-800/60">
@@ -288,15 +308,8 @@ export function FilterPanel() {
               <p>{t("filterPanel.noSelection")}</p>
             </div>
           )}
-        </Section>
-
-        <div className="flex gap-2 px-4 py-3 border-t border-zinc-800/60">
-          <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
-          <Button size="sm" variant="default" onClick={() => setSaveOpen(true)} className="flex-1">
-            <Save size={12} /> {t("filterPanel.saveAsPreset")}
-          </Button>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent>
