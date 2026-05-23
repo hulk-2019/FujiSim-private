@@ -41,6 +41,19 @@ export type Album = {
   id: number;
   name: string;
   created_at: string;
+  is_deleted: number;
+  deleted_at: string | null;
+};
+
+/** 相册摘要（含封面路径和资产数量） */
+export type AlbumSummary = {
+  id: number;
+  name: string;
+  created_at: string;
+  is_deleted: number;
+  deleted_at: string | null;
+  total: number;
+  cover_paths: string[];
 };
 
 /** 滤镜预设的读模型，包含 13 个内置（is_builtin=1）+ 任意用户自定义 */

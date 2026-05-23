@@ -297,12 +297,13 @@ fn read_raw_meta_from_bytes(data: &[u8]) -> ExifData {
 /// 根据 EXIF orientation 把传感器尺寸换算为显示尺寸（orientation 5/6/7/8 需交换宽高）。
 fn display_dims(w: Option<i64>, h: Option<i64>, orientation: u32) -> (Option<i64>, Option<i64>) {
     match orientation {
-        5 | 6 | 7 | 8 => (h, w),
+        5..=8 => (h, w),
         _ => (w, h),
     }
 }
 
 #[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 fn build_asset(
     path: &Path,
     file_name: String,

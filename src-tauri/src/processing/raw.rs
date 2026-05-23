@@ -302,7 +302,7 @@ fn decode_lossy_dng(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     let offsets = t.u32_array(off_val, tile_cnt);
     let counts = t.u32_array(bc_val, tile_cnt);
 
-    let tiles_x = (img_w + tile_w - 1) / tile_w;
+    let tiles_x = img_w.div_ceil(tile_w);
     let mut out: ImageBuffer<Rgb<u16>, Vec<u16>> = ImageBuffer::new(img_w, img_h);
 
     for (i, (&off, &cnt)) in offsets.iter().zip(counts.iter()).enumerate() {

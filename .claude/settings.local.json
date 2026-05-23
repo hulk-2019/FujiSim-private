@@ -39,7 +39,11 @@
       "Bash(npm install *)",
       "Bash(npm --version)",
       "Bash(node -e ' *)",
-      "WebFetch(domain:use-gesture.netlify.app)"
+      "WebFetch(domain:use-gesture.netlify.app)",
+      "Bash(ls /Users/ry2019/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/subagent-driven-development/)",
+      "Read(//Users/ry2019/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/subagent-driven-development/**)",
+      "Bash(cargo clippy *)",
+      "Bash(pnpm tsc *)"
     ]
   }
 }

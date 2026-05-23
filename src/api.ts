@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Album,
+  AlbumSummary,
   Asset,
   AssetQuery,
   BatchProgress,
@@ -77,6 +78,12 @@ export const api = {
     invoke<void>("album_add", { albumId, assetIds }),
   albumRemove: (albumId: number, assetIds: number[]) =>
     invoke<void>("album_remove", { albumId, assetIds }),
+
+  getAlbumSummaries: () => invoke<AlbumSummary[]>("get_album_summaries"),
+  listTrashAlbums: () => invoke<Album[]>("list_trash_albums"),
+  restoreAlbum: (id: number) => invoke<void>("restore_album", { id }),
+  purgeAlbum: (id: number) => invoke<void>("purge_album", { id }),
+  purgeAllTrash: () => invoke<void>("purge_all_trash"),
 
   // ===== 滤镜预设 CRUD =====
   listPresets: () => invoke<FilterPreset[]>("list_presets"),

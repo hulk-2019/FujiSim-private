@@ -586,6 +586,7 @@ fn estimate_export_memory_mb(file_size_bytes: i64) -> u64 {
 }
 
 /// 在 spawn_blocking 线程中执行单个资产的导出任务，完成后调度下一个 pending 任务。
+#[allow(clippy::too_many_arguments)]
 fn run_export_task(
     state: SharedState,
     app: tauri::AppHandle,
@@ -632,15 +633,13 @@ fn run_export_task(
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         loop {
             let current = state.export_memory_budget.load(std::sync::atomic::Ordering::SeqCst);
-            if current >= needed_mb {
-                if state.export_memory_budget
+            if current >= needed_mb && state.export_memory_budget
                     .compare_exchange(current, current - needed_mb,
                         std::sync::atomic::Ordering::SeqCst,
                         std::sync::atomic::Ordering::SeqCst)
                     .is_ok()
-                {
-                    break;
-                }
+            {
+                break;
             }
             if std::time::Instant::now() > deadline { break; }
             std::thread::sleep(std::time::Duration::from_millis(200));
@@ -1386,7 +1385,7 @@ pub async fn get_album_summaries(
     .fetch_all(&state.pool)
     .await?;
     let total_map: std::collections::HashMap<i64, i64> =
-        totals.into_iter().map(|(id, cnt)| (id, cnt)).collect();
+        totals.into_iter().collect();
 
     // 一次查询所有相册的前4张封面（用 ROW_NUMBER 窗口函数）
     let cover_rows: Vec<(i64, String)> = sqlx::query_as(

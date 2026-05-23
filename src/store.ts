@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Album,
+  AlbumSummary,
   Asset,
   AssetQuery,
   BatchProgress,
@@ -95,6 +96,13 @@ type AppState = {
   cameras: string[];
   fujiSimulations: string[];
   albums: Album[];
+  albumSummaries: AlbumSummary[];
+  trashedAlbums: Album[];
+  refreshAlbumSummaries: () => Promise<void>;
+  refreshTrash: () => Promise<void>;
+  restoreAlbum: (id: number) => Promise<void>;
+  purgeAlbum: (id: number) => Promise<void>;
+  purgeAllTrash: () => Promise<void>;
   currentFolderId: number | null;
   currentFolderName: string | null;
   enterFolder: (id: number, name: string) => Promise<void>;
@@ -189,6 +197,8 @@ export const useStore = create<AppState>((set, get) => ({
     "Nostalgic Neg", "Acros", "Acros + Y", "Acros + R", "Monochrome",
   ],
   albums: [],
+  albumSummaries: [],
+  trashedAlbums: [],
   currentFolderId: null,
   currentFolderName: null,
   importing: false,
@@ -294,6 +304,31 @@ export const useStore = create<AppState>((set, get) => ({
   refreshAlbums: async () => {
     const list = await api.listAlbums().catch(() => []);
     set({ albums: list });
+  },
+
+  refreshAlbumSummaries: async () => {
+    const list = await api.getAlbumSummaries().catch(() => []);
+    set({ albumSummaries: list });
+  },
+
+  refreshTrash: async () => {
+    const list = await api.listTrashAlbums().catch(() => []);
+    set({ trashedAlbums: list });
+  },
+
+  restoreAlbum: async (id) => {
+    await api.restoreAlbum(id);
+    await Promise.all([get().refreshAlbums(), get().refreshAlbumSummaries(), get().refreshTrash()]);
+  },
+
+  purgeAlbum: async (id) => {
+    await api.purgeAlbum(id);
+    await get().refreshTrash();
+  },
+
+  purgeAllTrash: async () => {
+    await api.purgeAllTrash();
+    await get().refreshTrash();
   },
 
   enterFolder: async (id, name) => {
