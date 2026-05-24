@@ -155,8 +155,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       const isIdentity =
         (filter.base_simulation === "Pass-Through" || !filter.base_simulation) &&
         !filter.lut_file_path &&
+        filter.exposure === 0 &&
+        filter.contrast === 0 &&
+        filter.brightness === 0 &&
         filter.highlight_tone === 0 &&
         filter.shadow_tone === 0 &&
+        filter.white === 0 &&
+        filter.black === 0 &&
+        filter.dehaze === 0 &&
+        filter.vibrance === 0 &&
         filter.color_saturation === 0 &&
         filter.clarity === 0 &&
         filter.sharpness === 0 &&
