@@ -31,7 +31,6 @@ import type { ToneCurvePoints } from "@/types";
 
 const GRAIN_EFFECTS = ["None", "Weak", "Medium", "Strong"];
 const GRAIN_SIZES = ["Small", "Large"];
-const CHROME_EFFECTS = ["None", "Weak", "Strong"];
 
 export function FilterPanel() {
   const { t } = useTranslation();
@@ -67,7 +66,6 @@ export function FilterPanel() {
       base_simulation: filter.base_simulation,
       grain_effect: filter.grain_effect ?? null,
       grain_size: filter.grain_size ?? null,
-      color_chrome_effect: filter.color_chrome_effect ?? null,
       exposure: filter.exposure,
       contrast: filter.contrast,
       brightness: filter.brightness,
@@ -143,15 +141,6 @@ export function FilterPanel() {
         <Section title={t("editor.sections.color")}>
           <SliderRow label={t("filterPanel.vibrance")}   value={filter.vibrance}         min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ vibrance: v })} />
           <SliderRow label={t("filterPanel.saturation")} value={filter.color_saturation} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ color_saturation: v })} />
-          <div>
-            <Label>{t("filterPanel.colorEffect")}</Label>
-            <Select value={filter.color_chrome_effect ?? "None"} onValueChange={(v) => setFilter({ color_chrome_effect: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CHROME_EFFECTS.map((g) => <SelectItem key={g} value={g}>{grainEffectLabel(g)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
           <SliderRow label={t("filterPanel.wbShiftR")} value={filter.wb_shift_r} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_r: v })} />
           <SliderRow label={t("filterPanel.wbShiftB")} value={filter.wb_shift_b} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_b: v })} />
         </Section>
