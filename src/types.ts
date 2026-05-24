@@ -56,6 +56,13 @@ export type AlbumSummary = {
   cover_paths: string[];
 };
 
+export type PresetCategory = {
+  id: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+};
+
 /** 滤镜预设的读模型，包含 13 个内置（is_builtin=1）+ 任意用户自定义 */
 export type FilterPreset = {
   id: number;
@@ -72,6 +79,7 @@ export type FilterPreset = {
   wb_shift_r: number;
   wb_shift_b: number;
   lut_file_path?: string | null;
+  category_id?: number | null;
   is_builtin: number;
   created_at: string;
 };
@@ -200,6 +208,7 @@ export type UserLut = {
   id: number;
   name: string;
   file_path: string;
+  category_id?: number | null;
   created_at: string;
 };
 

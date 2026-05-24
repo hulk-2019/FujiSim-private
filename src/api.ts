@@ -12,6 +12,7 @@ import type {
   ImportReport,
   LibraryStats,
   NewFilterPreset,
+  PresetCategory,
   PreviewResult,
   UserLut,
   UserFont,
@@ -93,13 +94,31 @@ export const api = {
     invoke<FilterPreset>("save_preset", { preset }),
   /** 仅可删用户自定义预设。后端 SQL 强制 `is_builtin=0`，传内置 id 不会报错但也不会删 */
   deletePreset: (id: number) => invoke<void>("delete_preset", { id }),
+  listPresetCategories: () => invoke<PresetCategory[]>("list_preset_categories"),
+  createPresetCategory: (name: string) =>
+    invoke<PresetCategory>("create_preset_category", { name }),
+  renamePresetCategory: (id: number, name: string) =>
+    invoke<PresetCategory>("rename_preset_category", { id, name }),
+  deletePresetCategory: (id: number) =>
+    invoke<void>("delete_preset_category", { id }),
+  checkPresetCategoryNameExists: (name: string, excludeId?: number | null) =>
+    invoke<boolean>("check_preset_category_name_exists", {
+      name,
+      excludeId: excludeId ?? null,
+    }),
+  setPresetCategory: (presetId: number, categoryId: number | null) =>
+    invoke<void>("set_preset_category", { presetId, categoryId }),
+  setUserLutCategory: (lutId: number, categoryId: number | null) =>
+    invoke<void>("set_user_lut_category", { lutId, categoryId }),
   listFujiSimulations: () => invoke<string[]>("list_fuji_simulations"),
 
   // ===== 用户 3D LUT 库 =====
   /** 批量导入 .cube；后端会复制到数据目录、校验合法、入库，单条失败会被跳过 */
-  importLuts: (paths: string[]) => invoke<UserLut[]>("import_luts", { paths }),
+  importLuts: (paths: string[], categoryId: number | null = null) =>
+    invoke<UserLut[]>("import_luts", { paths, categoryId }),
   /** 扫描目录下所有 .cube 文件并批量导入 */
-  importLutsFromDir: (dir: string) => invoke<UserLut[]>("import_luts_from_dir", { dir }),
+  importLutsFromDir: (dir: string, categoryId: number | null = null) =>
+    invoke<UserLut[]>("import_luts_from_dir", { dir, categoryId }),
   listUserLuts: () => invoke<UserLut[]>("list_user_luts"),
   deleteUserLut: (id: number) => invoke<void>("delete_user_lut", { id }),
 
