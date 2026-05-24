@@ -312,6 +312,11 @@ const zh = {
       builtin: "推荐",
       mine: "我的",
       searchPlaceholder: "搜索预设",
+      newCategory: "新建分类",
+      renameCategory: "重命名分类",
+      categoryNamePlaceholder: "输入分类名称",
+      categoryNameExists: "该分类名已存在",
+      categoryNameEmpty: "请输入分类名称",
     },
     presetNames: {
       "Provia": "Provia 标准",

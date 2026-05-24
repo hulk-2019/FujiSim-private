@@ -312,6 +312,11 @@ const en = {
       builtin: "Recommended",
       mine: "Mine",
       searchPlaceholder: "Search presets",
+      newCategory: "New category",
+      renameCategory: "Rename category",
+      categoryNamePlaceholder: "Enter category name",
+      categoryNameExists: "Category name already exists",
+      categoryNameEmpty: "Please enter a category name",
     },
     presetNames: {
       "Provia": "Provia",
