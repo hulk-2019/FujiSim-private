@@ -20,6 +20,7 @@ use std::path::Path;
 
 pub mod color;
 pub mod curves;
+pub mod dehaze;
 pub mod fuji;
 pub mod grain;
 pub mod lut;
