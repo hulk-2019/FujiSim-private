@@ -63,7 +63,6 @@ const zh = {
     vibrance: "鲜艳度",
     grainStrength: "颗粒强度",
     grainSize: "颗粒大小",
-    colorEffect: "色彩效果",
     highlight: "高光",
     shadow: "阴影",
     saturation: "饱和度",

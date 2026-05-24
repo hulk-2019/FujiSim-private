@@ -63,7 +63,6 @@ const en = {
     vibrance: "Vibrance",
     grainStrength: "Grain strength",
     grainSize: "Grain size",
-    colorEffect: "Color effect",
     highlight: "Highlight",
     shadow: "Shadow",
     saturation: "Saturation",
