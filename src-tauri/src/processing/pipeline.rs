@@ -1,4 +1,9 @@
 use crate::error::Result;
+use crate::processing::dehaze::apply_dehaze;
+use crate::processing::saturation::{apply_saturation_pixel, apply_vibrance_pixel};
+use crate::processing::tone::{
+    apply_brightness_pixel, apply_contrast_pixel, apply_exposure_pixel, apply_tone_segments_pixel,
+};
 use crate::processing::{
     color::{self, f_to_u16, u16_to_f},
     curves::{self, ToneCurve},
@@ -31,7 +36,6 @@ pub struct ToneCurvePoints {
 /// 通过 serde 自动收/发；缺省值由 `Default` 与 `#[serde(default)]` 给出，
 /// 保证前端发送部分字段也能正常工作。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct FilterSettings {
     pub base_simulation: String,
     #[serde(default)]
@@ -157,12 +161,10 @@ pub fn process_image(
     let (w, h) = src.dimensions();
     let profile = fuji::lookup(&settings.base_simulation);
 
-    // 用户的高光/阴影/对比叠加在预设上（预设的 contrast 直接进 curve.build 的第三个参数）
-    let curve = ToneCurve::build(
-        (settings.highlight_tone as f32 / 100.0) + profile.contrast * 0.0,
-        settings.shadow_tone as f32 / 100.0,
-        profile.contrast,
-    );
+    // Fuji preset's contrast curve. User's highlight_tone/shadow_tone are now applied
+    // separately via apply_tone_segments_pixel; pass 0 here so the preset curve isn't
+    // double-counted.
+    let curve = ToneCurve::build(0.0, 0.0, profile.contrast);
     // 三条分通道曲线，本质上是"基础曲线复合一次轻微弯折"
     let (rc, gc, bc) =
         curves::build_per_channel_curves(&curve, profile.r_tilt, profile.g_tilt, profile.b_tilt);
@@ -206,18 +208,48 @@ pub fn process_image(
         let mut g = u16_to_f(px.0[1]);
         let mut b = u16_to_f(px.0[2]);
 
-        // [1] 白平衡偏移：富士机内是 -9..+9 整数档，每档对应 ~2% 的通道增益
+        // [1] WB shift
         let (nr, ng, nb) = color::apply_wb_shift(r, g, b, settings.wb_shift_r, settings.wb_shift_b);
         r = nr;
         g = ng;
         b = nb;
 
-        // [2] 分通道色调曲线
+        // [2] Exposure (linear gain)
+        let (nr, ng, nb) = apply_exposure_pixel(r, g, b, settings.exposure);
+        r = nr;
+        g = ng;
+        b = nb;
+
+        // [3] Brightness then Contrast
+        let (nr, ng, nb) = apply_brightness_pixel(r, g, b, settings.brightness);
+        r = nr;
+        g = ng;
+        b = nb;
+        let (nr, ng, nb) = apply_contrast_pixel(r, g, b, settings.contrast);
+        r = nr;
+        g = ng;
+        b = nb;
+
+        // [4] Highlight / Shadow / White / Black 4-segment
+        let (nr, ng, nb) = apply_tone_segments_pixel(
+            r,
+            g,
+            b,
+            settings.highlight_tone,
+            settings.shadow_tone,
+            settings.white,
+            settings.black,
+        );
+        r = nr;
+        g = ng;
+        b = nb;
+
+        // [5] 分通道色调曲线 (Fuji preset)
         r = rc.apply(r);
         g = gc.apply(g);
         b = bc.apply(b);
 
-        // [2b] User point curves (applied on top of Fuji preset curves)
+        // [5b] User point curves (applied on top of Fuji preset curves)
         if let Some(ref uc) = user_rgb_curve {
             r = uc.apply(r);
             g = uc.apply(g);
@@ -233,7 +265,7 @@ pub fn process_image(
             b = uc.apply(b);
         }
 
-        // [3] Split Toning：根据亮度把像素分到"高光端"或"阴影端"，分别乘以预设里的染色系数
+        // [6] Split Toning：根据亮度把像素分到"高光端"或"阴影端"，分别乘以预设里的染色系数
         let l = color::luminance(r, g, b);
         let hi = (l - 0.5).max(0.0) * 2.0;
         let sh = (0.5 - l).max(0.0) * 2.0;
@@ -249,14 +281,24 @@ pub fn process_image(
         g += profile.green_shift * 0.05;
         b += profile.blue_shift * 0.05;
 
-        // [4] 饱和度：以亮度为锚点的线性插值，避免单纯乘法导致颜色偏移
-        let sat_amount = profile.saturation + (settings.color_saturation as f32 / 100.0);
-        let (sr, sg, sb) = color::saturate(r, g, b, sat_amount);
-        r = sr;
-        g = sg;
-        b = sb;
+        // [7] Vibrance (low-sat weighted)
+        let (nr, ng, nb) = apply_vibrance_pixel(r, g, b, settings.vibrance);
+        r = nr;
+        g = ng;
+        b = nb;
 
-        // [5] Color Chrome：在 HSL 空间提升已经较饱和的区域
+        // [7b] Saturation (global) + Fuji preset's saturation
+        // preset.saturation 范围是 -1..+1，折算到 -100..+100，与用户值合并
+        #[allow(clippy::cast_possible_truncation)]
+        let combined_sat = settings.color_saturation + (profile.saturation * 100.0) as i32;
+        if combined_sat != 0 {
+            let (nr, ng, nb) = apply_saturation_pixel(r, g, b, combined_sat);
+            r = nr;
+            g = ng;
+            b = nb;
+        }
+
+        // [8] Color Chrome：在 HSL 空间提升已经较饱和的区域
         if chrome_strength > 0.0 {
             let (h_, s, lv) = color::rgb_to_hsl(r, g, b);
             let boosted_s = (s + chrome_strength * (1.0 - s) * 0.5).clamp(0.0, 1.0);
@@ -266,7 +308,7 @@ pub fn process_image(
             b = cb;
         }
 
-        // [6] 褪色：往全图掺一点点亮灰（蓝偏一点点），实现"奶油色调"
+        // [9] 褪色：往全图掺一点点亮灰（蓝偏一点点），实现"奶油色调"
         if profile.fade > 0.0 {
             let f = profile.fade;
             r = r * (1.0 - f) + 0.08 * f;
@@ -274,7 +316,7 @@ pub fn process_image(
             b = b * (1.0 - f) + 0.10 * f;
         }
 
-        // [7] 黑白：用 Rec.601 亮度转灰度，再乘以预设的染色系数实现黄/红滤片效果
+        // [10] 黑白：用 Rec.601 亮度转灰度，再乘以预设的染色系数实现黄/红滤片效果
         if profile.monochrome {
             let y = 0.299 * r + 0.587 * g + 0.114 * b;
             r = (y * profile.mono_tint.0).clamp(0.0, 1.0);
@@ -282,7 +324,7 @@ pub fn process_image(
             b = (y * profile.mono_tint.2).clamp(0.0, 1.0);
         }
 
-        // [8] 外挂 3D LUT：放在最后，让用户的 LUT 工作在已应用富士曲线后的色彩上
+        // [11] 外挂 3D LUT：放在最后，让用户的 LUT 工作在已应用富士曲线后的色彩上
         if let Some(lut) = &lut {
             let (lr, lg, lb) = lut.apply(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0));
             r = lr;
@@ -295,7 +337,12 @@ pub fn process_image(
         chunk[2] = b.clamp(0.0, 1.0);
     });
 
-    // [9] Clarity / Sharpness：基于亮度的非锐化遮罩。半径不同：Clarity 模拟"中频对比"，Sharpness 是细节锐化
+    // [12] Dehaze (whole-image, DCP + guided filter)
+    if settings.dehaze != 0 {
+        apply_dehaze(&mut buf, w, h, settings.dehaze);
+    }
+
+    // [13] Clarity / Sharpness：基于亮度的非锐化遮罩。半径不同：Clarity 模拟"中频对比"，Sharpness 是细节锐化
     // 以 1920px 为基准缩放半径，保证视觉效果与预览一致
     let res_scale = (w.max(h) as f32 / 1920.0).max(1.0);
     if settings.clarity != 0 {
