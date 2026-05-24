@@ -1,25 +1,15 @@
 import { useEffect, useState } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Save, Info, FolderOpen, Files, ChevronDown, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, SlidersHorizontal, Stamp, ScrollText, type LucideIcon } from "lucide-react";
+import { Save, Info, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, SlidersHorizontal, Stamp, ScrollText, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +34,6 @@ const GRAIN_SIZES = ["Small", "Large"];
 const CHROME_EFFECTS = ["None", "Weak", "Strong"];
 
 const FUJI_PREFIX = "fuji:";
-const LUT_PREFIX = "lut:";
 
 export function FilterPanel() {
   const { t } = useTranslation();
@@ -53,66 +42,23 @@ export function FilterPanel() {
   const resetFilter = useStore((s) => s.resetFilter);
   const refreshPresets = useStore((s) => s.refreshPresets);
   const fujiSimulations = useStore((s) => s.fujiSimulations);
-  const userLuts = useStore((s) => s.userLuts);
-  const refreshUserLuts = useStore((s) => s.refreshUserLuts);
   const assets = useStore((s) => s.assets);
   const focusedId = useStore((s) => s.focusedId);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
-  const [importingLut, setImportingLut] = useState(false);
 
   useEffect(() => {
     refreshPresets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedValue = (() => {
-    if (filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path) {
-      const matched = userLuts.find((l) => l.file_path === filter.lut_file_path);
-      if (matched) return `${LUT_PREFIX}${matched.id}`;
-    }
-    return `${FUJI_PREFIX}${filter.base_simulation}`;
-  })();
+  const selectedValue = `${FUJI_PREFIX}${filter.base_simulation}`;
 
   function handleSimulationChange(value: string) {
     if (value.startsWith(FUJI_PREFIX)) {
       setFilter({ base_simulation: value.slice(FUJI_PREFIX.length), lut_file_path: null });
-      return;
-    }
-    if (value.startsWith(LUT_PREFIX)) {
-      const lut = userLuts.find((l) => l.id === Number(value.slice(LUT_PREFIX.length)));
-      if (lut) setFilter({ base_simulation: PASS_THROUGH_SIM, lut_file_path: lut.file_path });
-    }
-  }
-
-  async function importLuts() {
-    const selected = await openDialog({
-      multiple: true,
-      filters: [{ name: "Cube LUT", extensions: ["cube", "CUBE"] }],
-    });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    if (paths.length === 0) return;
-    setImportingLut(true);
-    try {
-      await api.importLuts(paths);
-      await refreshUserLuts();
-    } finally {
-      setImportingLut(false);
-    }
-  }
-
-  async function importLutsFromDir() {
-    const selected = await openDialog({ directory: true, multiple: false });
-    if (!selected || typeof selected !== "string") return;
-    setImportingLut(true);
-    try {
-      await api.importLutsFromDir(selected);
-      await refreshUserLuts();
-    } finally {
-      setImportingLut(false);
     }
   }
 
@@ -155,52 +101,14 @@ export function FilterPanel() {
           <ScrollArea className="flex-1">
             <div className="px-0 py-0">
             <Section title={t("editor.sections.basic")}>
-          <div className="flex items-center justify-between mb-1">
-            <Label>{t("filterPanel.filmSimulation")}</Label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={importingLut}
-                  className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-200 disabled:opacity-50"
-                >
-                  {importingLut ? t("filterPanel.importing") : t("filterPanel.importLut")}
-                  <ChevronDown size={10} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={importLuts}>
-                  <Files size={13} />
-                  {t("filterPanel.importFiles")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={importLutsFromDir}>
-                  <FolderOpen size={13} />
-                  {t("filterPanel.importDir")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <Label>{t("filterPanel.filmSimulation")}</Label>
           <Select value={selectedValue} onValueChange={handleSimulationChange}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectGroup>
-                <SelectLabel>{t("filterPanel.systemPresets")}</SelectLabel>
-                <SelectItem value={`${FUJI_PREFIX}Pass-Through`}>{t("filterPanel.noSimulation")}</SelectItem>
-                {fujiSimulations.map((s) => (
-                  <SelectItem key={s} value={`${FUJI_PREFIX}${s}`}>{s}</SelectItem>
-                ))}
-              </SelectGroup>
-              {userLuts.length > 0 && (
-                <>
-                  <SelectSeparator />
-                  <SelectGroup>
-                    <SelectLabel>{t("filterPanel.userPresets")}</SelectLabel>
-                    {userLuts.map((l) => (
-                      <SelectItem key={l.id} value={`${LUT_PREFIX}${l.id}`}>{l.name}</SelectItem>
-                    ))}
-                  </SelectGroup>
-                </>
-              )}
+              <SelectItem value={`${FUJI_PREFIX}Pass-Through`}>{t("filterPanel.noSimulation")}</SelectItem>
+              {fujiSimulations.map((s) => (
+                <SelectItem key={s} value={`${FUJI_PREFIX}${s}`}>{s}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path && (
