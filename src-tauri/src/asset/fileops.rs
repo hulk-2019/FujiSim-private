@@ -101,19 +101,22 @@ pub fn move_to_trash(path: &Path) -> Result<()> {
 pub fn reveal_in_file_manager(path: &Path) -> Result<()> {
     use std::process::Command;
     if !path.exists() {
-        return Err(AppError::other(format!("path not found: {}", path.display())));
+        return Err(AppError::other(format!(
+            "path not found: {}",
+            path.display()
+        )));
     }
     #[cfg(target_os = "macos")]
     {
         Command::new("open").arg("-R").arg(path).spawn()?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer")
             .arg(format!("/select,{}", path.display()))
             .spawn()?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {

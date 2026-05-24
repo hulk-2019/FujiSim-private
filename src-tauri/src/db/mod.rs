@@ -1,17 +1,17 @@
 use crate::error::Result;
-use sqlx::sqlite::{SqlitePoolOptions, SqliteConnectOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{ConnectOptions, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
 
-pub mod assets;
 pub mod albums;
+pub mod app_settings;
+pub mod assets;
 pub mod presets;
 pub mod tasks;
 pub mod user_fonts;
 pub mod user_luts;
 pub mod watermark_presets;
-pub mod app_settings;
 
 /// 创建（或打开）SQLite 数据库连接池。
 ///
@@ -61,6 +61,10 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE assets ADD COLUMN cover_path TEXT",
         "ALTER TABLE albums ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE albums ADD COLUMN deleted_at TEXT",
+        "ALTER TABLE filter_presets ADD COLUMN category_id INTEGER",
+        "ALTER TABLE user_luts      ADD COLUMN category_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_filter_presets_category ON filter_presets(category_id)",
+        "CREATE INDEX IF NOT EXISTS idx_user_luts_category      ON user_luts(category_id)",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }
@@ -95,28 +99,32 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     // 2. 用 json_each 把旧行按 JSON 数组拆成多行新行（asset_id 有值）
     // 3. 删除旧行（asset_id IS NULL 的行）和旧列
     let has_old_col: bool = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pragma_table_info('batch_tasks') WHERE name='asset_ids_json'"
+        "SELECT COUNT(*) FROM pragma_table_info('batch_tasks') WHERE name='asset_ids_json'",
     )
     .fetch_one(pool)
     .await
-    .unwrap_or(0i64) > 0;
+    .unwrap_or(0i64)
+        > 0;
 
     let has_new_col: bool = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM pragma_table_info('batch_tasks') WHERE name='asset_id'"
+        "SELECT COUNT(*) FROM pragma_table_info('batch_tasks') WHERE name='asset_id'",
     )
     .fetch_one(pool)
     .await
-    .unwrap_or(0i64) > 0;
+    .unwrap_or(0i64)
+        > 0;
 
     // 先确保 asset_id 列存在（已存在时 ALTER TABLE 会报错，忽略即可）
     if !has_new_col {
         let _ = sqlx::query("ALTER TABLE batch_tasks ADD COLUMN asset_id INTEGER")
-            .execute(pool).await;
+            .execute(pool)
+            .await;
     }
 
     if has_old_col {
         // 用 json_each 把每条旧任务拆成多行写入新格式（asset_id 有值的新行）
-        let _ = sqlx::query(r#"
+        let _ = sqlx::query(
+            r#"
             INSERT INTO batch_tasks
                 (status, asset_id, total, export_settings_json, filter_settings_json,
                  watermark_json, watermark_layer_path, created_at, completed_at,
@@ -136,15 +144,20 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             FROM batch_tasks bt, json_each(bt.asset_ids_json) je
             WHERE bt.asset_ids_json IS NOT NULL AND bt.asset_ids_json != '[]'
               AND CAST(je.value AS INTEGER) IN (SELECT id FROM assets)
-        "#).execute(pool).await;
+        "#,
+        )
+        .execute(pool)
+        .await;
 
         // 删除 asset_id 为 NULL 的旧行（原始 asset_ids_json 格式的行）
         let _ = sqlx::query("DELETE FROM batch_tasks WHERE asset_id IS NULL")
-            .execute(pool).await;
+            .execute(pool)
+            .await;
 
         // 删除旧列
         let _ = sqlx::query("ALTER TABLE batch_tasks DROP COLUMN asset_ids_json")
-            .execute(pool).await;
+            .execute(pool)
+            .await;
     }
 
     sqlx::query(
@@ -293,4 +306,14 @@ CREATE TABLE IF NOT EXISTS user_fonts (
     is_deleted INTEGER NOT NULL DEFAULT 0,
     deleted_at TEXT
 );
+
+-- 用户自定义预设分类：统一组织 filter_presets 和 user_luts
+CREATE TABLE IF NOT EXISTS preset_categories (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_preset_categories_sort ON preset_categories(sort_order);
 "#;
