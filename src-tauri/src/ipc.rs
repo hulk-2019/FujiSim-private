@@ -9,7 +9,9 @@
 //! 命名上和前端 `src/api.ts` 中的方法名严格对齐（snake_case ↔ camelCase 由 Tauri 自动转换）。
 
 use crate::asset::{fileops, scanner};
-use crate::db::{albums, assets, presets, tasks, user_fonts, user_luts, watermark_presets};
+use crate::db::{
+    albums, assets, preset_categories, presets, tasks, user_fonts, user_luts, watermark_presets,
+};
 use crate::error::{AppError, Result};
 use crate::export::{self, ExportSettings};
 use crate::processing::lut::Lut3D;
@@ -1552,4 +1554,70 @@ pub async fn purge_album(state: State<'_, SharedState>, id: i64) -> Result<()> {
 #[tauri::command]
 pub async fn purge_all_trash(state: State<'_, SharedState>) -> Result<()> {
     albums::purge_all(&state.pool).await
+}
+
+// ===== 预设分类 =====
+
+#[tauri::command]
+pub async fn list_preset_categories(
+    state: State<'_, SharedState>,
+) -> Result<Vec<preset_categories::PresetCategory>> {
+    preset_categories::list(&state.pool).await
+}
+
+#[tauri::command]
+pub async fn create_preset_category(
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<preset_categories::PresetCategory> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::other("分类名不能为空"));
+    }
+    preset_categories::create(&state.pool, trimmed).await
+}
+
+#[tauri::command]
+pub async fn rename_preset_category(
+    state: State<'_, SharedState>,
+    id: i64,
+    name: String,
+) -> Result<preset_categories::PresetCategory> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::other("分类名不能为空"));
+    }
+    preset_categories::rename(&state.pool, id, trimmed).await
+}
+
+#[tauri::command]
+pub async fn delete_preset_category(state: State<'_, SharedState>, id: i64) -> Result<()> {
+    preset_categories::delete(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn check_preset_category_name_exists(
+    state: State<'_, SharedState>,
+    name: String,
+    exclude_id: Option<i64>,
+) -> Result<bool> {
+    preset_categories::name_exists(&state.pool, name.trim(), exclude_id).await
+}
+
+#[tauri::command]
+pub async fn set_preset_category(
+    state: State<'_, SharedState>,
+    preset_id: i64,
+    category_id: Option<i64>,
+) -> Result<()> {
+    presets::set_category(&state.pool, preset_id, category_id).await
+}
+
+#[tauri::command]
+pub async fn set_user_lut_category(
+    state: State<'_, SharedState>,
+    lut_id: i64,
+    category_id: Option<i64>,
+) -> Result<()> {
+    user_luts::set_category(&state.pool, lut_id, category_id).await
 }

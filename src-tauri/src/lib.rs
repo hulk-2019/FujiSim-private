@@ -89,6 +89,13 @@ pub fn run() {
             ipc::list_presets,
             ipc::save_preset,
             ipc::delete_preset,
+            ipc::list_preset_categories,
+            ipc::create_preset_category,
+            ipc::rename_preset_category,
+            ipc::delete_preset_category,
+            ipc::check_preset_category_name_exists,
+            ipc::set_preset_category,
+            ipc::set_user_lut_category,
             // ===== 用户 3D LUT 库 =====
             ipc::import_luts,
             ipc::import_luts_from_dir,
