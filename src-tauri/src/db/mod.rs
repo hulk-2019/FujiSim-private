@@ -7,6 +7,7 @@ use std::str::FromStr;
 pub mod albums;
 pub mod app_settings;
 pub mod assets;
+pub mod preset_categories;
 pub mod presets;
 pub mod tasks;
 pub mod user_fonts;
