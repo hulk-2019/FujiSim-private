@@ -31,6 +31,7 @@ pub struct ToneCurvePoints {
 /// 通过 serde 自动收/发；缺省值由 `Default` 与 `#[serde(default)]` 给出，
 /// 保证前端发送部分字段也能正常工作。
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct FilterSettings {
     pub base_simulation: String,
     #[serde(default)]
@@ -40,15 +41,29 @@ pub struct FilterSettings {
     #[serde(default)]
     pub color_chrome_effect: Option<String>,
     #[serde(default)]
-    pub highlight_tone: f32,
+    pub exposure: f32,
     #[serde(default)]
-    pub shadow_tone: f32,
+    pub contrast: i32,
     #[serde(default)]
-    pub color_saturation: f32,
+    pub brightness: i32,
     #[serde(default)]
-    pub clarity: f32,
+    pub highlight_tone: i32,
     #[serde(default)]
-    pub sharpness: f32,
+    pub shadow_tone: i32,
+    #[serde(default)]
+    pub white: i32,
+    #[serde(default)]
+    pub black: i32,
+    #[serde(default)]
+    pub dehaze: i32,
+    #[serde(default)]
+    pub vibrance: i32,
+    #[serde(default)]
+    pub color_saturation: i32,
+    #[serde(default)]
+    pub clarity: i32,
+    #[serde(default)]
+    pub sharpness: i32,
     #[serde(default)]
     pub wb_shift_r: i32,
     #[serde(default)]
@@ -60,15 +75,21 @@ pub struct FilterSettings {
 }
 
 impl FilterSettings {
-    /// 所有参数都在默认值时返回 true，pipeline 可以直接返回原图。
     pub fn is_identity(&self) -> bool {
         (self.base_simulation == "Pass-Through" || self.base_simulation.is_empty())
             && self.lut_file_path.is_none()
-            && self.highlight_tone == 0.0
-            && self.shadow_tone == 0.0
-            && self.color_saturation == 0.0
-            && self.clarity == 0.0
-            && self.sharpness == 0.0
+            && self.exposure == 0.0
+            && self.contrast == 0
+            && self.brightness == 0
+            && self.highlight_tone == 0
+            && self.shadow_tone == 0
+            && self.white == 0
+            && self.black == 0
+            && self.dehaze == 0
+            && self.vibrance == 0
+            && self.color_saturation == 0
+            && self.clarity == 0
+            && self.sharpness == 0
             && self.wb_shift_r == 0
             && self.wb_shift_b == 0
             && matches!(self.grain_effect.as_deref(), None | Some("None"))
@@ -86,11 +107,18 @@ impl Default for FilterSettings {
             grain_effect: None,
             grain_size: None,
             color_chrome_effect: None,
-            highlight_tone: 0.0,
-            shadow_tone: 0.0,
-            color_saturation: 0.0,
-            clarity: 0.0,
-            sharpness: 0.0,
+            exposure: 0.0,
+            contrast: 0,
+            brightness: 0,
+            highlight_tone: 0,
+            shadow_tone: 0,
+            white: 0,
+            black: 0,
+            dehaze: 0,
+            vibrance: 0,
+            color_saturation: 0,
+            clarity: 0,
+            sharpness: 0,
             wb_shift_r: 0,
             wb_shift_b: 0,
             tone_curve: None,
@@ -131,8 +159,8 @@ pub fn process_image(
 
     // 用户的高光/阴影/对比叠加在预设上（预设的 contrast 直接进 curve.build 的第三个参数）
     let curve = ToneCurve::build(
-        settings.highlight_tone + profile.contrast * 0.0,
-        settings.shadow_tone,
+        (settings.highlight_tone as f32 / 100.0) + profile.contrast * 0.0,
+        settings.shadow_tone as f32 / 100.0,
         profile.contrast,
     );
     // 三条分通道曲线，本质上是"基础曲线复合一次轻微弯折"
@@ -222,7 +250,7 @@ pub fn process_image(
         b += profile.blue_shift * 0.05;
 
         // [4] 饱和度：以亮度为锚点的线性插值，避免单纯乘法导致颜色偏移
-        let sat_amount = profile.saturation + settings.color_saturation;
+        let sat_amount = profile.saturation + (settings.color_saturation as f32 / 100.0);
         let (sr, sg, sb) = color::saturate(r, g, b, sat_amount);
         r = sr;
         g = sg;
@@ -270,13 +298,13 @@ pub fn process_image(
     // [9] Clarity / Sharpness：基于亮度的非锐化遮罩。半径不同：Clarity 模拟"中频对比"，Sharpness 是细节锐化
     // 以 1920px 为基准缩放半径，保证视觉效果与预览一致
     let res_scale = (w.max(h) as f32 / 1920.0).max(1.0);
-    if settings.clarity.abs() > 0.001 {
+    if settings.clarity != 0 {
         let radius = (8.0 * res_scale).round() as i32;
-        apply_clarity(&mut buf, w, h, settings.clarity, radius);
+        apply_clarity(&mut buf, w, h, settings.clarity as f32 / 100.0, radius);
     }
-    if settings.sharpness.abs() > 0.001 {
+    if settings.sharpness != 0 {
         let radius = (2.0 * res_scale).round() as i32;
-        apply_unsharp(&mut buf, w, h, settings.sharpness, radius);
+        apply_unsharp(&mut buf, w, h, settings.sharpness as f32 / 100.0, radius);
     }
 
     // [10] 颗粒：最后做，保证颗粒不会被锐化算法当作"细节"二次放大
