@@ -317,6 +317,10 @@ const zh = {
       categoryNamePlaceholder: "输入分类名称",
       categoryNameExists: "该分类名已存在",
       categoryNameEmpty: "请输入分类名称",
+      importLutTitle: "导入 LUT",
+      importLutSelectCategory: "分类",
+      noCategory: "不分类",
+      next: "下一步",
     },
     presetNames: {
       "Provia": "Provia 标准",

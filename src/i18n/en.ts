@@ -317,6 +317,10 @@ const en = {
       categoryNamePlaceholder: "Enter category name",
       categoryNameExists: "Category name already exists",
       categoryNameEmpty: "Please enter a category name",
+      importLutTitle: "Import LUT",
+      importLutSelectCategory: "Category",
+      noCategory: "Uncategorized",
+      next: "Next",
     },
     presetNames: {
       "Provia": "Provia",
