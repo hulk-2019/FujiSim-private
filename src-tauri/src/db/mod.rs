@@ -66,6 +66,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE user_luts      ADD COLUMN category_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_filter_presets_category ON filter_presets(category_id)",
         "CREATE INDEX IF NOT EXISTS idx_user_luts_category      ON user_luts(category_id)",
+        "DROP TABLE IF EXISTS filter_presets",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }
@@ -232,19 +233,27 @@ CREATE TABLE IF NOT EXISTS album_assets (
 CREATE TABLE IF NOT EXISTS filter_presets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    base_simulation TEXT NOT NULL,         -- 基础胶片模拟名称（Provia/Velvia/...）
-    grain_effect TEXT,                     -- None / Weak / Medium / Strong
-    grain_size TEXT,                       -- Small / Large
-    color_chrome_effect TEXT,              -- None / Weak / Strong
-    highlight_tone REAL NOT NULL DEFAULT 0,
-    shadow_tone REAL NOT NULL DEFAULT 0,
-    color_saturation REAL NOT NULL DEFAULT 0,
-    clarity REAL NOT NULL DEFAULT 0,
-    sharpness REAL NOT NULL DEFAULT 0,
-    wb_shift_r INTEGER NOT NULL DEFAULT 0, -- 白平衡偏移 R 轴：-9..+9
-    wb_shift_b INTEGER NOT NULL DEFAULT 0, -- 白平衡偏移 B 轴：-9..+9
-    lut_file_path TEXT,                    -- 外挂 .cube LUT 路径
+    base_simulation TEXT NOT NULL,
+    grain_effect TEXT,
+    grain_size TEXT,
+    color_chrome_effect TEXT,
+    exposure REAL NOT NULL DEFAULT 0,
+    contrast INTEGER NOT NULL DEFAULT 0,
+    brightness INTEGER NOT NULL DEFAULT 0,
+    highlight_tone INTEGER NOT NULL DEFAULT 0,
+    shadow_tone INTEGER NOT NULL DEFAULT 0,
+    white INTEGER NOT NULL DEFAULT 0,
+    black INTEGER NOT NULL DEFAULT 0,
+    dehaze INTEGER NOT NULL DEFAULT 0,
+    vibrance INTEGER NOT NULL DEFAULT 0,
+    color_saturation INTEGER NOT NULL DEFAULT 0,
+    clarity INTEGER NOT NULL DEFAULT 0,
+    sharpness INTEGER NOT NULL DEFAULT 0,
+    wb_shift_r INTEGER NOT NULL DEFAULT 0,
+    wb_shift_b INTEGER NOT NULL DEFAULT 0,
+    lut_file_path TEXT,
     is_builtin INTEGER NOT NULL DEFAULT 0,
+    category_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
