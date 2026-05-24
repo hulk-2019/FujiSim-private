@@ -25,6 +25,7 @@ pub mod grain;
 pub mod lut;
 pub mod pipeline;
 pub mod raw;
+pub mod tone;
 
 pub use pipeline::{process_image, FilterSettings};
 
