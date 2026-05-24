@@ -13,7 +13,6 @@ pub struct FilterPreset {
     pub base_simulation: String,
     pub grain_effect: Option<String>,
     pub grain_size: Option<String>,
-    pub color_chrome_effect: Option<String>,
     pub exposure: f64,
     pub contrast: i64,
     pub brightness: i64,
@@ -41,7 +40,6 @@ pub struct NewFilterPreset {
     pub base_simulation: String,
     pub grain_effect: Option<String>,
     pub grain_size: Option<String>,
-    pub color_chrome_effect: Option<String>,
     pub exposure: f64,
     pub contrast: i64,
     pub brightness: i64,
@@ -65,13 +63,12 @@ pub struct NewFilterPreset {
 /// 这样应用启动种子内置预设和用户保存自定义预设可以走同一条路径。
 pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPreset> {
     sqlx::query(
-        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,color_chrome_effect,exposure,contrast,brightness,highlight_tone,shadow_tone,white,black,dehaze,vibrance,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,exposure,contrast,brightness,highlight_tone,shadow_tone,white,black,dehaze,vibrance,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(name) DO UPDATE SET
              base_simulation=excluded.base_simulation,
              grain_effect=excluded.grain_effect,
              grain_size=excluded.grain_size,
-             color_chrome_effect=excluded.color_chrome_effect,
              exposure=excluded.exposure,
              contrast=excluded.contrast,
              brightness=excluded.brightness,
@@ -94,7 +91,6 @@ pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPres
     .bind(&p.base_simulation)
     .bind(&p.grain_effect)
     .bind(&p.grain_size)
-    .bind(&p.color_chrome_effect)
     .bind(p.exposure)
     .bind(p.contrast)
     .bind(p.brightness)
