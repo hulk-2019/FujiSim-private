@@ -888,7 +888,7 @@ pub async fn import_luts_from_dir(
             continue;
         }
         let dest_str = dest.to_string_lossy().to_string();
-        match user_luts::insert(&state.pool, &display_name, &dest_str).await {
+        match user_luts::insert(&state.pool, &display_name, &dest_str, None).await {
             Ok(lut) => out.push(lut),
             Err(e) => {
                 tracing::warn!(?dest, error = %e, "import_luts_from_dir: db insert failed");
@@ -948,7 +948,7 @@ pub async fn import_luts(
         }
 
         let dest_str = dest.to_string_lossy().to_string();
-        match user_luts::insert(&state.pool, &display_name, &dest_str).await {
+        match user_luts::insert(&state.pool, &display_name, &dest_str, None).await {
             Ok(lut) => out.push(lut),
             Err(e) => {
                 tracing::warn!(?dest, error = %e, "import_luts: db insert failed");

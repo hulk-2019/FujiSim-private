@@ -7,18 +7,29 @@ pub struct UserLut {
     pub id: i64,
     pub name: String,
     pub file_path: String,
+    pub category_id: Option<i64>,
     pub created_at: String,
     pub is_deleted: i64,
     pub deleted_at: Option<String>,
 }
 
-pub async fn insert(pool: &SqlitePool, name: &str, file_path: &str) -> Result<UserLut> {
+pub async fn insert(
+    pool: &SqlitePool,
+    name: &str,
+    file_path: &str,
+    category_id: Option<i64>,
+) -> Result<UserLut> {
     sqlx::query(
-        r#"INSERT INTO user_luts (name, file_path) VALUES (?, ?)
-           ON CONFLICT(file_path) DO UPDATE SET name = excluded.name, is_deleted = 0, deleted_at = NULL"#,
+        r#"INSERT INTO user_luts (name, file_path, category_id) VALUES (?, ?, ?)
+           ON CONFLICT(file_path) DO UPDATE SET
+             name = excluded.name,
+             category_id = excluded.category_id,
+             is_deleted = 0,
+             deleted_at = NULL"#,
     )
     .bind(name)
     .bind(file_path)
+    .bind(category_id)
     .execute(pool)
     .await?;
     sqlx::query_as::<_, UserLut>("SELECT * FROM user_luts WHERE file_path = ?")
@@ -56,4 +67,13 @@ pub async fn name_exists(pool: &SqlitePool, name: &str) -> Result<bool> {
             .fetch_optional(pool)
             .await?;
     Ok(row.is_some())
+}
+
+pub async fn set_category(pool: &SqlitePool, lut_id: i64, category_id: Option<i64>) -> Result<()> {
+    sqlx::query("UPDATE user_luts SET category_id = ? WHERE id = ?")
+        .bind(category_id)
+        .bind(lut_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
