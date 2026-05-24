@@ -321,6 +321,10 @@ const zh = {
       importLutSelectCategory: "分类",
       noCategory: "不分类",
       next: "下一步",
+      moveToCategory: "移动到分类...",
+      delete: "删除",
+      confirmDeletePreset: "确定删除这个预设？",
+      confirmDeleteLut: "确定删除这个 LUT？",
     },
     presetNames: {
       "Provia": "Provia 标准",

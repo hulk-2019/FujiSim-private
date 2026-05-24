@@ -321,6 +321,10 @@ const en = {
       importLutSelectCategory: "Category",
       noCategory: "Uncategorized",
       next: "Next",
+      moveToCategory: "Move to category...",
+      delete: "Delete",
+      confirmDeletePreset: "Delete this preset?",
+      confirmDeleteLut: "Delete this LUT?",
     },
     presetNames: {
       "Provia": "Provia",
