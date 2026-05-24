@@ -41,10 +41,11 @@ export default function App() {
 
   useEffect(() => {
     const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts,
-            refreshAlbums, refreshAlbumSummaries, setCoverDir } = useStore.getState();
+            refreshAlbums, refreshAlbumSummaries, refreshCategories, setCoverDir } = useStore.getState();
     refreshAssets();
     refreshFacets();
     refreshPresets();
+    refreshCategories();
     refreshUserLuts();
     refreshAlbums();
     refreshAlbumSummaries();

@@ -8,6 +8,7 @@ import type {
   BatchTask,
   FilterPreset,
   FilterSettings,
+  PresetCategory,
   UserFont,
   UserLut,
   WatermarkPreset,
@@ -103,6 +104,15 @@ type AppState = {
   restoreAlbum: (id: number) => Promise<void>;
   purgeAlbum: (id: number) => Promise<void>;
   purgeAllTrash: () => Promise<void>;
+
+  // ===== 预设分类 =====
+  categories: PresetCategory[];
+  refreshCategories: () => Promise<void>;
+  createCategory: (name: string) => Promise<PresetCategory>;
+  renameCategory: (id: number, name: string) => Promise<PresetCategory>;
+  deleteCategory: (id: number) => Promise<void>;
+  setPresetCategory: (presetId: number, categoryId: number | null) => Promise<void>;
+  setUserLutCategory: (lutId: number, categoryId: number | null) => Promise<void>;
   currentFolderId: number | null;
   currentFolderName: string | null;
   enterFolder: (id: number, name: string) => Promise<void>;
@@ -182,6 +192,7 @@ export const useStore = create<AppState>((set, get) => ({
   focusedId: null,
   filter: { ...DEFAULT_FILTER },
   presets: [],
+  categories: [],
   userLuts: [],
   watermark: { ...DEFAULT_WATERMARK },
   userFonts: [],
@@ -299,6 +310,40 @@ export const useStore = create<AppState>((set, get) => ({
   refreshUserLuts: async () => {
     const luts = await api.listUserLuts().catch(() => []);
     set({ userLuts: luts });
+  },
+
+  refreshCategories: async () => {
+    const list = await api.listPresetCategories().catch(() => []);
+    set({ categories: list });
+  },
+  createCategory: async (name: string) => {
+    const created = await api.createPresetCategory(name);
+    set({
+      categories: [...get().categories, created].sort(
+        (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
+      ),
+    });
+    return created;
+  },
+  renameCategory: async (id, name) => {
+    const updated = await api.renamePresetCategory(id, name);
+    set({
+      categories: get().categories.map((c) => (c.id === id ? updated : c)),
+    });
+    return updated;
+  },
+  deleteCategory: async (id) => {
+    await api.deletePresetCategory(id);
+    set({ categories: get().categories.filter((c) => c.id !== id) });
+    await Promise.all([get().refreshPresets(), get().refreshUserLuts()]);
+  },
+  setPresetCategory: async (presetId, categoryId) => {
+    await api.setPresetCategory(presetId, categoryId);
+    await get().refreshPresets();
+  },
+  setUserLutCategory: async (lutId, categoryId) => {
+    await api.setUserLutCategory(lutId, categoryId);
+    await get().refreshUserLuts();
   },
 
   refreshAlbums: async () => {
