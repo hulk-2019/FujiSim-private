@@ -16,6 +16,7 @@ export function SliderRow({
   step,
   onChange,
   display,
+  resetValue = 0,
 }: {
   label: string;
   value: number;
@@ -24,6 +25,7 @@ export function SliderRow({
   step: number;
   onChange: (v: number) => void;
   display?: (v: number) => string;
+  resetValue?: number;
 }) {
   return (
     <div>
@@ -33,7 +35,14 @@ export function SliderRow({
           {display ? display(value) : value.toFixed(2)}
         </span>
       </div>
-      <Slider value={[value]} min={min} max={max} step={step} onValueChange={([v]) => onChange(v)} />
+      <Slider
+        value={[value]}
+        min={min}
+        max={max}
+        step={step}
+        onValueChange={([v]) => onChange(v)}
+        onThumbDoubleClick={() => onChange(resetValue)}
+      />
     </div>
   );
 }
