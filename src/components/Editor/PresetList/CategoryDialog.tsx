@@ -41,6 +41,8 @@ export function CategoryDialog(props: Props) {
     }
   }, [props.open, initial]);
 
+  const excludeId = props.mode === "rename" ? props.id : null;
+
   useEffect(() => {
     if (!name.trim()) {
       setDuplicate(false);
@@ -48,7 +50,6 @@ export function CategoryDialog(props: Props) {
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      const excludeId = props.mode === "rename" ? props.id : null;
       const exists = await api
         .checkPresetCategoryNameExists(name.trim(), excludeId)
         .catch(() => false);
@@ -57,7 +58,7 @@ export function CategoryDialog(props: Props) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [name, props]);
+  }, [name, excludeId]);
 
   const trimmed = name.trim();
   const canSubmit = !!trimmed && !duplicate && !submitting;

@@ -56,6 +56,13 @@ export function FilterPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!saveOpen) {
+      setSaveName("");
+      setSaveCategoryId("__none__");
+    }
+  }, [saveOpen]);
+
   const selectedValue = `${FUJI_PREFIX}${filter.base_simulation}`;
 
   function handleSimulationChange(value: string) {
@@ -84,8 +91,6 @@ export function FilterPanel() {
       category_id: saveCategoryId === "__none__" ? null : Number(saveCategoryId),
     });
     setSaveOpen(false);
-    setSaveName("");
-    setSaveCategoryId("__none__");
     await refreshPresets();
   }
 
