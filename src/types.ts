@@ -71,16 +71,23 @@ export type FilterPreset = {
   grain_effect?: string | null;
   grain_size?: string | null;
   color_chrome_effect?: string | null;
+  exposure: number;
+  contrast: number;
+  brightness: number;
   highlight_tone: number;
   shadow_tone: number;
+  white: number;
+  black: number;
+  dehaze: number;
+  vibrance: number;
   color_saturation: number;
   clarity: number;
   sharpness: number;
   wb_shift_r: number;
   wb_shift_b: number;
   lut_file_path?: string | null;
-  category_id?: number | null;
   is_builtin: number;
+  category_id?: number | null;
   created_at: string;
 };
 
@@ -104,15 +111,22 @@ export type FilterSettings = {
   grain_effect?: string | null;
   grain_size?: string | null;
   color_chrome_effect?: string | null;
+  exposure: number;
+  contrast: number;
+  brightness: number;
   highlight_tone: number;
   shadow_tone: number;
+  white: number;
+  black: number;
+  dehaze: number;
+  vibrance: number;
   color_saturation: number;
   clarity: number;
   sharpness: number;
   wb_shift_r: number;
   wb_shift_b: number;
-  lut_file_path?: string | null;
   tone_curve?: ToneCurvePoints | null;
+  lut_file_path?: string | null;
 };
 
 /** 资产列表查询条件，所有字段可选，前端按需带 */
