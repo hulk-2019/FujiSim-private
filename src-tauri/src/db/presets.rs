@@ -14,11 +14,18 @@ pub struct FilterPreset {
     pub grain_effect: Option<String>,
     pub grain_size: Option<String>,
     pub color_chrome_effect: Option<String>,
-    pub highlight_tone: f64,
-    pub shadow_tone: f64,
-    pub color_saturation: f64,
-    pub clarity: f64,
-    pub sharpness: f64,
+    pub exposure: f64,
+    pub contrast: i64,
+    pub brightness: i64,
+    pub highlight_tone: i64,
+    pub shadow_tone: i64,
+    pub white: i64,
+    pub black: i64,
+    pub dehaze: i64,
+    pub vibrance: i64,
+    pub color_saturation: i64,
+    pub clarity: i64,
+    pub sharpness: i64,
     pub wb_shift_r: i64,
     pub wb_shift_b: i64,
     pub lut_file_path: Option<String>,
@@ -35,11 +42,18 @@ pub struct NewFilterPreset {
     pub grain_effect: Option<String>,
     pub grain_size: Option<String>,
     pub color_chrome_effect: Option<String>,
-    pub highlight_tone: f64,
-    pub shadow_tone: f64,
-    pub color_saturation: f64,
-    pub clarity: f64,
-    pub sharpness: f64,
+    pub exposure: f64,
+    pub contrast: i64,
+    pub brightness: i64,
+    pub highlight_tone: i64,
+    pub shadow_tone: i64,
+    pub white: i64,
+    pub black: i64,
+    pub dehaze: i64,
+    pub vibrance: i64,
+    pub color_saturation: i64,
+    pub clarity: i64,
+    pub sharpness: i64,
     pub wb_shift_r: i64,
     pub wb_shift_b: i64,
     pub lut_file_path: Option<String>,
@@ -51,15 +65,22 @@ pub struct NewFilterPreset {
 /// 这样应用启动种子内置预设和用户保存自定义预设可以走同一条路径。
 pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPreset> {
     sqlx::query(
-        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,color_chrome_effect,highlight_tone,shadow_tone,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,color_chrome_effect,exposure,contrast,brightness,highlight_tone,shadow_tone,white,black,dehaze,vibrance,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(name) DO UPDATE SET
              base_simulation=excluded.base_simulation,
              grain_effect=excluded.grain_effect,
              grain_size=excluded.grain_size,
              color_chrome_effect=excluded.color_chrome_effect,
+             exposure=excluded.exposure,
+             contrast=excluded.contrast,
+             brightness=excluded.brightness,
              highlight_tone=excluded.highlight_tone,
              shadow_tone=excluded.shadow_tone,
+             white=excluded.white,
+             black=excluded.black,
+             dehaze=excluded.dehaze,
+             vibrance=excluded.vibrance,
              color_saturation=excluded.color_saturation,
              clarity=excluded.clarity,
              sharpness=excluded.sharpness,
@@ -74,8 +95,15 @@ pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPres
     .bind(&p.grain_effect)
     .bind(&p.grain_size)
     .bind(&p.color_chrome_effect)
+    .bind(p.exposure)
+    .bind(p.contrast)
+    .bind(p.brightness)
     .bind(p.highlight_tone)
     .bind(p.shadow_tone)
+    .bind(p.white)
+    .bind(p.black)
+    .bind(p.dehaze)
+    .bind(p.vibrance)
     .bind(p.color_saturation)
     .bind(p.clarity)
     .bind(p.sharpness)
