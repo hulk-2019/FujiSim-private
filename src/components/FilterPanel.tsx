@@ -33,15 +33,12 @@ const GRAIN_EFFECTS = ["None", "Weak", "Medium", "Strong"];
 const GRAIN_SIZES = ["Small", "Large"];
 const CHROME_EFFECTS = ["None", "Weak", "Strong"];
 
-const FUJI_PREFIX = "fuji:";
-
 export function FilterPanel() {
   const { t } = useTranslation();
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
   const resetFilter = useStore((s) => s.resetFilter);
   const refreshPresets = useStore((s) => s.refreshPresets);
-  const fujiSimulations = useStore((s) => s.fujiSimulations);
   const categories = useStore((s) => s.categories);
   const assets = useStore((s) => s.assets);
   const focusedId = useStore((s) => s.focusedId);
@@ -63,14 +60,6 @@ export function FilterPanel() {
     }
   }, [saveOpen]);
 
-  const selectedValue = `${FUJI_PREFIX}${filter.base_simulation}`;
-
-  function handleSimulationChange(value: string) {
-    if (value.startsWith(FUJI_PREFIX)) {
-      setFilter({ base_simulation: value.slice(FUJI_PREFIX.length), lut_file_path: null });
-    }
-  }
-
   async function saveAsPreset() {
     if (!saveName.trim()) return;
     await api.savePreset({
@@ -79,8 +68,15 @@ export function FilterPanel() {
       grain_effect: filter.grain_effect ?? null,
       grain_size: filter.grain_size ?? null,
       color_chrome_effect: filter.color_chrome_effect ?? null,
+      exposure: filter.exposure,
+      contrast: filter.contrast,
+      brightness: filter.brightness,
       highlight_tone: filter.highlight_tone,
       shadow_tone: filter.shadow_tone,
+      white: filter.white,
+      black: filter.black,
+      dehaze: filter.dehaze,
+      vibrance: filter.vibrance,
       color_saturation: filter.color_saturation,
       clarity: filter.clarity,
       sharpness: filter.sharpness,
@@ -110,28 +106,43 @@ export function FilterPanel() {
           <ScrollArea className="flex-1">
             <div className="px-0 py-0">
             <Section title={t("editor.sections.basic")}>
-          <Label>{t("filterPanel.filmSimulation")}</Label>
-          <Select value={selectedValue} onValueChange={handleSimulationChange}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={`${FUJI_PREFIX}Pass-Through`}>{t("filterPanel.noSimulation")}</SelectItem>
-              {fujiSimulations.map((s) => (
-                <SelectItem key={s} value={`${FUJI_PREFIX}${s}`}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           {filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path && (
-            <p className="mt-1 text-[10px] text-zinc-500">{t("filterPanel.lutAppliedNotice")}</p>
+            <p className="mb-2 text-[10px] text-zinc-500">{t("filterPanel.lutAppliedNotice")}</p>
           )}
+          <SliderRow
+            label={t("filterPanel.exposure")}
+            value={filter.exposure}
+            min={-5} max={5} step={0.05}
+            display={(v) => v.toFixed(2)}
+            onChange={(v) => setFilter({ exposure: v })}
+          />
+          <SliderRow
+            label={t("filterPanel.contrast")}
+            value={filter.contrast}
+            min={-100} max={100} step={1}
+            display={(v) => v.toFixed(0)}
+            onChange={(v) => setFilter({ contrast: v })}
+          />
+          <SliderRow
+            label={t("filterPanel.brightness")}
+            value={filter.brightness}
+            min={-100} max={100} step={1}
+            display={(v) => v.toFixed(0)}
+            onChange={(v) => setFilter({ brightness: v })}
+          />
         </Section>
 
         <Section title={t("editor.sections.light")}>
-          <SliderRow label={t("filterPanel.highlight")} value={filter.highlight_tone} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ highlight_tone: v })} />
-          <SliderRow label={t("filterPanel.shadow")}    value={filter.shadow_tone}    min={-1} max={1} step={0.05} onChange={(v) => setFilter({ shadow_tone: v })} />
+          <SliderRow label={t("filterPanel.highlight")} value={filter.highlight_tone} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ highlight_tone: v })} />
+          <SliderRow label={t("filterPanel.shadow")}    value={filter.shadow_tone}    min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ shadow_tone: v })} />
+          <SliderRow label={t("filterPanel.white")}     value={filter.white}          min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ white: v })} />
+          <SliderRow label={t("filterPanel.black")}     value={filter.black}          min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ black: v })} />
+          <SliderRow label={t("filterPanel.dehaze")}    value={filter.dehaze}         min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ dehaze: v })} />
         </Section>
 
         <Section title={t("editor.sections.color")}>
-          <SliderRow label={t("filterPanel.saturation")} value={filter.color_saturation} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ color_saturation: v })} />
+          <SliderRow label={t("filterPanel.vibrance")}   value={filter.vibrance}         min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ vibrance: v })} />
+          <SliderRow label={t("filterPanel.saturation")} value={filter.color_saturation} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ color_saturation: v })} />
           <div>
             <Label>{t("filterPanel.colorEffect")}</Label>
             <Select value={filter.color_chrome_effect ?? "None"} onValueChange={(v) => setFilter({ color_chrome_effect: v })}>
@@ -166,11 +177,11 @@ export function FilterPanel() {
               </Select>
             </div>
           </div>
-          <SliderRow label={t("filterPanel.clarity")} value={filter.clarity} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ clarity: v })} />
         </Section>
 
         <Section title={t("editor.sections.detail")}>
-          <SliderRow label={t("filterPanel.sharpness")} value={filter.sharpness} min={-1} max={1} step={0.05} onChange={(v) => setFilter({ sharpness: v })} />
+          <SliderRow label={t("filterPanel.clarity")}   value={filter.clarity}   min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ clarity: v })} />
+          <SliderRow label={t("filterPanel.sharpness")} value={filter.sharpness} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ sharpness: v })} />
         </Section>
 
             <Section title={t("editor.sections.curves")} defaultOpen={false}>
