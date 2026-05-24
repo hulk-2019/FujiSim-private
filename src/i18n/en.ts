@@ -325,6 +325,10 @@ const en = {
       delete: "Delete",
       confirmDeletePreset: "Delete this preset?",
       confirmDeleteLut: "Delete this LUT?",
+      uncategorized: "Uncategorized",
+      emptyCategory: "No presets in this category",
+      confirmDeleteCategory: "After deleting, items will move to Uncategorized. Continue?",
+      rename: "Rename",
     },
     presetNames: {
       "Provia": "Provia",

@@ -325,6 +325,10 @@ const zh = {
       delete: "删除",
       confirmDeletePreset: "确定删除这个预设？",
       confirmDeleteLut: "确定删除这个 LUT？",
+      uncategorized: "未分类",
+      emptyCategory: "该分类下暂无预设",
+      confirmDeleteCategory: "删除分类后，分类下条目将回到「未分类」，确定删除吗？",
+      rename: "重命名",
     },
     presetNames: {
       "Provia": "Provia 标准",
