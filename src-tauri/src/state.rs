@@ -110,7 +110,6 @@ async fn seed_builtin_presets(pool: &SqlitePool) -> Result<()> {
             base_simulation: (*name).to_string(),
             grain_effect: None,
             grain_size: None,
-            color_chrome_effect: None,
             exposure: 0.0,
             contrast: 0,
             brightness: 0,
