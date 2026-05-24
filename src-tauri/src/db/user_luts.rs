@@ -29,12 +29,10 @@ pub async fn insert(pool: &SqlitePool, name: &str, file_path: &str) -> Result<Us
 }
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<UserLut>> {
-    sqlx::query_as::<_, UserLut>(
-        "SELECT * FROM user_luts WHERE is_deleted = 0 ORDER BY name ASC",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(Into::into)
+    sqlx::query_as::<_, UserLut>("SELECT * FROM user_luts WHERE is_deleted = 0 ORDER BY name ASC")
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
 }
 
 /// 软删除：标记 is_deleted=1，保留记录和物理文件路径。
@@ -44,12 +42,10 @@ pub async fn delete(pool: &SqlitePool, id: i64) -> Result<Option<String>> {
             .bind(id)
             .fetch_optional(pool)
             .await?;
-    sqlx::query(
-        "UPDATE user_luts SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE user_luts SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(row.map(|(p,)| p))
 }
 

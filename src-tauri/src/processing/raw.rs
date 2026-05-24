@@ -81,7 +81,11 @@ fn parse_tiff_orientation(tiff: &[u8]) -> Option<u32> {
     };
     let u16_at = |off: usize| -> Option<u16> {
         let b = tiff.get(off..off + 2)?;
-        Some(if le { u16::from_le_bytes([b[0], b[1]]) } else { u16::from_be_bytes([b[0], b[1]]) })
+        Some(if le {
+            u16::from_le_bytes([b[0], b[1]])
+        } else {
+            u16::from_be_bytes([b[0], b[1]])
+        })
     };
     let u32_at = |off: usize| -> Option<u32> {
         let b = tiff.get(off..off + 4)?;
@@ -103,8 +107,8 @@ fn parse_tiff_orientation(tiff: &[u8]) -> Option<u32> {
 }
 
 fn extract_thumb_rsraw(data: &[u8]) -> Result<Vec<u8>> {
-    let mut raw = rsraw::RawImage::open(data)
-        .map_err(|e| AppError::other(format!("rsraw open: {e}")))?;
+    let mut raw =
+        rsraw::RawImage::open(data).map_err(|e| AppError::other(format!("rsraw open: {e}")))?;
     let thumbs = raw
         .extract_thumbs()
         .map_err(|e| AppError::other(format!("extract thumbs: {e}")))?;
@@ -153,7 +157,9 @@ fn extract_thumb_tiff(data: &[u8]) -> Result<Vec<u8>> {
         return Ok(data[off as usize..(off + size) as usize].to_vec());
     }
 
-    Err(AppError::other("no embedded JPEG preview found in DNG/TIFF"))
+    Err(AppError::other(
+        "no embedded JPEG preview found in DNG/TIFF",
+    ))
 }
 
 /// 解码 RAW 文件，输出 16-bit sRGB 图像（已按 EXIF orientation 旋转到正向）。
@@ -168,12 +174,18 @@ pub fn decode_raw_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> 
 }
 
 /// 预览专用解码：max_edge 为 None 时全分辨率解码；有值时若原始长边/2 仍大于目标则启用 half_size（约快 4x）。
-pub fn decode_raw_rgb16_for_preview(path: &Path, max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+pub fn decode_raw_rgb16_for_preview(
+    path: &Path,
+    max_edge: Option<u32>,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     let data = std::fs::read(path)?;
     decode_raw_rgb16_from_bytes(&data, max_edge)
 }
 
-fn decode_raw_rgb16_from_bytes(data: &[u8], max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+fn decode_raw_rgb16_from_bytes(
+    data: &[u8],
+    max_edge: Option<u32>,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     if let Ok(img) = decode_with_libraw(data, max_edge) {
         return Ok(img);
     }
@@ -196,31 +208,35 @@ fn apply_orientation_rgb16(
     if orientation <= 1 {
         return img;
     }
-    let transform = |img: &ImageBuffer<Rgb<u16>, Vec<u16>>| -> Option<ImageBuffer<Rgb<u16>, Vec<u16>>> {
-        use libvips::ops::{Angle, Direction};
-        let vimg = crate::vips_io::rgb16_to_vips(img).ok()?;
-        let rotated = match orientation {
-            2 => libvips::ops::flip(&vimg, Direction::Horizontal).ok()?,
-            3 => libvips::ops::rot(&vimg, Angle::D180).ok()?,
-            4 => libvips::ops::flip(&vimg, Direction::Vertical).ok()?,
-            5 => libvips::ops::rot(&vimg, Angle::D90)
+    let transform =
+        |img: &ImageBuffer<Rgb<u16>, Vec<u16>>| -> Option<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+            use libvips::ops::{Angle, Direction};
+            let vimg = crate::vips_io::rgb16_to_vips(img).ok()?;
+            let rotated = match orientation {
+                2 => libvips::ops::flip(&vimg, Direction::Horizontal).ok()?,
+                3 => libvips::ops::rot(&vimg, Angle::D180).ok()?,
+                4 => libvips::ops::flip(&vimg, Direction::Vertical).ok()?,
+                5 => libvips::ops::rot(&vimg, Angle::D90)
                     .ok()
                     .and_then(|r| libvips::ops::flip(&r, Direction::Horizontal).ok())?,
-            6 => libvips::ops::rot(&vimg, Angle::D90).ok()?,
-            7 => libvips::ops::rot(&vimg, Angle::D270)
+                6 => libvips::ops::rot(&vimg, Angle::D90).ok()?,
+                7 => libvips::ops::rot(&vimg, Angle::D270)
                     .ok()
                     .and_then(|r| libvips::ops::flip(&r, Direction::Horizontal).ok())?,
-            8 => libvips::ops::rot(&vimg, Angle::D270).ok()?,
-            _ => return None,
+                8 => libvips::ops::rot(&vimg, Angle::D270).ok()?,
+                _ => return None,
+            };
+            crate::vips_io::vips_to_rgb16(&rotated).ok()
         };
-        crate::vips_io::vips_to_rgb16(&rotated).ok()
-    };
     transform(&img).unwrap_or(img)
 }
 
-fn decode_with_libraw(data: &[u8], max_edge: Option<u32>) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
-    let mut raw = rsraw::RawImage::open(data)
-        .map_err(|e| AppError::other(format!("LibRaw open: {e}")))?;
+fn decode_with_libraw(
+    data: &[u8],
+    max_edge: Option<u32>,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    let mut raw =
+        rsraw::RawImage::open(data).map_err(|e| AppError::other(format!("LibRaw open: {e}")))?;
 
     // 使用相机白平衡和色彩矩阵，保留原始色彩意图
     raw.set_use_camera_wb(true);
@@ -276,7 +292,11 @@ fn decode_lossy_dng(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
             let w = t.tag(off, 256)?.2;
             let h = t.tag(off, 257)?.2;
             let comp = t.tag(off, 259)?.2;
-            if comp == 34892 { Some((w, h, off)) } else { None }
+            if comp == 34892 {
+                Some((w, h, off))
+            } else {
+                None
+            }
         })
         .max_by_key(|&(w, h, _)| w * h)
         .ok_or_else(|| AppError::other("DNG: no Lossy JPEG SubIFD found"))?;
@@ -365,7 +385,11 @@ impl<'a> Tiff<'a> {
 
     fn u16(&self, off: usize) -> u16 {
         let b = &self.data[off..off + 2];
-        if self.le { u16::from_le_bytes([b[0], b[1]]) } else { u16::from_be_bytes([b[0], b[1]]) }
+        if self.le {
+            u16::from_le_bytes([b[0], b[1]])
+        } else {
+            u16::from_be_bytes([b[0], b[1]])
+        }
     }
 
     fn u32(&self, off: usize) -> u32 {
@@ -436,9 +460,7 @@ pub fn extract_cover_fast(path: &Path) -> Result<Vec<u8>> {
 
 /// 一次 LibRaw 解码，同时生成 400px cover JPEG 和 800px 16-bit PNG 预览底图。
 /// cover 用于网格缩略图快速显示；preview_base 用于永久磁盘缓存，避免重复 RAW 解码。
-pub fn generate_cover_and_preview_base(
-    path: &Path,
-) -> Result<(Vec<u8>, Vec<u8>)> {
+pub fn generate_cover_and_preview_base(path: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
     let data = std::fs::read(path)?;
     let orientation = read_tiff_file_orientation(&data).unwrap_or(1);
 

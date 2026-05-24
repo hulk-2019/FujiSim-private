@@ -23,6 +23,7 @@ pub struct FilterPreset {
     pub wb_shift_b: i64,
     pub lut_file_path: Option<String>,
     pub is_builtin: i64,
+    pub category_id: Option<i64>,
     pub created_at: String,
 }
 
@@ -42,6 +43,7 @@ pub struct NewFilterPreset {
     pub wb_shift_r: i64,
     pub wb_shift_b: i64,
     pub lut_file_path: Option<String>,
+    pub category_id: Option<i64>,
     pub is_builtin: bool,
 }
 
@@ -49,8 +51,8 @@ pub struct NewFilterPreset {
 /// 这样应用启动种子内置预设和用户保存自定义预设可以走同一条路径。
 pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPreset> {
     sqlx::query(
-        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,color_chrome_effect,highlight_tone,shadow_tone,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,color_chrome_effect,highlight_tone,shadow_tone,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(name) DO UPDATE SET
              base_simulation=excluded.base_simulation,
              grain_effect=excluded.grain_effect,
@@ -64,7 +66,8 @@ pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPres
              wb_shift_r=excluded.wb_shift_r,
              wb_shift_b=excluded.wb_shift_b,
              lut_file_path=excluded.lut_file_path,
-             is_builtin=excluded.is_builtin"#,
+             is_builtin=excluded.is_builtin,
+             category_id=excluded.category_id"#,
     )
     .bind(&p.name)
     .bind(&p.base_simulation)
@@ -80,6 +83,7 @@ pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPres
     .bind(p.wb_shift_b)
     .bind(&p.lut_file_path)
     .bind(p.is_builtin as i64)
+    .bind(p.category_id)
     .execute(pool)
     .await?;
     sqlx::query_as::<_, FilterPreset>("SELECT * FROM filter_presets WHERE name = ?")
@@ -103,6 +107,20 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<FilterPreset>> {
 pub async fn delete(pool: &SqlitePool, id: i64) -> Result<()> {
     sqlx::query("DELETE FROM filter_presets WHERE id = ? AND is_builtin = 0")
         .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// 把指定预设挂到分类下，传 None 即移到「未分类」。
+pub async fn set_category(
+    pool: &SqlitePool,
+    preset_id: i64,
+    category_id: Option<i64>,
+) -> Result<()> {
+    sqlx::query("UPDATE filter_presets SET category_id = ? WHERE id = ?")
+        .bind(category_id)
+        .bind(preset_id)
         .execute(pool)
         .await?;
     Ok(())

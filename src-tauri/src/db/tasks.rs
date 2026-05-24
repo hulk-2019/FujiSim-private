@@ -168,12 +168,10 @@ pub async fn reset_for_retry(pool: &SqlitePool, task_id: i64) -> Result<()> {
 }
 
 pub async fn soft_delete(pool: &SqlitePool, task_id: i64) -> Result<()> {
-    sqlx::query(
-        "UPDATE batch_tasks SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
-    )
-    .bind(task_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE batch_tasks SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?")
+        .bind(task_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -190,11 +188,15 @@ pub async fn cancel_and_delete_batch(pool: &SqlitePool, ids: &[i64]) -> Result<(
         "UPDATE batch_tasks SET is_deleted = 1, deleted_at = datetime('now') WHERE id IN ({placeholders})"
     );
     let mut q = sqlx::query(&cancel_sql);
-    for id in ids { q = q.bind(id); }
+    for id in ids {
+        q = q.bind(id);
+    }
     q.execute(pool).await?;
 
     let mut q = sqlx::query(&delete_sql);
-    for id in ids { q = q.bind(id); }
+    for id in ids {
+        q = q.bind(id);
+    }
     q.execute(pool).await?;
 
     Ok(())

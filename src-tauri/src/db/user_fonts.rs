@@ -31,12 +31,10 @@ pub async fn insert(pool: &SqlitePool, name: &str, file_path: &str, ext: &str) -
 }
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<UserFont>> {
-    sqlx::query_as::<_, UserFont>(
-        "SELECT * FROM user_fonts WHERE is_deleted = 0 ORDER BY name ASC",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(Into::into)
+    sqlx::query_as::<_, UserFont>("SELECT * FROM user_fonts WHERE is_deleted = 0 ORDER BY name ASC")
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn delete(pool: &SqlitePool, id: i64) -> Result<Option<String>> {
@@ -45,12 +43,10 @@ pub async fn delete(pool: &SqlitePool, id: i64) -> Result<Option<String>> {
             .bind(id)
             .fetch_optional(pool)
             .await?;
-    sqlx::query(
-        "UPDATE user_fonts SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE user_fonts SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(row.map(|(p,)| p))
 }
 

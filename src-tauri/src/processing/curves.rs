@@ -1,6 +1,6 @@
 use crate::processing::color;
-use splines::{Interpolation, Key, Spline};
 use crate::processing::pipeline::CurvePoint;
+use splines::{Interpolation, Key, Spline};
 
 /// 256 项查找表，用于把"输入亮度 0..1"映射到"输出亮度 0..1"。
 ///

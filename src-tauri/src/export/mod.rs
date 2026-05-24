@@ -87,7 +87,6 @@ pub fn resolve_destination_dir(src: &Path, dest: &Destination) -> Result<PathBuf
     Ok(dir)
 }
 
-
 fn composite_watermark(base: &mut RgbImage, overlay: &image::RgbaImage) {
     let (out_w, out_h) = base.dimensions();
     for (x, y, ov) in overlay.enumerate_pixels() {
@@ -221,4 +220,3 @@ fn sanitize(s: &str) -> String {
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect()
 }
-

@@ -36,7 +36,12 @@ pub async fn create(pool: &SqlitePool, name: &str, settings_json: &str) -> Resul
     .map_err(Into::into)
 }
 
-pub async fn update(pool: &SqlitePool, id: i64, name: &str, settings_json: &str) -> Result<WatermarkPreset> {
+pub async fn update(
+    pool: &SqlitePool,
+    id: i64,
+    name: &str,
+    settings_json: &str,
+) -> Result<WatermarkPreset> {
     sqlx::query(
         "UPDATE watermark_presets SET name = ?, settings_json = ? WHERE id = ? AND is_deleted = 0",
     )

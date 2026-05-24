@@ -37,12 +37,10 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<Album>> {
 }
 
 pub async fn delete(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query(
-        "UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -78,23 +76,23 @@ pub async fn remove_assets(pool: &SqlitePool, album_id: i64, asset_ids: &[i64]) 
 }
 
 /// 检查名称是否已存在。`exclude_id` 用于重命名时排除自身。
-pub async fn name_exists(
-    pool: &SqlitePool,
-    name: &str,
-    exclude_id: Option<i64>,
-) -> Result<bool> {
+pub async fn name_exists(pool: &SqlitePool, name: &str, exclude_id: Option<i64>) -> Result<bool> {
     let count: (i64,) = match exclude_id {
-        Some(eid) => sqlx::query_as(
-            "SELECT COUNT(*) FROM albums WHERE name = ? AND id != ? AND is_deleted = 0",
-        )
-        .bind(name)
-        .bind(eid)
-        .fetch_one(pool)
-        .await?,
-        None => sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = ? AND is_deleted = 0")
+        Some(eid) => {
+            sqlx::query_as(
+                "SELECT COUNT(*) FROM albums WHERE name = ? AND id != ? AND is_deleted = 0",
+            )
             .bind(name)
+            .bind(eid)
             .fetch_one(pool)
-            .await?,
+            .await?
+        }
+        None => {
+            sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = ? AND is_deleted = 0")
+                .bind(name)
+                .fetch_one(pool)
+                .await?
+        }
     };
     Ok(count.0 > 0)
 }
@@ -117,40 +115,33 @@ pub async fn rename(pool: &SqlitePool, id: i64, name: &str) -> Result<Album> {
 
 /// 查询文件夹内资产数量（用于删除确认弹框）。
 pub async fn asset_count(pool: &SqlitePool, id: i64) -> Result<i64> {
-    let (count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM album_assets WHERE album_id = ?")
-            .bind(id)
-            .fetch_one(pool)
-            .await?;
+    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM album_assets WHERE album_id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
     Ok(count)
 }
 
 pub async fn delete_with_assets(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query(
-        "UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE albums SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 pub async fn list_trash(pool: &SqlitePool) -> Result<Vec<Album>> {
-    sqlx::query_as::<_, Album>(
-        "SELECT * FROM albums WHERE is_deleted = 1 ORDER BY deleted_at DESC",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(Into::into)
+    sqlx::query_as::<_, Album>("SELECT * FROM albums WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn restore(pool: &SqlitePool, id: i64) -> Result<()> {
-    sqlx::query(
-        "UPDATE albums SET is_deleted = 0, deleted_at = NULL WHERE id = ?",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE albums SET is_deleted = 0, deleted_at = NULL WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

@@ -30,7 +30,10 @@ impl Lut3D {
                 continue;
             }
             if let Some(rest) = line.strip_prefix("LUT_3D_SIZE") {
-                size = rest.trim().parse::<usize>().map_err(|e| AppError::other(e.to_string()))?;
+                size = rest
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|e| AppError::other(e.to_string()))?;
                 continue;
             }
             if line.starts_with("TITLE") || line.starts_with("DOMAIN_") {
@@ -39,7 +42,10 @@ impl Lut3D {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() == 3 {
                 for p in parts {
-                    data.push(p.parse::<f32>().map_err(|e| AppError::other(e.to_string()))?);
+                    data.push(
+                        p.parse::<f32>()
+                            .map_err(|e| AppError::other(e.to_string()))?,
+                    );
                 }
             }
         }
@@ -72,7 +78,8 @@ impl Lut3D {
         let fg = gs - g0 as f32;
         let fb = bs - b0 as f32;
         // 计算 8 个角点的 base 偏移（直接对应 data 数组里 RGB 三元组的起点）
-        let idx = |r: usize, g: usize, b: usize| (b * self.size * self.size + g * self.size + r) * 3;
+        let idx =
+            |r: usize, g: usize, b: usize| (b * self.size * self.size + g * self.size + r) * 3;
         let c000 = idx(r0, g0, b0);
         let c100 = idx(r1, g0, b0);
         let c010 = idx(r0, g1, b0);

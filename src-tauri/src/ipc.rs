@@ -113,7 +113,9 @@ pub async fn list_assets(
     query: assets::AssetQuery,
 ) -> Result<assets::ListAssetsResult> {
     let result = assets::list(&state.pool, &query).await?;
-    let ids: Vec<i64> = result.items.iter()
+    let ids: Vec<i64> = result
+        .items
+        .iter()
         .filter(|a| a.is_raw != 0 && a.cover_path.is_none())
         .map(|a| a.id)
         .collect();
@@ -286,18 +288,12 @@ pub async fn rename_album(
 }
 
 #[tauri::command]
-pub async fn get_folder_asset_count(
-    state: State<'_, SharedState>,
-    id: i64,
-) -> Result<i64> {
+pub async fn get_folder_asset_count(state: State<'_, SharedState>, id: i64) -> Result<i64> {
     albums::asset_count(&state.pool, id).await
 }
 
 #[tauri::command]
-pub async fn delete_folder(
-    state: State<'_, SharedState>,
-    id: i64,
-) -> Result<()> {
+pub async fn delete_folder(state: State<'_, SharedState>, id: i64) -> Result<()> {
     albums::delete_with_assets(&state.pool, id).await?;
     Ok(())
 }
@@ -370,7 +366,9 @@ pub async fn get_preview(
     let sem = state.preview_sem.clone();
     let preview_token = state.preview_token.clone();
 
-    let permit = sem.acquire_owned().await
+    let permit = sem
+        .acquire_owned()
+        .await
         .map_err(|_| AppError::other("preview_busy"))?;
 
     // 等到拿到 permit 后再检查一次，可能已经有更新的请求进来了
@@ -405,12 +403,10 @@ pub async fn get_preview(
             };
             let (rw, rh) = resized.dimensions();
             let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
-            let jpeg = crate::vips_io::encode_rgb16(
-                &processed,
-                crate::export::ExportFormat::Jpeg,
-                88,
-            )?;
-            let out_path = std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}.jpg"));
+            let jpeg =
+                crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, 88)?;
+            let out_path =
+                std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}.jpg"));
             std::fs::write(&out_path, &jpeg)
                 .map_err(|e| AppError::other(format!("preview write: {e}")))?;
             Ok(PreviewResult {
@@ -491,7 +487,9 @@ pub async fn start_batch_export(
         .await?;
 
         // 查找该 asset 对应的水印层并保存到磁盘
-        let watermark_layer = request.per_asset_watermark.as_ref()
+        let watermark_layer = request
+            .per_asset_watermark
+            .as_ref()
             .and_then(|list| list.iter().find(|e| e.asset_id == asset_id))
             .map(|e| &e.layer);
         if let Some(path) = save_watermark_layer(watermark_layer, &state.watermark_dir, task_id)? {
@@ -508,16 +506,19 @@ pub async fn start_batch_export(
 
     // 推送所有任务的初始 pending 进度
     for &task_id in &task_ids {
-        let _ = app.emit("export:progress", &BatchProgress {
-            task_id,
-            total: 1,
-            completed: 0,
-            failed: 0,
-            last_asset_id: None,
-            last_output: None,
-            last_error: None,
-            done: false,
-        });
+        let _ = app.emit(
+            "export:progress",
+            &BatchProgress {
+                task_id,
+                total: 1,
+                completed: 0,
+                failed: 0,
+                last_asset_id: None,
+                last_output: None,
+                last_error: None,
+                done: false,
+            },
+        );
     }
 
     // 立即填满队列空位
@@ -549,7 +550,8 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
                 continue;
             }
         };
-        let export_settings: ExportSettings = match serde_json::from_str(&task.export_settings_json) {
+        let export_settings: ExportSettings = match serde_json::from_str(&task.export_settings_json)
+        {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!(task_id, error = %e, "dispatch_pending: bad export_json");
@@ -567,10 +569,8 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
                 continue;
             }
         };
-        let watermark_path: Option<PathBuf> = task
-            .watermark_layer_path
-            .as_deref()
-            .map(PathBuf::from);
+        let watermark_path: Option<PathBuf> =
+            task.watermark_layer_path.as_deref().map(PathBuf::from);
 
         // try_acquire 已经递增了计数器，无需再调用 on_task_start
         run_export_task(
@@ -609,17 +609,26 @@ fn run_export_task(
         let pool = state.pool.clone();
         let rt = tokio::runtime::Handle::current();
 
-        let _ = app.emit("export:progress", &BatchProgress {
-            task_id, total: 1,
-            completed: 0, failed: 0,
-            last_asset_id: None, last_output: None, last_error: None,
-            done: false,
-        });
+        let _ = app.emit(
+            "export:progress",
+            &BatchProgress {
+                task_id,
+                total: 1,
+                completed: 0,
+                failed: 0,
+                last_asset_id: None,
+                last_output: None,
+                last_error: None,
+                done: false,
+            },
+        );
 
         if state.task_queue.is_cancelled(task_id) {
             let _ = rt.block_on(crate::db::tasks::finish(&pool, task_id));
             state.task_queue.on_task_finish(task_id);
-            rt.spawn(async move { dispatch_pending(state, app).await; });
+            rt.spawn(async move {
+                dispatch_pending(state, app).await;
+            });
             return;
         }
 
@@ -630,7 +639,9 @@ fn run_export_task(
                 let _ = rt.block_on(crate::db::tasks::finish(&pool, task_id));
                 cleanup_watermark_file(&state.watermark_dir, task_id);
                 state.task_queue.on_task_finish(task_id);
-                rt.spawn(async move { dispatch_pending(state, app).await; });
+                rt.spawn(async move {
+                    dispatch_pending(state, app).await;
+                });
                 return;
             }
         };
@@ -640,16 +651,25 @@ fn run_export_task(
         // 等待内存预算（最多 30s），CAS 扣减
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         loop {
-            let current = state.export_memory_budget.load(std::sync::atomic::Ordering::SeqCst);
-            if current >= needed_mb && state.export_memory_budget
-                    .compare_exchange(current, current - needed_mb,
+            let current = state
+                .export_memory_budget
+                .load(std::sync::atomic::Ordering::SeqCst);
+            if current >= needed_mb
+                && state
+                    .export_memory_budget
+                    .compare_exchange(
+                        current,
+                        current - needed_mb,
                         std::sync::atomic::Ordering::SeqCst,
-                        std::sync::atomic::Ordering::SeqCst)
+                        std::sync::atomic::Ordering::SeqCst,
+                    )
                     .is_ok()
             {
                 break;
             }
-            if std::time::Instant::now() > deadline { break; }
+            if std::time::Instant::now() > deadline {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
 
@@ -658,54 +678,95 @@ fn run_export_task(
         // 在 export_pool 内执行，确保 process_image 的 rayon 并行使用受控线程池
         // 而非全局线程池，避免导出任务占满所有 CPU 核心
         let result: Result<PathBuf> = state.export_pool.install(|| {
-            export::resolve_destination_dir(&src_path, &export_settings.destination)
-                .and_then(|dest| export::export_one(
-                    &src_path, &dest, &filter, &export_settings,
-                    lut.as_deref(), watermark_path.as_deref(),
-                ))
+            export::resolve_destination_dir(&src_path, &export_settings.destination).and_then(
+                |dest| {
+                    export::export_one(
+                        &src_path,
+                        &dest,
+                        &filter,
+                        &export_settings,
+                        lut.as_deref(),
+                        watermark_path.as_deref(),
+                    )
+                },
+            )
         });
 
         // 归还内存预算
-        state.export_memory_budget.fetch_add(needed_mb, std::sync::atomic::Ordering::SeqCst);
+        state
+            .export_memory_budget
+            .fetch_add(needed_mb, std::sync::atomic::Ordering::SeqCst);
 
         match &result {
             Ok(out) => {
                 let _ = rt.block_on(crate::db::tasks::record_generation(
-                    &pool, task_id, asset_id,
-                    Some(out.to_string_lossy().as_ref()), "Success", None,
+                    &pool,
+                    task_id,
+                    asset_id,
+                    Some(out.to_string_lossy().as_ref()),
+                    "Success",
+                    None,
                 ));
-                let _ = app.emit("export:progress", &BatchProgress {
-                    task_id, total: 1, completed: 1, failed: 0,
-                    last_asset_id: Some(asset_id),
-                    last_output: Some(out.to_string_lossy().to_string()),
-                    last_error: None, done: false,
-                });
+                let _ = app.emit(
+                    "export:progress",
+                    &BatchProgress {
+                        task_id,
+                        total: 1,
+                        completed: 1,
+                        failed: 0,
+                        last_asset_id: Some(asset_id),
+                        last_output: Some(out.to_string_lossy().to_string()),
+                        last_error: None,
+                        done: false,
+                    },
+                );
             }
             Err(e) => {
                 let msg = e.to_string();
                 let _ = rt.block_on(crate::db::tasks::record_generation(
-                    &pool, task_id, asset_id, None, "Error", Some(&msg),
+                    &pool,
+                    task_id,
+                    asset_id,
+                    None,
+                    "Error",
+                    Some(&msg),
                 ));
-                let _ = app.emit("export:progress", &BatchProgress {
-                    task_id, total: 1, completed: 0, failed: 1,
-                    last_asset_id: Some(asset_id),
-                    last_output: None, last_error: Some(msg), done: false,
-                });
+                let _ = app.emit(
+                    "export:progress",
+                    &BatchProgress {
+                        task_id,
+                        total: 1,
+                        completed: 0,
+                        failed: 1,
+                        last_asset_id: Some(asset_id),
+                        last_output: None,
+                        last_error: Some(msg),
+                        done: false,
+                    },
+                );
             }
         }
 
         let _ = rt.block_on(crate::db::tasks::finish(&pool, task_id));
         cleanup_watermark_file(&state.watermark_dir, task_id);
-        let _ = app.emit("export:progress", &BatchProgress {
-            task_id, total: 1,
-            completed: if result.is_ok() { 1 } else { 0 },
-            failed: if result.is_err() { 1 } else { 0 },
-            last_asset_id: None, last_output: None, last_error: None,
-            done: true,
-        });
+        let _ = app.emit(
+            "export:progress",
+            &BatchProgress {
+                task_id,
+                total: 1,
+                completed: if result.is_ok() { 1 } else { 0 },
+                failed: if result.is_err() { 1 } else { 0 },
+                last_asset_id: None,
+                last_output: None,
+                last_error: None,
+                done: true,
+            },
+        );
 
         state.task_queue.on_task_finish(task_id);
-        rt.spawn(async move { dispatch_pending(state, app).await; });
+        rt.spawn(async move {
+            dispatch_pending(state, app).await;
+        });
     });
 }
 
@@ -723,7 +784,10 @@ pub async fn list_active_tasks_on_startup(
 
 #[tauri::command]
 pub async fn list_fuji_simulations() -> Result<Vec<String>> {
-    Ok(processing::fuji::BUILTIN_NAMES.iter().map(|s| s.to_string()).collect())
+    Ok(processing::fuji::BUILTIN_NAMES
+        .iter()
+        .map(|s| s.to_string())
+        .collect())
 }
 
 /// 导入用户手动选择的图片文件列表（不递归）。
@@ -800,22 +864,36 @@ pub async fn import_luts_from_dir(
             tracing::warn!(?src, error = %e, "import_luts_from_dir: invalid cube, skip");
             continue;
         }
-        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("lut").to_string();
+        let stem = src
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("lut")
+            .to_string();
         let display_name = match unique_lut_name(&state.pool, &stem).await {
             Ok(n) => n,
-            Err(e) => { tracing::warn!(?src, error = %e, "import_luts_from_dir: name check failed"); continue; }
+            Err(e) => {
+                tracing::warn!(?src, error = %e, "import_luts_from_dir: name check failed");
+                continue;
+            }
         };
         let dest = match unique_lut_dest(&state.lut_dir, &stem) {
             Ok(p) => p,
-            Err(e) => { tracing::warn!(?src, error = %e, "import_luts_from_dir: pick dest failed"); continue; }
+            Err(e) => {
+                tracing::warn!(?src, error = %e, "import_luts_from_dir: pick dest failed");
+                continue;
+            }
         };
         if let Err(e) = std::fs::copy(&src, &dest) {
-            tracing::warn!(?src, ?dest, error = %e, "import_luts_from_dir: copy failed"); continue;
+            tracing::warn!(?src, ?dest, error = %e, "import_luts_from_dir: copy failed");
+            continue;
         }
         let dest_str = dest.to_string_lossy().to_string();
         match user_luts::insert(&state.pool, &display_name, &dest_str).await {
             Ok(lut) => out.push(lut),
-            Err(e) => { tracing::warn!(?dest, error = %e, "import_luts_from_dir: db insert failed"); let _ = std::fs::remove_file(&dest); }
+            Err(e) => {
+                tracing::warn!(?dest, error = %e, "import_luts_from_dir: db insert failed");
+                let _ = std::fs::remove_file(&dest);
+            }
         }
     }
     Ok(out)
@@ -984,7 +1062,9 @@ pub async fn get_raw_original(
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let cache_path = state.raw_original_dir.join(format!("{asset_id}_{mtime}.jpg"));
+    let cache_path = state
+        .raw_original_dir
+        .join(format!("{asset_id}_{mtime}.jpg"));
 
     // 磁盘缓存命中（数据库未记录但文件已存在）
     if cache_path.exists() {
@@ -1065,7 +1145,8 @@ pub async fn retry_export_task(
     state.task_queue.uncancel(task_id);
     tasks::reset_for_retry(&state.pool, task_id).await?;
 
-    let task = tasks::get(&state.pool, task_id).await?
+    let task = tasks::get(&state.pool, task_id)
+        .await?
         .ok_or_else(|| AppError::other("task not found"))?;
     let asset_id = task.asset_id;
     let filter: FilterSettings = serde_json::from_str(&task.filter_settings_json)?;
@@ -1077,12 +1158,19 @@ pub async fn retry_export_task(
         task.watermark_layer_path.as_deref().map(PathBuf::from)
     };
 
-    let _ = app.emit("export:progress", &BatchProgress {
-        task_id, total: 1,
-        completed: 0, failed: 0,
-        last_asset_id: None, last_output: None, last_error: None,
-        done: false,
-    });
+    let _ = app.emit(
+        "export:progress",
+        &BatchProgress {
+            task_id,
+            total: 1,
+            completed: 0,
+            failed: 0,
+            last_asset_id: None,
+            last_output: None,
+            last_error: None,
+            done: false,
+        },
+    );
 
     if state.task_queue.try_acquire() {
         sqlx::query("UPDATE batch_tasks SET status = 'processing' WHERE id = ?")
@@ -1093,8 +1181,14 @@ pub async fn retry_export_task(
         let lut = cached_lut(&state, filter.lut_file_path.as_deref())?;
         // try_acquire 已经递增了计数器，无需再调用 on_task_start
         run_export_task(
-            state.inner().clone(), app,
-            task_id, asset_id, filter, export_settings, lut, resolved_path,
+            state.inner().clone(),
+            app,
+            task_id,
+            asset_id,
+            filter,
+            export_settings,
+            lut,
+            resolved_path,
         );
     }
 
@@ -1202,14 +1296,22 @@ pub async fn import_fonts(
             tracing::warn!(?src, "import_fonts: skip non-file path");
             continue;
         }
-        let ext = match src.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) {
+        let ext = match src
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+        {
             Some(e) if ALLOWED_FONT_EXTS.contains(&e.as_str()) => e,
             _ => {
                 tracing::warn!(?src, "import_fonts: unsupported extension, skip");
                 continue;
             }
         };
-        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("font").to_string();
+        let stem = src
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("font")
+            .to_string();
         let display_name = match unique_font_name(&state.pool, &stem).await {
             Ok(n) => n,
             Err(e) => {
@@ -1296,7 +1398,9 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
                 Ok(b) => b,
                 Err(_) => break,
             };
-            if batch.is_empty() { break; }
+            if batch.is_empty() {
+                break;
+            }
 
             for asset in batch {
                 let permit = state.io_sem.clone().acquire_owned().await;
@@ -1308,13 +1412,15 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
                     let _permit = permit;
                     let path = std::path::Path::new(&asset.file_path);
                     let kind = crate::asset::format::classify(path);
-                    let (exif, width, height) = crate::asset::scanner::extract_exif_only(path, kind);
+                    let (exif, width, height) =
+                        crate::asset::scanner::extract_exif_only(path, kind);
                     let rt = tokio::runtime::Handle::current();
                     let _ = rt.block_on(crate::db::assets::update_exif(
                         &pool, asset.id, &exif, width, height,
                     ));
                     let _ = app2.emit("exif:item_done", asset.id);
-                }).await;
+                })
+                .await;
             }
             let _ = app.emit("exif:batch_done", ());
         }
@@ -1343,29 +1449,19 @@ pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> R
 
 /// 取单个设置值，未设置时返回 `None`。
 #[tauri::command]
-pub async fn get_setting(
-    state: State<'_, SharedState>,
-    key: String,
-) -> Result<Option<String>> {
+pub async fn get_setting(state: State<'_, SharedState>, key: String) -> Result<Option<String>> {
     crate::db::app_settings::get(&state.pool, &key).await
 }
 
 /// 写入或更新设置值。复杂类型由前端 `JSON.stringify` 后再传入。
 #[tauri::command]
-pub async fn set_setting(
-    state: State<'_, SharedState>,
-    key: String,
-    value: String,
-) -> Result<()> {
+pub async fn set_setting(state: State<'_, SharedState>, key: String, value: String) -> Result<()> {
     crate::db::app_settings::set(&state.pool, &key, &value).await
 }
 
 /// 删除某项设置。删除不存在的 key 不视为错误。
 #[tauri::command]
-pub async fn delete_setting(
-    state: State<'_, SharedState>,
-    key: String,
-) -> Result<()> {
+pub async fn delete_setting(state: State<'_, SharedState>, key: String) -> Result<()> {
     crate::db::app_settings::delete(&state.pool, &key).await
 }
 
@@ -1378,9 +1474,7 @@ pub async fn get_all_settings(
 }
 
 #[tauri::command]
-pub async fn get_album_summaries(
-    state: State<'_, SharedState>,
-) -> Result<Vec<AlbumSummary>> {
+pub async fn get_album_summaries(state: State<'_, SharedState>) -> Result<Vec<AlbumSummary>> {
     let albums = albums::list(&state.pool).await?;
     build_album_summaries(&state.pool, albums).await
 }
@@ -1396,13 +1490,11 @@ async fn build_album_summaries(
     }
 
     // 一次查询所有相册的资产数量
-    let totals: Vec<(i64, i64)> = sqlx::query_as(
-        "SELECT album_id, COUNT(*) as cnt FROM album_assets GROUP BY album_id",
-    )
-    .fetch_all(pool)
-    .await?;
-    let total_map: std::collections::HashMap<i64, i64> =
-        totals.into_iter().collect();
+    let totals: Vec<(i64, i64)> =
+        sqlx::query_as("SELECT album_id, COUNT(*) as cnt FROM album_assets GROUP BY album_id")
+            .fetch_all(pool)
+            .await?;
+    let total_map: std::collections::HashMap<i64, i64> = totals.into_iter().collect();
 
     // 一次查询所有相册的前4张封面（用 ROW_NUMBER 窗口函数）
     let cover_rows: Vec<(i64, String)> = sqlx::query_as(
@@ -1442,9 +1534,7 @@ async fn build_album_summaries(
 }
 
 #[tauri::command]
-pub async fn list_trash_albums(
-    state: State<'_, SharedState>,
-) -> Result<Vec<AlbumSummary>> {
+pub async fn list_trash_albums(state: State<'_, SharedState>) -> Result<Vec<AlbumSummary>> {
     let albums = albums::list_trash(&state.pool).await?;
     build_album_summaries(&state.pool, albums).await
 }

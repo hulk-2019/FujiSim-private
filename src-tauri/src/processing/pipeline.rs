@@ -140,16 +140,24 @@ pub fn process_image(
         curves::build_per_channel_curves(&curve, profile.r_tilt, profile.g_tilt, profile.b_tilt);
 
     // Pre-build user curve LUTs (once, before pixel loop)
-    let user_rgb_curve = settings.tone_curve.as_ref()
+    let user_rgb_curve = settings
+        .tone_curve
+        .as_ref()
         .filter(|tc| !tc.rgb.is_empty())
         .map(|tc| ToneCurve::from_points(&tc.rgb));
-    let user_r_curve = settings.tone_curve.as_ref()
+    let user_r_curve = settings
+        .tone_curve
+        .as_ref()
         .filter(|tc| !tc.r.is_empty())
         .map(|tc| ToneCurve::from_points(&tc.r));
-    let user_g_curve = settings.tone_curve.as_ref()
+    let user_g_curve = settings
+        .tone_curve
+        .as_ref()
         .filter(|tc| !tc.g.is_empty())
         .map(|tc| ToneCurve::from_points(&tc.g));
-    let user_b_curve = settings.tone_curve.as_ref()
+    let user_b_curve = settings
+        .tone_curve
+        .as_ref()
         .filter(|tc| !tc.b.is_empty())
         .map(|tc| ToneCurve::from_points(&tc.b));
 
@@ -163,89 +171,101 @@ pub fn process_image(
     // 主缓冲区：连续 RGB 浮点，便于 par_chunks_mut(3) 一次处理一个像素
     let mut buf: Vec<f32> = vec![0.0; (w * h * 3) as usize];
 
-    buf.par_chunks_mut(3)
-        .enumerate()
-        .for_each(|(idx, chunk)| {
-            // 从原图取出 16-bit 像素并归一化到 [0,1]
-            let px = src.get_pixel((idx as u32) % w, (idx as u32) / w);
-            let mut r = u16_to_f(px.0[0]);
-            let mut g = u16_to_f(px.0[1]);
-            let mut b = u16_to_f(px.0[2]);
+    buf.par_chunks_mut(3).enumerate().for_each(|(idx, chunk)| {
+        // 从原图取出 16-bit 像素并归一化到 [0,1]
+        let px = src.get_pixel((idx as u32) % w, (idx as u32) / w);
+        let mut r = u16_to_f(px.0[0]);
+        let mut g = u16_to_f(px.0[1]);
+        let mut b = u16_to_f(px.0[2]);
 
-            // [1] 白平衡偏移：富士机内是 -9..+9 整数档，每档对应 ~2% 的通道增益
-            let (nr, ng, nb) = color::apply_wb_shift(r, g, b, settings.wb_shift_r, settings.wb_shift_b);
-            r = nr; g = ng; b = nb;
+        // [1] 白平衡偏移：富士机内是 -9..+9 整数档，每档对应 ~2% 的通道增益
+        let (nr, ng, nb) = color::apply_wb_shift(r, g, b, settings.wb_shift_r, settings.wb_shift_b);
+        r = nr;
+        g = ng;
+        b = nb;
 
-            // [2] 分通道色调曲线
-            r = rc.apply(r);
-            g = gc.apply(g);
-            b = bc.apply(b);
+        // [2] 分通道色调曲线
+        r = rc.apply(r);
+        g = gc.apply(g);
+        b = bc.apply(b);
 
-            // [2b] User point curves (applied on top of Fuji preset curves)
-            if let Some(ref uc) = user_rgb_curve {
-                r = uc.apply(r);
-                g = uc.apply(g);
-                b = uc.apply(b);
-            }
-            if let Some(ref uc) = user_r_curve { r = uc.apply(r); }
-            if let Some(ref uc) = user_g_curve { g = uc.apply(g); }
-            if let Some(ref uc) = user_b_curve { b = uc.apply(b); }
+        // [2b] User point curves (applied on top of Fuji preset curves)
+        if let Some(ref uc) = user_rgb_curve {
+            r = uc.apply(r);
+            g = uc.apply(g);
+            b = uc.apply(b);
+        }
+        if let Some(ref uc) = user_r_curve {
+            r = uc.apply(r);
+        }
+        if let Some(ref uc) = user_g_curve {
+            g = uc.apply(g);
+        }
+        if let Some(ref uc) = user_b_curve {
+            b = uc.apply(b);
+        }
 
-            // [3] Split Toning：根据亮度把像素分到"高光端"或"阴影端"，分别乘以预设里的染色系数
-            let l = color::luminance(r, g, b);
-            let hi = (l - 0.5).max(0.0) * 2.0;
-            let sh = (0.5 - l).max(0.0) * 2.0;
-            r *= color::channel_lerp(1.0, profile.split_highlight.0, hi);
-            g *= color::channel_lerp(1.0, profile.split_highlight.1, hi);
-            b *= color::channel_lerp(1.0, profile.split_highlight.2, hi);
-            r *= color::channel_lerp(1.0, profile.split_shadow.0, sh);
-            g *= color::channel_lerp(1.0, profile.split_shadow.1, sh);
-            b *= color::channel_lerp(1.0, profile.split_shadow.2, sh);
+        // [3] Split Toning：根据亮度把像素分到"高光端"或"阴影端"，分别乘以预设里的染色系数
+        let l = color::luminance(r, g, b);
+        let hi = (l - 0.5).max(0.0) * 2.0;
+        let sh = (0.5 - l).max(0.0) * 2.0;
+        r *= color::channel_lerp(1.0, profile.split_highlight.0, hi);
+        g *= color::channel_lerp(1.0, profile.split_highlight.1, hi);
+        b *= color::channel_lerp(1.0, profile.split_highlight.2, hi);
+        r *= color::channel_lerp(1.0, profile.split_shadow.0, sh);
+        g *= color::channel_lerp(1.0, profile.split_shadow.1, sh);
+        b *= color::channel_lerp(1.0, profile.split_shadow.2, sh);
 
-            // 整体微调三通道（预设里独立配置，Velvia 红/绿都正向、Classic Chrome 红负蓝正等等）
-            r += profile.red_shift * 0.05;
-            g += profile.green_shift * 0.05;
-            b += profile.blue_shift * 0.05;
+        // 整体微调三通道（预设里独立配置，Velvia 红/绿都正向、Classic Chrome 红负蓝正等等）
+        r += profile.red_shift * 0.05;
+        g += profile.green_shift * 0.05;
+        b += profile.blue_shift * 0.05;
 
-            // [4] 饱和度：以亮度为锚点的线性插值，避免单纯乘法导致颜色偏移
-            let sat_amount = profile.saturation + settings.color_saturation;
-            let (sr, sg, sb) = color::saturate(r, g, b, sat_amount);
-            r = sr; g = sg; b = sb;
+        // [4] 饱和度：以亮度为锚点的线性插值，避免单纯乘法导致颜色偏移
+        let sat_amount = profile.saturation + settings.color_saturation;
+        let (sr, sg, sb) = color::saturate(r, g, b, sat_amount);
+        r = sr;
+        g = sg;
+        b = sb;
 
-            // [5] Color Chrome：在 HSL 空间提升已经较饱和的区域
-            if chrome_strength > 0.0 {
-                let (h_, s, lv) = color::rgb_to_hsl(r, g, b);
-                let boosted_s = (s + chrome_strength * (1.0 - s) * 0.5).clamp(0.0, 1.0);
-                let (cr, cg, cb) = color::hsl_to_rgb(h_, boosted_s, lv);
-                r = cr; g = cg; b = cb;
-            }
+        // [5] Color Chrome：在 HSL 空间提升已经较饱和的区域
+        if chrome_strength > 0.0 {
+            let (h_, s, lv) = color::rgb_to_hsl(r, g, b);
+            let boosted_s = (s + chrome_strength * (1.0 - s) * 0.5).clamp(0.0, 1.0);
+            let (cr, cg, cb) = color::hsl_to_rgb(h_, boosted_s, lv);
+            r = cr;
+            g = cg;
+            b = cb;
+        }
 
-            // [6] 褪色：往全图掺一点点亮灰（蓝偏一点点），实现"奶油色调"
-            if profile.fade > 0.0 {
-                let f = profile.fade;
-                r = r * (1.0 - f) + 0.08 * f;
-                g = g * (1.0 - f) + 0.08 * f;
-                b = b * (1.0 - f) + 0.10 * f;
-            }
+        // [6] 褪色：往全图掺一点点亮灰（蓝偏一点点），实现"奶油色调"
+        if profile.fade > 0.0 {
+            let f = profile.fade;
+            r = r * (1.0 - f) + 0.08 * f;
+            g = g * (1.0 - f) + 0.08 * f;
+            b = b * (1.0 - f) + 0.10 * f;
+        }
 
-            // [7] 黑白：用 Rec.601 亮度转灰度，再乘以预设的染色系数实现黄/红滤片效果
-            if profile.monochrome {
-                let y = 0.299 * r + 0.587 * g + 0.114 * b;
-                r = (y * profile.mono_tint.0).clamp(0.0, 1.0);
-                g = (y * profile.mono_tint.1).clamp(0.0, 1.0);
-                b = (y * profile.mono_tint.2).clamp(0.0, 1.0);
-            }
+        // [7] 黑白：用 Rec.601 亮度转灰度，再乘以预设的染色系数实现黄/红滤片效果
+        if profile.monochrome {
+            let y = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = (y * profile.mono_tint.0).clamp(0.0, 1.0);
+            g = (y * profile.mono_tint.1).clamp(0.0, 1.0);
+            b = (y * profile.mono_tint.2).clamp(0.0, 1.0);
+        }
 
-            // [8] 外挂 3D LUT：放在最后，让用户的 LUT 工作在已应用富士曲线后的色彩上
-            if let Some(lut) = &lut {
-                let (lr, lg, lb) = lut.apply(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0));
-                r = lr; g = lg; b = lb;
-            }
+        // [8] 外挂 3D LUT：放在最后，让用户的 LUT 工作在已应用富士曲线后的色彩上
+        if let Some(lut) = &lut {
+            let (lr, lg, lb) = lut.apply(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0));
+            r = lr;
+            g = lg;
+            b = lb;
+        }
 
-            chunk[0] = r.clamp(0.0, 1.0);
-            chunk[1] = g.clamp(0.0, 1.0);
-            chunk[2] = b.clamp(0.0, 1.0);
-        });
+        chunk[0] = r.clamp(0.0, 1.0);
+        chunk[1] = g.clamp(0.0, 1.0);
+        chunk[2] = b.clamp(0.0, 1.0);
+    });
 
     // [9] Clarity / Sharpness：基于亮度的非锐化遮罩。半径不同：Clarity 模拟"中频对比"，Sharpness 是细节锐化
     // 以 1920px 为基准缩放半径，保证视觉效果与预览一致

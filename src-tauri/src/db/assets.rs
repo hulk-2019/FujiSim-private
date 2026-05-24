@@ -207,7 +207,8 @@ pub async fn list(pool: &SqlitePool, q: &AssetQuery) -> Result<ListAssetsResult>
         binds.push(Bind::I64(max_iso));
     }
     if let Some(s) = &q.search {
-        where_clauses.push("(a.file_name LIKE ? OR a.camera_model LIKE ? OR a.lens_model LIKE ?)".into());
+        where_clauses
+            .push("(a.file_name LIKE ? OR a.camera_model LIKE ? OR a.lens_model LIKE ?)".into());
         let pat = format!("%{}%", s);
         binds.push(Bind::Str(pat.clone()));
         binds.push(Bind::Str(pat.clone()));
@@ -334,7 +335,10 @@ pub async fn ids_by_paths(pool: &SqlitePool, paths: &[String]) -> Result<Vec<i64
     let mut out = Vec::with_capacity(paths.len());
     // SQLite 默认 host 参数上限是 999，留点余量分批
     for chunk in paths.chunks(500) {
-        let placeholders = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(",");
+        let placeholders = std::iter::repeat("?")
+            .take(chunk.len())
+            .collect::<Vec<_>>()
+            .join(",");
         let sql = format!("SELECT id FROM assets WHERE file_path IN ({placeholders})");
         let mut q = sqlx::query_as::<_, (i64,)>(&sql);
         for p in chunk {
@@ -379,7 +383,9 @@ pub async fn all_raw_ids(pool: &SqlitePool) -> Result<Vec<i64>> {
 }
 
 pub async fn stats(pool: &SqlitePool) -> Result<LibraryStats> {
-    let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM assets").fetch_one(pool).await?;
+    let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM assets")
+        .fetch_one(pool)
+        .await?;
     let by_camera: Vec<(String, i64)> = sqlx::query_as(
         "SELECT camera_model, COUNT(*) FROM assets WHERE camera_model IS NOT NULL GROUP BY camera_model ORDER BY 2 DESC LIMIT 20",
     )
@@ -388,15 +394,14 @@ pub async fn stats(pool: &SqlitePool) -> Result<LibraryStats> {
     Ok(LibraryStats { total, by_camera })
 }
 
-
 /// 取出 exif_extracted=0 的资产，最多 limit 条
 pub async fn list_exif_pending(pool: &SqlitePool, limit: i64) -> Result<Vec<Asset>> {
-    Ok(sqlx::query_as::<_, Asset>(
-        "SELECT * FROM assets WHERE exif_extracted = 0 LIMIT ?"
+    Ok(
+        sqlx::query_as::<_, Asset>("SELECT * FROM assets WHERE exif_extracted = 0 LIMIT ?")
+            .bind(limit)
+            .fetch_all(pool)
+            .await?,
     )
-    .bind(limit)
-    .fetch_all(pool)
-    .await?)
 }
 
 /// 把 EXIF 数据写回资产，标记 exif_extracted=1
@@ -412,7 +417,7 @@ pub async fn update_exif(
            date_taken=?, camera_make=?, camera_model=?, lens_model=?,
            iso=?, f_number=?, shutter_speed=?, focal_length=?,
            width=?, height=?, exif_extracted=1
-         WHERE id=?"
+         WHERE id=?",
     )
     .bind(&exif.date_taken)
     .bind(&exif.camera_make)
@@ -435,11 +440,7 @@ pub fn _placeholder_time() -> DateTime<Utc> {
     Utc::now()
 }
 
-pub async fn update_preview_path(
-    pool: &SqlitePool,
-    id: i64,
-    preview_path: &str,
-) -> Result<()> {
+pub async fn update_preview_path(pool: &SqlitePool, id: i64, preview_path: &str) -> Result<()> {
     sqlx::query("UPDATE assets SET preview_path = ? WHERE id = ?")
         .bind(preview_path)
         .bind(id)
@@ -448,11 +449,7 @@ pub async fn update_preview_path(
     Ok(())
 }
 
-pub async fn update_cover_path(
-    pool: &SqlitePool,
-    id: i64,
-    cover_path: &str,
-) -> Result<()> {
+pub async fn update_cover_path(pool: &SqlitePool, id: i64, cover_path: &str) -> Result<()> {
     sqlx::query("UPDATE assets SET cover_path = ? WHERE id = ?")
         .bind(cover_path)
         .bind(id)

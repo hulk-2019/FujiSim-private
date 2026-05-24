@@ -1,4 +1,7 @@
-use crate::asset::{exif::ExifData, format::{self, FileKind}};
+use crate::asset::{
+    exif::ExifData,
+    format::{self, FileKind},
+};
 use crate::db::assets::NewAsset;
 use crate::error::Result;
 use crate::processing::raw::read_tiff_file_orientation;
@@ -17,7 +20,11 @@ pub struct ScanResult {
 pub fn scan_dir(root: &Path) -> Result<ScanResult> {
     let mut items = Vec::new();
     let mut skipped = 0usize;
-    for entry in WalkDir::new(root).follow_links(false).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         if !entry.file_type().is_file() {
             continue;
         }
@@ -31,7 +38,8 @@ pub fn scan_dir(root: &Path) -> Result<ScanResult> {
         let file_type = format::ext_upper(path);
         let metadata = entry.metadata().ok();
         let file_size = metadata.as_ref().map(|m| m.len() as i64);
-        let file_mtime = metadata.as_ref()
+        let file_mtime = metadata
+            .as_ref()
             .and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64);
@@ -72,11 +80,15 @@ pub fn scan_files(paths: &[std::path::PathBuf]) -> Result<ScanResult> {
             skipped += 1;
             continue;
         }
-        let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
         let file_type = format::ext_upper(path);
         let metadata = path.metadata().ok();
         let file_size = metadata.as_ref().map(|m| m.len() as i64);
-        let file_mtime = metadata.as_ref()
+        let file_mtime = metadata
+            .as_ref()
             .and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64);
@@ -135,18 +147,26 @@ fn extract_meta(path: &Path, kind: FileKind) -> (ExifData, Option<i64>, Option<i
                 let (raw_w, raw_h) = if exif.width.is_some() && exif.height.is_some() {
                     (exif.width, exif.height)
                 } else {
-                    file_data.as_deref().map(read_dng_dimensions_from_bytes).unwrap_or((None, None))
+                    file_data
+                        .as_deref()
+                        .map(read_dng_dimensions_from_bytes)
+                        .unwrap_or((None, None))
                 };
-                let orientation = exif.orientation
+                let orientation = exif
+                    .orientation
                     .or_else(|| file_data.as_deref().and_then(read_tiff_file_orientation))
                     .unwrap_or(1);
                 let (dw, dh) = display_dims(raw_w, raw_h, orientation);
                 (exif, dw, dh)
             } else {
-                let exif = file_data.as_deref().map(read_raw_meta_from_bytes).unwrap_or_default();
+                let exif = file_data
+                    .as_deref()
+                    .map(read_raw_meta_from_bytes)
+                    .unwrap_or_default();
                 let raw_w = exif.width;
                 let raw_h = exif.height;
-                let orientation = file_data.as_deref()
+                let orientation = file_data
+                    .as_deref()
                     .and_then(read_tiff_file_orientation)
                     .unwrap_or(1);
                 let (dw, dh) = display_dims(raw_w, raw_h, orientation);
@@ -170,7 +190,11 @@ fn read_dng_dimensions_from_bytes(data: &[u8]) -> (Option<i64>, Option<i64>) {
     };
     let u16_at = |off: usize| -> Option<u16> {
         let b = data.get(off..off + 2)?;
-        Some(if le { u16::from_le_bytes([b[0], b[1]]) } else { u16::from_be_bytes([b[0], b[1]]) })
+        Some(if le {
+            u16::from_le_bytes([b[0], b[1]])
+        } else {
+            u16::from_be_bytes([b[0], b[1]])
+        })
     };
     let u32_at = |off: usize| -> Option<u32> {
         let b = data.get(off..off + 4)?;
@@ -221,11 +245,14 @@ fn read_dng_dimensions_from_bytes(data: &[u8]) -> (Option<i64>, Option<i64>) {
         }
     }
 
-    let best = ifds.iter().filter_map(|&ifd| {
-        let w = tag_val(ifd, 256)?;
-        let h = tag_val(ifd, 257)?;
-        Some((w, h))
-    }).max_by_key(|&(w, h)| w * h);
+    let best = ifds
+        .iter()
+        .filter_map(|&ifd| {
+            let w = tag_val(ifd, 256)?;
+            let h = tag_val(ifd, 257)?;
+            Some((w, h))
+        })
+        .max_by_key(|&(w, h)| w * h);
 
     match best {
         Some((w, h)) => (Some(w as i64), Some(h as i64)),
@@ -242,12 +269,16 @@ fn read_raw_meta_from_bytes(data: &[u8]) -> ExifData {
 
     let clean = |s: std::borrow::Cow<'_, str>| -> Option<String> {
         let s = s.trim().to_string();
-        if s.is_empty() { None } else { Some(s) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     };
 
-    let date_taken = raw.datetime().map(|dt| {
-        dt.format("%Y-%m-%d %H:%M:%S").to_string()
-    });
+    let date_taken = raw
+        .datetime()
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
 
     let shutter = raw.shutter();
     let shutter_speed = if shutter > 0.0 {
@@ -261,10 +292,18 @@ fn read_raw_meta_from_bytes(data: &[u8]) -> ExifData {
     };
 
     let aperture = raw.aperture();
-    let f_number = if aperture > 0.0 { Some(aperture as f64) } else { None };
+    let f_number = if aperture > 0.0 {
+        Some(aperture as f64)
+    } else {
+        None
+    };
 
     let focal = raw.focal_len();
-    let focal_length = if focal > 0.0 { Some(focal as f64) } else { None };
+    let focal_length = if focal > 0.0 {
+        Some(focal as f64)
+    } else {
+        None
+    };
 
     let iso = raw.iso_speed();
     let iso = if iso > 0 { Some(iso as i64) } else { None };
@@ -272,7 +311,11 @@ fn read_raw_meta_from_bytes(data: &[u8]) -> ExifData {
     let lens_info = raw.lens_info();
     let lens_model = {
         let name = lens_info.lens_name.trim().to_string();
-        if name.is_empty() { None } else { Some(name) }
+        if name.is_empty() {
+            None
+        } else {
+            Some(name)
+        }
     };
 
     // rsraw width/height 是解码后的实际像素尺寸
@@ -343,4 +386,3 @@ pub fn extract_exif_only(
 ) -> (crate::asset::exif::ExifData, Option<i64>, Option<i64>) {
     extract_meta(path, kind)
 }
-

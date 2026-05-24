@@ -37,10 +37,18 @@ impl CoverQueue {
 
     /// Fire-and-forget: filters already-inflight ids, enqueues the rest,
     /// and spawns a background task to process them concurrently.
-    pub fn enqueue(self: &Arc<Self>, asset_ids: Vec<i64>, state: SharedState, app: tauri::AppHandle) {
+    pub fn enqueue(
+        self: &Arc<Self>,
+        asset_ids: Vec<i64>,
+        state: SharedState,
+        app: tauri::AppHandle,
+    ) {
         let new_ids: Vec<i64> = {
             let mut inflight = self.inflight.lock().expect("cover_queue inflight poisoned");
-            asset_ids.into_iter().filter(|id| inflight.insert(*id)).collect()
+            asset_ids
+                .into_iter()
+                .filter(|id| inflight.insert(*id))
+                .collect()
         };
         if new_ids.is_empty() {
             return;
@@ -71,7 +79,10 @@ impl CoverQueue {
                             }
                         }
                     }
-                    let _guard = Guard { queue: queue.clone(), asset_id };
+                    let _guard = Guard {
+                        queue: queue.clone(),
+                        asset_id,
+                    };
                     process_one(asset_id, &state, &app);
                 });
             }
@@ -95,7 +106,9 @@ fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
     };
 
     let file_path = PathBuf::from(&asset.file_path);
-    let mtime = file_path.metadata().ok()
+    let mtime = file_path
+        .metadata()
+        .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
@@ -104,7 +117,10 @@ fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
     let cover_path = state.cover_dir.join(format!("{}_{}.jpg", asset_id, mtime));
 
     if cover_path.exists() {
-        let _ = app.emit("thumbnail:done", &crate::ipc::ThumbnailDonePayload { asset_id });
+        let _ = app.emit(
+            "thumbnail:done",
+            &crate::ipc::ThumbnailDonePayload { asset_id },
+        );
         return;
     }
 
@@ -124,6 +140,13 @@ fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
     }
 
     let cover_path_str = cover_path.to_string_lossy().to_string();
-    let _ = rt.block_on(crate::db::assets::update_cover_path(&state.pool, asset_id, &cover_path_str));
-    let _ = app.emit("thumbnail:done", &crate::ipc::ThumbnailDonePayload { asset_id });
+    let _ = rt.block_on(crate::db::assets::update_cover_path(
+        &state.pool,
+        asset_id,
+        &cover_path_str,
+    ));
+    let _ = app.emit(
+        "thumbnail:done",
+        &crate::ipc::ThumbnailDonePayload { asset_id },
+    );
 }

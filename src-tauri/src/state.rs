@@ -4,9 +4,9 @@ use crate::queue::TaskQueue;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
-use std::sync::atomic::AtomicU64;
 
 pub struct AppState {
     pub pool: SqlitePool,
@@ -119,6 +119,7 @@ async fn seed_builtin_presets(pool: &SqlitePool) -> Result<()> {
             wb_shift_r: 0,
             wb_shift_b: 0,
             lut_file_path: None,
+            category_id: None,
             is_builtin: true,
         };
         upsert(pool, &preset).await?;

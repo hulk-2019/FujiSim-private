@@ -17,12 +17,12 @@
 //! - [`state`]：应用全局共享状态（连接池、数据目录等）
 
 pub mod asset;
+pub mod cover_queue;
 pub mod db;
 pub mod error;
 pub mod export;
 pub mod ipc;
 pub mod processing;
-pub mod cover_queue;
 pub mod queue;
 pub mod state;
 pub mod vips_io;
@@ -36,12 +36,11 @@ pub fn run() {
     // 安装日志订阅器。`try_init` 而非 `init`：避免在测试环境多次初始化报错。
     // 过滤指令使用 `parse` 而不是 `unwrap`，解析失败则回退到默认 EnvFilter。
     let filter = tracing_subscriber::EnvFilter::from_default_env()
-        .add_directive(
-            "fujisim=info"
-                .parse()
-                .expect("内置日志指令必须可解析"),
-        );
-    tracing_subscriber::fmt().with_env_filter(filter).try_init().ok();
+        .add_directive("fujisim=info".parse().expect("内置日志指令必须可解析"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .try_init()
+        .ok();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

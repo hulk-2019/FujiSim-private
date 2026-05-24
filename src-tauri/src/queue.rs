@@ -41,7 +41,8 @@ impl TaskQueue {
             if cur >= self.max_concurrent {
                 return false;
             }
-            if self.running_count
+            if self
+                .running_count
                 .compare_exchange(cur, cur + 1, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
             {

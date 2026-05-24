@@ -84,7 +84,10 @@ pub fn read(path: &Path) -> Result<ExifData> {
                         format!("1/{}", first.denom)
                     } else if first.num < first.denom {
                         // 例如 2/250 → 显示为 1/125
-                        format!("1/{}", (first.denom as f64 / first.num as f64).round() as u32)
+                        format!(
+                            "1/{}",
+                            (first.denom as f64 / first.num as f64).round() as u32
+                        )
                     } else {
                         // 长曝光（如 30/1），直接显示秒数
                         format!("{}", first.num as f64 / first.denom as f64)

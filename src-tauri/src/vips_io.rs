@@ -1,9 +1,11 @@
 use crate::error::{AppError, Result};
 use crate::export::ExportFormat;
 use image::{ImageBuffer, Rgb, RgbaImage};
+use libvips::ops::{
+    Angle, BandFormat, CastOptions, Direction, JpegsaveBufferOptions, Kernel, PngsaveBufferOptions,
+    ResizeOptions, WebpsaveBufferOptions,
+};
 use libvips::{ops, VipsApp, VipsImage};
-use libvips::ops::{BandFormat, CastOptions, Direction, Angle, JpegsaveBufferOptions,
-                   PngsaveBufferOptions, WebpsaveBufferOptions, ResizeOptions, Kernel};
 use once_cell::sync::Lazy;
 use std::path::Path;
 
@@ -24,9 +26,8 @@ pub fn ensure_init() {
 pub(crate) fn rgb16_to_vips(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> Result<VipsImage> {
     let (w, h) = img.dimensions();
     let pixels: &[u16] = img.as_raw();
-    let bytes = unsafe {
-        std::slice::from_raw_parts(pixels.as_ptr() as *const u8, pixels.len() * 2)
-    };
+    let bytes =
+        unsafe { std::slice::from_raw_parts(pixels.as_ptr() as *const u8, pixels.len() * 2) };
     VipsImage::new_from_memory(bytes, w as i32, h as i32, 3, BandFormat::Ushort)
         .map_err(|e| AppError::Vips(e.to_string()))
 }
@@ -47,7 +48,8 @@ pub(crate) fn vips_to_rgb16(vimg: &VipsImage) -> Result<ImageBuffer<Rgb<u16>, Ve
 
 pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     ensure_init();
-    let path_str = path.to_str()
+    let path_str = path
+        .to_str()
         .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("decode {path_str}: {e}")))?;
@@ -55,15 +57,14 @@ pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
         .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
     // strip alpha if present (RGBA → RGB)
     let vimg = if vimg.get_bands() == 4 {
-        let r = ops::extract_band(&vimg, 0)
-            .map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
-        let g = ops::extract_band(&vimg, 1)
-            .map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
-        let b = ops::extract_band(&vimg, 2)
-            .map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
+        let r =
+            ops::extract_band(&vimg, 0).map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
+        let g =
+            ops::extract_band(&vimg, 1).map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
+        let b =
+            ops::extract_band(&vimg, 2).map_err(|e| AppError::Vips(format!("strip alpha: {e}")))?;
         let mut bands = [r, g, b];
-        ops::bandjoin(&mut bands)
-            .map_err(|e| AppError::Vips(format!("bandjoin: {e}")))?
+        ops::bandjoin(&mut bands).map_err(|e| AppError::Vips(format!("bandjoin: {e}")))?
     } else {
         vimg
     };
@@ -72,8 +73,8 @@ pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
 
 pub fn decode_bytes_to_rgb16(data: &[u8]) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
     // Use image crate to avoid libvips new_from_buffer GObject ABI issue with empty option_str
-    let dyn_img = image::load_from_memory(data)
-        .map_err(|e| AppError::Vips(format!("decode bytes: {e}")))?;
+    let dyn_img =
+        image::load_from_memory(data).map_err(|e| AppError::Vips(format!("decode bytes: {e}")))?;
     let rgb16 = dyn_img.into_rgb16();
     Ok(rgb16)
 }
@@ -88,17 +89,23 @@ pub fn resize_rgb16(
     let vimg = rgb16_to_vips(img)?;
     let hscale = nw as f64 / w as f64;
     let vscale = nh as f64 / h as f64;
-    let resized = ops::resize_with_opts(&vimg, hscale, &ResizeOptions {
-        kernel: Kernel::Lanczos3,
-        vscale,
-        ..ResizeOptions::default()
-    }).map_err(|e| AppError::Vips(format!("resize: {e}")))?;
+    let resized = ops::resize_with_opts(
+        &vimg,
+        hscale,
+        &ResizeOptions {
+            kernel: Kernel::Lanczos3,
+            vscale,
+            ..ResizeOptions::default()
+        },
+    )
+    .map_err(|e| AppError::Vips(format!("resize: {e}")))?;
     vips_to_rgb16(&resized)
 }
 
 pub fn image_dimensions(path: &Path) -> Result<(u32, u32)> {
     ensure_init();
-    let path_str = path.to_str()
+    let path_str = path
+        .to_str()
         .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("dimensions {path_str}: {e}")))?;
@@ -118,49 +125,61 @@ pub fn encode_rgb16(
         ExportFormat::Jpeg => {
             let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
-            ops::jpegsave_buffer_with_opts(&vimg8, &JpegsaveBufferOptions {
-                q: quality as i32,
-                optimize_coding: true,
-                ..JpegsaveBufferOptions::default()
-            }).map_err(|e| AppError::Vips(e.to_string()))
+            ops::jpegsave_buffer_with_opts(
+                &vimg8,
+                &JpegsaveBufferOptions {
+                    q: quality as i32,
+                    optimize_coding: true,
+                    ..JpegsaveBufferOptions::default()
+                },
+            )
+            .map_err(|e| AppError::Vips(e.to_string()))
         }
-        ExportFormat::Png => {
-            ops::pngsave_buffer_with_opts(&vimg, &PngsaveBufferOptions {
+        ExportFormat::Png => ops::pngsave_buffer_with_opts(
+            &vimg,
+            &PngsaveBufferOptions {
                 bitdepth: 16,
                 compression: 6,
                 ..PngsaveBufferOptions::default()
-            }).map_err(|e| AppError::Vips(e.to_string()))
-        }
+            },
+        )
+        .map_err(|e| AppError::Vips(e.to_string())),
         ExportFormat::Webp => {
             let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
-            ops::webpsave_buffer_with_opts(&vimg8, &WebpsaveBufferOptions {
-                q: quality as i32,
-                ..WebpsaveBufferOptions::default()
-            }).map_err(|e| AppError::Vips(e.to_string()))
+            ops::webpsave_buffer_with_opts(
+                &vimg8,
+                &WebpsaveBufferOptions {
+                    q: quality as i32,
+                    ..WebpsaveBufferOptions::default()
+                },
+            )
+            .map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Tiff => {
             let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
-            ops::tiffsave_buffer(&vimg8)
-                .map_err(|e| AppError::Vips(e.to_string()))
+            ops::tiffsave_buffer(&vimg8).map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Gif => {
             let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
                 .map_err(|e| AppError::Vips(e.to_string()))?;
-            ops::gifsave_buffer(&vimg8)
-                .map_err(|e| AppError::Vips(e.to_string()))
+            ops::gifsave_buffer(&vimg8).map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Bmp => {
             // libvips has no bmpsave — fall back to image crate
             let (w, h) = img.dimensions();
             let mut rgb8 = image::RgbImage::new(w, h);
             for (x, y, px) in img.enumerate_pixels() {
-                rgb8.put_pixel(x, y, image::Rgb([
-                    (px.0[0] >> 8) as u8,
-                    (px.0[1] >> 8) as u8,
-                    (px.0[2] >> 8) as u8,
-                ]));
+                rgb8.put_pixel(
+                    x,
+                    y,
+                    image::Rgb([
+                        (px.0[0] >> 8) as u8,
+                        (px.0[1] >> 8) as u8,
+                        (px.0[2] >> 8) as u8,
+                    ]),
+                );
             }
             let mut buf = std::io::Cursor::new(Vec::new());
             rgb8.write_to(&mut buf, image::ImageFormat::Bmp)
@@ -193,25 +212,29 @@ pub fn apply_jpeg_orientation(jpeg: Vec<u8>, orientation: u32) -> Result<Vec<u8>
         2 => ops::flip(&vimg, Direction::Horizontal),
         3 => ops::rot(&vimg, Angle::D180),
         4 => ops::flip(&vimg, Direction::Vertical),
-        5 => ops::rot(&vimg, Angle::D90)
-                .and_then(|r| ops::flip(&r, Direction::Horizontal)),
+        5 => ops::rot(&vimg, Angle::D90).and_then(|r| ops::flip(&r, Direction::Horizontal)),
         6 => ops::rot(&vimg, Angle::D90),
-        7 => ops::rot(&vimg, Angle::D270)
-                .and_then(|r| ops::flip(&r, Direction::Horizontal)),
+        7 => ops::rot(&vimg, Angle::D270).and_then(|r| ops::flip(&r, Direction::Horizontal)),
         8 => ops::rot(&vimg, Angle::D270),
         _ => return Ok(jpeg),
-    }.map_err(|e| AppError::Vips(format!("orient transform: {e}")))?;
+    }
+    .map_err(|e| AppError::Vips(format!("orient transform: {e}")))?;
     let vimg8 = ops::cast_with_opts(&rotated, BandFormat::Uchar, &CastOptions { shift: true })
         .map_err(|e| AppError::Vips(e.to_string()))?;
-    ops::jpegsave_buffer_with_opts(&vimg8, &JpegsaveBufferOptions {
-        q: 90,
-        ..JpegsaveBufferOptions::default()
-    }).map_err(|e| AppError::Vips(e.to_string()))
+    ops::jpegsave_buffer_with_opts(
+        &vimg8,
+        &JpegsaveBufferOptions {
+            q: 90,
+            ..JpegsaveBufferOptions::default()
+        },
+    )
+    .map_err(|e| AppError::Vips(e.to_string()))
 }
 
 pub fn load_watermark(path: &Path, out_w: u32, out_h: u32) -> Result<RgbaImage> {
     ensure_init();
-    let path_str = path.to_str()
+    let path_str = path
+        .to_str()
         .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("watermark open: {e}")))?;
@@ -221,17 +244,21 @@ pub fn load_watermark(path: &Path, out_w: u32, out_h: u32) -> Result<RgbaImage> 
     let vimg = if needs_resize {
         let hscale = out_w as f64 / wm_w as f64;
         let vscale = out_h as f64 / wm_h as f64;
-        ops::resize_with_opts(&vimg, hscale, &ResizeOptions {
-            kernel: Kernel::Lanczos3,
-            vscale,
-            ..ResizeOptions::default()
-        }).map_err(|e| AppError::Vips(format!("watermark resize: {e}")))?
+        ops::resize_with_opts(
+            &vimg,
+            hscale,
+            &ResizeOptions {
+                kernel: Kernel::Lanczos3,
+                vscale,
+                ..ResizeOptions::default()
+            },
+        )
+        .map_err(|e| AppError::Vips(format!("watermark resize: {e}")))?
     } else {
         vimg
     };
     let vimg = if vimg.get_bands() == 3 {
-        ops::bandjoin_const(&vimg, &mut [255.0_f64])
-            .map_err(|e| AppError::Vips(e.to_string()))?
+        ops::bandjoin_const(&vimg, &mut [255.0_f64]).map_err(|e| AppError::Vips(e.to_string()))?
     } else {
         vimg
     };
