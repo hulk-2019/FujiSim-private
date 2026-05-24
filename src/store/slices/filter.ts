@@ -25,6 +25,7 @@ function presetToFilter(preset: FilterPreset): FilterSettings {
     wb_shift_r: preset.wb_shift_r,
     wb_shift_b: preset.wb_shift_b,
     lut_file_path: preset.lut_file_path ?? null,
+    tone_curve: null,
   };
 }
 

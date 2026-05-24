@@ -70,6 +70,11 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
     }
+    // 上面的迁移数组里有 DROP TABLE filter_presets（旧 schema 不再向后兼容时直接重建）。
+    // 重新跑一次 SCHEMA，把刚被 DROP 掉的表按最新结构补回来；CREATE TABLE IF NOT EXISTS
+    // 对未删除的表是 no-op，所以这里完全幂等。
+    sqlx::query(SCHEMA).execute(pool).await?;
+
     // 删除冗余列：completed/failed 改由 asset_generations 聚合计算；
     // display_width/display_height 已废弃，width/height 直接存储实际像素尺寸。
     // SQLite 3.35+ 支持 DROP COLUMN；旧版本会报错，忽略即可（列留着不影响正确性）

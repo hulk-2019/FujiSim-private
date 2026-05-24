@@ -133,17 +133,21 @@ impl Default for FilterSettings {
 
 /// **核心色彩流水线**。输入 16-bit RGB 图，输出 16-bit RGB 图。
 ///
-/// 步骤顺序：
-/// 1. **白平衡偏移**（WB Shift R/B）—— 在线性空间整体偏色；
-/// 2. **分通道色调曲线** —— 实现对比度 + 高光/阴影 + 富士预设的色彩偏好；
-/// 3. **Split Toning** —— 高光/阴影分别染色，模拟胶片的"暖高光冷阴影"；
-/// 4. **饱和度** —— 预设值 + 用户增量；
-/// 5. **Color Chrome** —— 高饱和区进一步加饱和（富士机内同名功能）；
-/// 6. **褪色** —— 给整图加一层灰底，模拟 Eterna / Classic Neg 的低对比感；
-/// 7. **黑白转换** —— 对 Acros / Monochrome 预设生效；
-/// 8. **3D LUT** —— 用户外挂 .cube（由调用方预先加载并传入，避免重复 IO）；
-/// 9. **Clarity / Sharpness** —— 基于亮度局部模糊的非锐化遮罩；
-/// 10. **胶片颗粒** —— 最后合成，与亮度做掩膜（中灰最重）。
+/// 步骤顺序（与下方像素循环里的 `[N]` 注释一一对应）：
+/// 1.  **白平衡偏移**（WB Shift R/B）—— 在线性空间整体偏色；
+/// 2.  **曝光**（Exposure）—— 线性增益，2^EV；
+/// 3.  **明亮度 + 对比度**（Brightness / Contrast）—— 在分段曲线之前先把整体亮度/对比拉到位；
+/// 4.  **四段色调**（Highlight / Shadow / White / Black）—— 高光、阴影、白阶、黑阶分段调整；
+/// 5.  **分通道色调曲线**（Fuji 预设）+ 用户自定义点曲线 —— 实现富士的色彩偏好；
+/// 6.  **Split Toning** —— 高光/阴影分别染色，模拟胶片的"暖高光冷阴影"；
+/// 7.  **Vibrance + Saturation**（含预设饱和度）—— 低饱和优先 + 全局饱和度叠加；
+/// 8.  **Color Chrome** —— 高饱和区进一步加饱和（富士机内同名功能）；
+/// 9.  **褪色** —— 给整图加一层灰底，模拟 Eterna / Classic Neg 的低对比感；
+/// 10. **黑白转换** —— 对 Acros / Monochrome 预设生效；
+/// 11. **3D LUT** —— 用户外挂 .cube（由调用方预先加载并传入，避免重复 IO）；
+/// 12. **Dehaze** —— 暗通道先验 + Guided Filter 全图操作；
+/// 13. **Clarity / Sharpness** —— 基于亮度局部模糊的非锐化遮罩；
+/// 14. **胶片颗粒** —— 最后合成，与亮度做掩膜（中灰最重）。
 ///
 /// 像素遍历使用 [`rayon::par_chunks_mut`] 并行，每个像素独立计算可线性扩展到多核。
 ///
@@ -354,7 +358,7 @@ pub fn process_image(
         apply_unsharp(&mut buf, w, h, settings.sharpness as f32 / 100.0, radius);
     }
 
-    // [10] 颗粒：最后做，保证颗粒不会被锐化算法当作"细节"二次放大
+    // [14] 颗粒：最后做，保证颗粒不会被锐化算法当作"细节"二次放大
     let strength = GrainStrength::parse(settings.grain_effect.as_deref());
     let size = GrainSize::parse(settings.grain_size.as_deref());
     // 以 1920px 为基准缩放 cell，保证颗粒视觉大小与预览一致

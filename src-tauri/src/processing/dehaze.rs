@@ -83,7 +83,10 @@ fn estimate_airlight(buf: &[f32], dark: &[f32]) -> [f32; 3] {
     let n = dark.len();
     let take = (n / 1000).max(1);
     let mut idx: Vec<usize> = (0..n).collect();
-    idx.sort_by(|&a, &b| {
+    // 只需要前 take 个最大值（顺序无所谓），用 select_nth_unstable_by 做 O(n) 部分排序，
+    // 比 sort_by 的 O(n log n) 更快——1280×1280 的预览能省下不少 ms。
+    let pivot = take.saturating_sub(1).min(n - 1);
+    idx.select_nth_unstable_by(pivot, |&a, &b| {
         dark[b]
             .partial_cmp(&dark[a])
             .unwrap_or(std::cmp::Ordering::Equal)
