@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -66,3 +67,39 @@ export const DropdownMenuLabel = React.forwardRef<
   />
 ));
 DropdownMenuLabel.displayName = "DropdownMenuLabel";
+
+export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
+
+export const DropdownMenuSubTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none",
+      "focus:bg-zinc-800 data-[state=open]:bg-zinc-800",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+    <ChevronRight size={12} className="ml-auto" />
+  </DropdownMenuPrimitive.SubTrigger>
+));
+DropdownMenuSubTrigger.displayName = "DropdownMenuSubTrigger";
+
+export const DropdownMenuSubContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubContent
+    ref={ref}
+    className={cn(
+      "z-50 min-w-[8rem] overflow-hidden rounded-md border border-zinc-700 bg-zinc-900 p-1 text-zinc-100 shadow-lg",
+      className,
+    )}
+    {...props}
+  />
+));
+DropdownMenuSubContent.displayName = "DropdownMenuSubContent";
