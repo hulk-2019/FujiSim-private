@@ -1,33 +1,44 @@
-import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import { useStore } from "@/store";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { FilterPreset } from "@/types";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useStore } from "@/store";
+import type { FilterSettings } from "@/types";
+import { PresetListHeader } from "./PresetListHeader";
+import { PresetGroupedList } from "./PresetGroupedList";
+import { PresetCard, applyEntry, type PresetEntry } from "./PresetCard";
 
 export function PresetList() {
   const { t } = useTranslation();
   const presets = useStore((s) => s.presets);
   const filter = useStore((s) => s.filter);
   const applyPreset = useStore((s) => s.applyPreset);
+  const setFilter = useStore((s) => s.setFilter);
+  const refreshPresets = useStore((s) => s.refreshPresets);
+  const refreshUserLuts = useStore((s) => s.refreshUserLuts);
+  const refreshCategories = useStore((s) => s.refreshCategories);
 
-  const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"builtin" | "mine">("builtin");
+  const [search, setSearch] = useState("");
 
-  const filtered = useMemo(() => {
-    const isBuiltin = tab === "builtin";
-    return presets.filter(
-      (p) =>
-        !!p.is_builtin === isBuiltin &&
-        p.name.toLowerCase().includes(search.toLowerCase()),
-    );
-  }, [presets, tab, search]);
+  useEffect(() => {
+    void refreshPresets();
+    void refreshUserLuts();
+    void refreshCategories();
+  }, [refreshPresets, refreshUserLuts, refreshCategories]);
+
+  const builtinFiltered = useMemo(() => {
+    const q = search.toLowerCase();
+    return presets.filter((p) => p.is_builtin && p.name.toLowerCase().includes(q));
+  }, [presets, search]);
 
   return (
     <aside className="w-[220px] flex-shrink-0 flex flex-col bg-zinc-950 border-l border-zinc-800/60 overflow-hidden">
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "builtin" | "mine")} className="flex-1 flex flex-col overflow-hidden">
+      <PresetListHeader showPlus={tab === "mine"} search={search} setSearch={setSearch} />
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as "builtin" | "mine")}
+        className="flex-1 flex flex-col overflow-hidden"
+      >
         <div className="px-2 pt-2">
           <TabsList className="w-full grid grid-cols-2">
             <TabsTrigger value="builtin">{t("editor.presetList.builtin")}</TabsTrigger>
@@ -35,52 +46,30 @@ export function PresetList() {
           </TabsList>
         </div>
 
-        <div className="relative px-2 mt-2">
-          <Search size={12} className="absolute left-4 top-2 text-zinc-500" />
-          <Input
-            placeholder={t("editor.presetList.searchPlaceholder")}
-            className="h-7 pl-7 text-xs"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
         <TabsContent value="builtin" className="flex-1 overflow-y-auto px-2 mt-2 space-y-1">
-          {filtered.map((p) => (
-            <PresetCard key={p.id} preset={p} active={filter.base_simulation === p.base_simulation} onApply={() => applyPreset(p)} />
-          ))}
+          {builtinFiltered.map((p) => {
+            const entry: PresetEntry = { kind: "preset", preset: p };
+            const active = filter.base_simulation === p.base_simulation;
+            return (
+              <PresetCard
+                key={p.id}
+                entry={entry}
+                active={active}
+                onApply={() =>
+                  applyEntry(
+                    entry,
+                    (patch: Partial<FilterSettings>) => setFilter(patch),
+                    applyPreset,
+                  )
+                }
+              />
+            );
+          })}
         </TabsContent>
-        <TabsContent value="mine" className="flex-1 overflow-y-auto px-2 mt-2 space-y-1">
-          {filtered.length === 0 && (
-            <p className="text-[11px] text-zinc-600 px-2 pt-2">{t("filterPanel.noPresets")}</p>
-          )}
-          {filtered.map((p) => (
-            <PresetCard key={p.id} preset={p} active={false} onApply={() => applyPreset(p)} />
-          ))}
+        <TabsContent value="mine" className="flex-1 overflow-y-auto px-2 mt-2">
+          <PresetGroupedList search={search} />
         </TabsContent>
       </Tabs>
     </aside>
-  );
-}
-
-export function PresetCard({ preset, active, onApply }: { preset: FilterPreset; active: boolean; onApply: () => void }) {
-  const { t } = useTranslation();
-  const displayName = preset.is_builtin
-    ? t(`editor.presetNames.${preset.name}` as any, { defaultValue: preset.name })
-    : preset.name;
-  return (
-    <button
-      type="button"
-      onClick={onApply}
-      title={displayName}
-      className={cn(
-        "w-full text-left rounded-md border px-2 py-1.5 text-xs transition-colors",
-        active
-          ? "border-blue-500 bg-blue-500/10 text-zinc-100"
-          : "border-zinc-800 hover:border-zinc-600 text-zinc-300",
-      )}
-    >
-      <p className="truncate">{displayName}</p>
-    </button>
   );
 }
