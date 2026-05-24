@@ -43,8 +43,6 @@ pub struct FilterSettings {
     #[serde(default)]
     pub grain_size: Option<String>,
     #[serde(default)]
-    pub color_chrome_effect: Option<String>,
-    #[serde(default)]
     pub exposure: f32,
     #[serde(default)]
     pub contrast: i32,
@@ -97,7 +95,6 @@ impl FilterSettings {
             && self.wb_shift_r == 0
             && self.wb_shift_b == 0
             && matches!(self.grain_effect.as_deref(), None | Some("None"))
-            && matches!(self.color_chrome_effect.as_deref(), None | Some("None"))
             && self.tone_curve.as_ref().map_or(true, |tc| {
                 tc.rgb.is_empty() && tc.r.is_empty() && tc.g.is_empty() && tc.b.is_empty()
             })
@@ -110,7 +107,6 @@ impl Default for FilterSettings {
             base_simulation: "Pass-Through".into(),
             grain_effect: None,
             grain_size: None,
-            color_chrome_effect: None,
             exposure: 0.0,
             contrast: 0,
             brightness: 0,
@@ -194,13 +190,6 @@ pub fn process_image(
         .as_ref()
         .filter(|tc| !tc.b.is_empty())
         .map(|tc| ToneCurve::from_points(&tc.b));
-
-    // Color Chrome 在 HSL 空间根据现有饱和度做"再升一档"
-    let chrome_strength = match settings.color_chrome_effect.as_deref().unwrap_or("None") {
-        "Weak" => 0.15,
-        "Strong" => 0.30,
-        _ => 0.0,
-    };
 
     // 主缓冲区：连续 RGB 浮点，便于 par_chunks_mut(3) 一次处理一个像素
     let mut buf: Vec<f32> = vec![0.0; (w * h * 3) as usize];
@@ -300,16 +289,6 @@ pub fn process_image(
             r = nr;
             g = ng;
             b = nb;
-        }
-
-        // [8] Color Chrome：在 HSL 空间提升已经较饱和的区域
-        if chrome_strength > 0.0 {
-            let (h_, s, lv) = color::rgb_to_hsl(r, g, b);
-            let boosted_s = (s + chrome_strength * (1.0 - s) * 0.5).clamp(0.0, 1.0);
-            let (cr, cg, cb) = color::hsl_to_rgb(h_, boosted_s, lv);
-            r = cr;
-            g = cg;
-            b = cb;
         }
 
         // [9] 褪色：往全图掺一点点亮灰（蓝偏一点点），实现"奶油色调"
