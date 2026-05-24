@@ -70,7 +70,6 @@ export type FilterPreset = {
   base_simulation: string;
   grain_effect?: string | null;
   grain_size?: string | null;
-  color_chrome_effect?: string | null;
   exposure: number;
   contrast: number;
   brightness: number;
@@ -110,7 +109,6 @@ export type FilterSettings = {
   base_simulation: string;
   grain_effect?: string | null;
   grain_size?: string | null;
-  color_chrome_effect?: string | null;
   exposure: number;
   contrast: number;
   brightness: number;

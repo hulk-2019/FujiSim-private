@@ -9,7 +9,6 @@ function presetToFilter(preset: FilterPreset): FilterSettings {
     base_simulation: preset.base_simulation,
     grain_effect: preset.grain_effect ?? "None",
     grain_size: preset.grain_size ?? "Small",
-    color_chrome_effect: preset.color_chrome_effect ?? "None",
     exposure: preset.exposure,
     contrast: preset.contrast,
     brightness: preset.brightness,

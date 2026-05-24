@@ -8,7 +8,6 @@ export const DEFAULT_FILTER: FilterSettings = {
   base_simulation: "Pass-Through",
   grain_effect: "None",
   grain_size: "Small",
-  color_chrome_effect: "None",
   exposure: 0,
   contrast: 0,
   brightness: 0,
