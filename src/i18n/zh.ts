@@ -84,6 +84,7 @@ const zh = {
     savePresetTitle: "保存为预设",
     savePresetDesc: "把当前参数组合保存到自定义预设。同名将覆盖。",
     savePresetPlaceholder: "例如：人像 暖调 +颗粒",
+    savePresetCategory: "分类",
     strengthLabels: {
       none: "关闭",
       weak: "弱",

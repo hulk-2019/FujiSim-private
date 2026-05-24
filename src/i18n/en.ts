@@ -84,6 +84,7 @@ const en = {
     savePresetTitle: "Save preset",
     savePresetDesc: "Save current settings as a custom preset. Same name will overwrite.",
     savePresetPlaceholder: "e.g. Portrait warm +grain",
+    savePresetCategory: "Category",
     strengthLabels: {
       none: "Off",
       weak: "Weak",
