@@ -2,32 +2,32 @@
 
 **最后更新**：2026-05-25
 **当前分支**：`feature/raw-3`
-**最新提交**：`623024e`
+**最新提交**：`b3a62c8`
 **关联文档**：
 - Spec：[docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md](../specs/2026-05-25-webgpu-pipeline-design.md)
 - Plan：[docs/superpowers/plans/2026-05-25-webgpu-pipeline.md](2026-05-25-webgpu-pipeline.md)
 
 ---
 
-## 进度概览（14/16 任务完成）
+## 进度概览（15/16 任务完成）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
 | M1.1 | 添加 wgpu 依赖、创建 gpu 模块骨架 | ✅ 完成 | `9f3d6f5` |
 | M1.2 | 把 GpuContext 接到 SharedState | ✅ 完成 | `d0e5321` |
-| M1.3 | rgba16f upload + readback helpers | ✅ 完成 | `36d1997` + `da9aa7e`（修复 f16 subnormal bug + clippy/fmt） |
+| M1.3 | rgba16f upload + readback helpers | ✅ 完成 | `36d1997` + `da9aa7e` |
 | M1.4 | passthrough compute pipeline 烟雾测试 | ✅ 完成 | `f777542` |
 | M2.1 | tone curve bake 到 1024×4 LUT | ✅ 完成 | `5b936dd` |
-| M2.2 | FilterUniforms 结构（std140） | ✅ 完成 | `6a7b3f7` + `b0247f8`（修复 std140 vec4 对齐） |
-| M2.3 | color_fused.wgsl 写步骤 [1]–[10] | ✅ 完成 | `5788d13` + `a154533`（修复 3 处 CPU↔GPU 数学不匹配） |
+| M2.2 | FilterUniforms 结构（std140） | ✅ 完成 | `6a7b3f7` + `b0247f8` |
+| M2.3 | color_fused.wgsl 写步骤 [1]–[10] | ✅ 完成 | `5788d13` + `a154533` |
 | M2.4 | color_fused host code + 缓存 pipeline | ✅ 完成 | `3d32942` |
 | M2.5 | 数值回归测试 vs CPU pipeline | ✅ 完成 | `bd6b911` |
 | M2.6 | process_image_gpu 入口（CPU tail 兜底） | ✅ 完成 | `e90de34` |
-| M3.1 | GPU LUT 缓存 + lut3d.wgsl | ✅ 完成 | `8008bff` + `d6df95b`（修复 TOCTOU race） |
+| M3.1 | GPU LUT 缓存 + lut3d.wgsl | ✅ 完成 | `8008bff` + `d6df95b` |
 | M3.2 | box blur (H/V) + sharpen.wgsl | ✅ 完成 | `0b1b0bc` |
 | M3.3 | sharpen pass host code | ✅ 完成 | `0aa2bee` |
-| **M3.4** | **grain.wgsl + 确定性测试** | ✅ **完成** | `623024e` |
-| M3.5 | 全 GPU 流水线串通 | ⏸ 下一站 | — |
+| M3.4 | grain.wgsl + 确定性测试 | ✅ 完成 | `623024e` |
+| **M3.5** | **全 GPU 流水线串通** | ✅ **完成** | `b3a62c8`（含 R16Float→Rgba16Float 修复） |
 | M4.1 | 切换 process_image 走 GPU | 待办 | — |
 | M4.2 | 验证 export 路径走 GPU | 待办 | — |
 | M4.3 | criterion benchmark | 待办 | — |
@@ -90,19 +90,19 @@ src-tauri/src/processing/gpu/
 
 ---
 
-## 下次启动应做的第一件事：M3.5 全 GPU 流水线串通
+## 下次启动应做的第一件事：M4.1 切换 process_image 走 GPU
 
 ### 任务全文
 
-**Task M3.5: Wire all GPU passes into process_image_gpu**
+**Task M4.1: Switch process_image through GPU**
 
-完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M3.5 section。
+完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M4.1 section。
 
-### M3.5 关键提示
+### M4.1 关键提示
 
-- 把 process_image_gpu 从"M2.6 的 CPU tail 兜底"改为全 GPU chain
-- 5 个 compute pass: color_fused → lut3d → sharpen → grain → (可能 dehaze CPU detour)
-- 需要处理 FilterSettings 的参数映射：clarity/sharpness → SharpenArgs，grain_strength/grain_size → grain dispatch
+- 在 `process_image` 入口处优先调用 `process_image_gpu`
+- GPU 不可用时 fallback 到 CPU 路径
+- 保持 API 签名不变
 
 ---
 
@@ -122,6 +122,6 @@ src-tauri/src/processing/gpu/
 
 ## 重启后的第一条 prompt 建议
 
-> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.4 已完成（commit 623024e），下一个是 M3.5 全 GPU 流水线串通。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M3.5。
+> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.5 已完成（commit b3a62c8），下一个是 M4.1 切换 process_image 走 GPU。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M4.1。
 
 这样新会话能秒接上下文。
