@@ -2,14 +2,14 @@
 
 **最后更新**：2026-05-25
 **当前分支**：`feature/raw-3`
-**最新提交**：`e90de34`
+**最新提交**：`d6df95b`
 **关联文档**：
 - Spec：[docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md](../specs/2026-05-25-webgpu-pipeline-design.md)
 - Plan：[docs/superpowers/plans/2026-05-25-webgpu-pipeline.md](2026-05-25-webgpu-pipeline.md)
 
 ---
 
-## 进度概览（10/16 任务完成）
+## 进度概览（11/16 任务完成）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
@@ -23,7 +23,7 @@
 | M2.4 | color_fused host code + 缓存 pipeline | ✅ 完成 | `3d32942` |
 | M2.5 | 数值回归测试 vs CPU pipeline | ✅ 完成 | `bd6b911` |
 | M2.6 | process_image_gpu 入口（CPU tail 兜底） | ✅ 完成 | `e90de34` |
-| **M3.1** | **GPU LUT 缓存 + lut3d.wgsl** | ⏸ **下一站** | — |
+| **M3.1** | **GPU LUT 缓存 + lut3d.wgsl** | ✅ **完成** | `8008bff` + `d6df95b`（修复 TOCTOU race） |
 | M3.2 | box blur (H/V) + sharpen.wgsl | 待办 | — |
 | M3.3 | sharpen pass host code | 待办 | — |
 | M3.4 | grain.wgsl + 确定性测试 | 待办 | — |
@@ -40,17 +40,20 @@
 
 ```
 src-tauri/src/processing/gpu/
-├── mod.rs              # pub mod context / curves_bake / passes / passthrough / uniforms / upload
+├── mod.rs              # pub mod context / curves_bake / lut_cache / passes / passthrough / uniforms / upload
 ├── context.rs          # GpuContext { device, queue, pipelines: Pipelines }
 ├── curves_bake.rs      # bake(&FilterSettings) -> [Vec<f32>; 4]，row 3 已置 0（只用 row 0..2）
+├── lut_cache.rs        # GpuLutCache: path → Arc<wgpu::Texture> 3D LUT 缓存
 ├── passthrough.rs      # M1.4 烟雾测试，M2 起未删除（仍用作 GPU 健康检查测试）
 ├── uniforms.rs         # FilterUniforms 144 字节 std140 布局
 ├── upload.rs           # upload_rgb16_as_rgba16f / readback_rgba16f_as_rgb16 + f16 helpers
 ├── passes/
-│   ├── mod.rs          # pub mod color_fused
-│   └── color_fused.rs  # create_pipeline / dispatch / run_color_fused_only
+│   ├── mod.rs          # pub mod color_fused / lut3d
+│   ├── color_fused.rs  # create_pipeline / dispatch / run_color_fused_only
+│   └── lut3d.rs        # create_pipeline / dispatch for 3D LUT trilinear sampling
 └── shaders/
     ├── color_fused.wgsl
+    ├── lut3d.wgsl
     └── passthrough.wgsl
 ```
 
@@ -83,28 +86,19 @@ src-tauri/src/processing/gpu/
 
 ---
 
-## 下次启动应做的第一件事：M2.5 数值回归测试
+## 下次启动应做的第一件事：M3.2 box blur + sharpen.wgsl
 
 ### 任务全文
 
-**Task M2.5: Numerical regression test for color_fused vs CPU pipeline**
+**Task M3.2: WGSL box blur (H + V) for clarity/sharpness**
 
-**Files:**
-- Create: `src-tauri/src/processing/gpu/tests/mod.rs`
-- Create: `src-tauri/src/processing/gpu/tests/color_fused_test.rs`
-- Modify: `src-tauri/src/processing/gpu/mod.rs`
+完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M3.2 section。
 
-测试目标：
-- 在 `processing/gpu/tests/` 子目录下放回归测试，5 组典型 settings × 64×64 测试图，对比 `passes::color_fused::run_color_fused_only`（GPU）与 `processing::pipeline::process_image`（CPU）输出，最大色差 ≤ 256（约 0.4%，覆盖 f16 量化）。
-- 5 组 settings：identity / Velvia preset / 高曝光高饱和 / Acros 单色 / Classic Chrome 高 shadow。
+### M3.2 关键提示
 
-完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M2.5 section。
-
-### M2.5 关键提示
-
-- CPU 的 `process_image` 本身做完所有 14 步；要让 CPU 只跑 [1]–[10] 与 GPU 对比，构造 settings 时把 `dehaze=0, clarity=0, sharpness=0, grain_effect=None, lut_file_path=None`，那些步骤会自动跳过。
-- 注意 M2.3 阶段已经把 WGSL 数学纠正到与 CPU 严格对齐（包括 luma 权重、curve 顺序），所以测试 tolerance 可以收紧到 256/65535（≈ 0.39%）。如果误差超此，先怀疑是不是新引入了 mismatch。
-- 测试启动 GPU 用 `pollster::block_on(GpuContext::new())`，无 GPU 时 `eprintln!("WARN ...")` 跳过（与现有几个 GPU 测试一致风格）。
+- box_blur_h.wgsl 和 box_blur_v.wgsl 分离水平/垂直模糊，输出单通道 luma（R16Float）
+- sharpen.wgsl 读模糊结果 + 原图，按 clarity/sharpness 参数融合
+- 注意 Rec.709 luma 权重：0.2126 R + 0.7152 G + 0.0722 B
 
 ---
 
@@ -124,6 +118,6 @@ src-tauri/src/processing/gpu/
 
 ## 重启后的第一条 prompt 建议
 
-> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M2.4 已完成（commit 3d32942），下一个是 M2.5 数值回归测试。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M2.5。
+> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.1 已完成（commit d6df95b），下一个是 M3.2 box blur + sharpen.wgsl。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M3.2。
 
 这样新会话能秒接上下文。
