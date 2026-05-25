@@ -157,9 +157,8 @@ pub fn encode_rgb16(
             .map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Tiff => {
-            let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
-                .map_err(|e| AppError::Vips(e.to_string()))?;
-            ops::tiffsave_buffer(&vimg8).map_err(|e| AppError::Vips(e.to_string()))
+            // Save as 16-bit TIFF (no cast to 8-bit) to preserve full precision
+            ops::tiffsave_buffer(&vimg).map_err(|e| AppError::Vips(e.to_string()))
         }
         ExportFormat::Gif => {
             let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })

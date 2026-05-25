@@ -82,7 +82,12 @@ pub async fn get_preview(
 
             // Save to disk cache for future preview requests (skip if we just read from cache)
             if !cache_path.exists() {
-                if let Err(e) = resized.save(&cache_path) {
+                if let Err(e) = crate::vips_io::encode_rgb16_to_file(
+                    &resized,
+                    &cache_path,
+                    crate::export::ExportFormat::Tiff,
+                    0,
+                ) {
                     tracing::warn!("failed to cache preview base for asset {}: {}", asset_id, e);
                 }
             }
