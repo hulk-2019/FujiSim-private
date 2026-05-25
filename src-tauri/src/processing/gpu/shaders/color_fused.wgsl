@@ -89,11 +89,6 @@ fn luma709(c: vec3<f32>) -> f32 {
     return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 }
 
-// Rec.601 luminance (matches CPU monochrome step and split-toning step).
-fn luma601(c: vec3<f32>) -> f32 {
-    return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-}
-
 // [4] 4-segment tone: hue-preserving scale via luma ratio (matches CPU apply_tone_segments_pixel).
 // amount values are raw i32-cast-to-f32 in range [-100, 100].
 fn apply_tone_segments(c: vec3<f32>, highlight: f32, shadow: f32, white: f32, black: f32) -> vec3<f32> {
@@ -166,18 +161,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // [4] 4-segment tone (highlight/shadow/white/black) — hue-preserving via luma ratio.
     c = apply_tone_segments(c, u.highlight, u.shadow, u.white, u.black);
 
-    // [5] Per-channel tone curves (R/G/B rows of curve_lut), then optional master curve.
+    // [5] Per-channel tone curves (R/G/B rows of curve_lut).
+    // Rows already encode: rc → user_rgb → user_per_ch (baked in curves_bake.rs).
+    // Row 3 is reserved/zeros and is never sampled.
     c.r = sample_curve(c.r, 0);
     c.g = sample_curve(c.g, 1);
     c.b = sample_curve(c.b, 2);
-    if (u.has_master_curve != 0u) {
-        c.r = sample_curve(c.r, 3);
-        c.g = sample_curve(c.g, 3);
-        c.b = sample_curve(c.b, 3);
-    }
 
-    // [6] Split toning — luminance-weighted multiplicative tint (Rec.601 luma, matches CPU).
-    let l2 = luma601(c);
+    // [6] Split toning — luminance-weighted multiplicative tint (Rec.709 luma, matches CPU color::luminance).
+    let l2 = luma709(c);
     let hi = max(l2 - 0.5, 0.0) * 2.0;
     let sh = max(0.5 - l2, 0.0) * 2.0;
     c.r = c.r * lerp(1.0, u.split_hi.r, hi);
@@ -191,7 +183,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     c = c + u.channel_shift.rgb;
 
     // [7] Vibrance then saturation (both in HSL space).
-    c = clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    // No clamp here — CPU apply_vibrance_pixel/apply_saturation_pixel also see
+    // possibly out-of-range values after channel_shift.
     c = apply_vibrance(c, u.vibrance);
     c = apply_saturation(c, u.saturation);
 

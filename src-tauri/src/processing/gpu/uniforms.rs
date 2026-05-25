@@ -72,11 +72,10 @@ impl FilterUniforms {
             shadow: s.shadow_tone as f32,
             white: s.white as f32,
             black: s.black as f32,
-            has_master_curve: s
-                .tone_curve
-                .as_ref()
-                .map(|tc| !tc.rgb.is_empty())
-                .unwrap_or(false) as u32,
+            // has_master_curve is reserved/unused: the shader no longer samples row 3
+            // (user_rgb is now baked into per-channel rows in curves_bake.rs).
+            // Kept at 0 for layout stability — do not remove the field.
+            has_master_curve: 0,
             _pad_after_has_master_curve: [0, 0],
             split_hi_r: p.split_highlight.0,
             split_hi_g: p.split_highlight.1,
