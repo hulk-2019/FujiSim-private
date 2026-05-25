@@ -2,14 +2,14 @@
 
 **最后更新**：2026-05-25
 **当前分支**：`feature/raw-3`
-**最新提交**：`0aa2bee`
+**最新提交**：`623024e`
 **关联文档**：
 - Spec：[docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md](../specs/2026-05-25-webgpu-pipeline-design.md)
 - Plan：[docs/superpowers/plans/2026-05-25-webgpu-pipeline.md](2026-05-25-webgpu-pipeline.md)
 
 ---
 
-## 进度概览（13/16 任务完成）
+## 进度概览（14/16 任务完成）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
@@ -24,10 +24,10 @@
 | M2.5 | 数值回归测试 vs CPU pipeline | ✅ 完成 | `bd6b911` |
 | M2.6 | process_image_gpu 入口（CPU tail 兜底） | ✅ 完成 | `e90de34` |
 | M3.1 | GPU LUT 缓存 + lut3d.wgsl | ✅ 完成 | `8008bff` + `d6df95b`（修复 TOCTOU race） |
-| **M3.2** | **box blur (H/V) + sharpen.wgsl** | ✅ **完成** | `0b1b0bc` |
-| **M3.3** | **sharpen pass host code** | ✅ **完成** | `0aa2bee` |
-| M3.4 | grain.wgsl + 确定性测试 | 待办 | — |
-| M3.5 | 全 GPU 流水线串通 | 待办 | — |
+| M3.2 | box blur (H/V) + sharpen.wgsl | ✅ 完成 | `0b1b0bc` |
+| M3.3 | sharpen pass host code | ✅ 完成 | `0aa2bee` |
+| **M3.4** | **grain.wgsl + 确定性测试** | ✅ **完成** | `623024e` |
+| M3.5 | 全 GPU 流水线串通 | ⏸ 下一站 | — |
 | M4.1 | 切换 process_image 走 GPU | 待办 | — |
 | M4.2 | 验证 export 路径走 GPU | 待办 | — |
 | M4.3 | criterion benchmark | 待办 | — |
@@ -90,19 +90,19 @@ src-tauri/src/processing/gpu/
 
 ---
 
-## 下次启动应做的第一件事：M3.4 grain.wgsl + 确定性测试
+## 下次启动应做的第一件事：M3.5 全 GPU 流水线串通
 
 ### 任务全文
 
-**Task M3.4: grain.wgsl + deterministic test**
+**Task M3.5: Wire all GPU passes into process_image_gpu**
 
-完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M3.4 section。
+完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M3.5 section。
 
-### M3.4 关键提示
+### M3.5 关键提示
 
-- grain 效果需要确定性：相同输入 + 相同 seed → 相同输出
-- WGSL 需要实现简单的伪随机数生成器（如 LCG）
-- 注意 grain_size 参数影响噪声颗粒大小
+- 把 process_image_gpu 从"M2.6 的 CPU tail 兜底"改为全 GPU chain
+- 5 个 compute pass: color_fused → lut3d → sharpen → grain → (可能 dehaze CPU detour)
+- 需要处理 FilterSettings 的参数映射：clarity/sharpness → SharpenArgs，grain_strength/grain_size → grain dispatch
 
 ---
 
@@ -122,6 +122,6 @@ src-tauri/src/processing/gpu/
 
 ## 重启后的第一条 prompt 建议
 
-> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.3 已完成（commit 0aa2bee），下一个是 M3.4 grain.wgsl + 确定性测试。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M3.4。
+> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.4 已完成（commit 623024e），下一个是 M3.5 全 GPU 流水线串通。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M3.5。
 
 这样新会话能秒接上下文。
