@@ -147,9 +147,37 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     const token = ++previewTokenCounter;
     currentTokenRef.current = token;
 
-    // Don't clear preview — keep showing current effect until new one is ready.
-    // This avoids flashing the unedited original between slider drags.
-    // Only clear on asset switch (handled by the focused?.id change effect).
+    // When resetting to identity, clear the preview immediately so the canvas
+    // shows the original instead of the old effect.
+    // For normal adjustments, keep the old preview visible until new one arrives.
+    const isIdentity =
+      (filter.base_simulation === "Pass-Through" || !filter.base_simulation) &&
+      !filter.lut_file_path &&
+      filter.exposure === 0 &&
+      filter.contrast === 0 &&
+      filter.brightness === 0 &&
+      filter.highlight_tone === 0 &&
+      filter.shadow_tone === 0 &&
+      filter.white === 0 &&
+      filter.black === 0 &&
+      filter.dehaze === 0 &&
+      filter.vibrance === 0 &&
+      filter.color_saturation === 0 &&
+      filter.clarity === 0 &&
+      filter.sharpness === 0 &&
+      filter.wb_shift_r === 0 &&
+      filter.wb_shift_b === 0 &&
+      (!filter.grain_effect || filter.grain_effect === "None") &&
+      (!filter.tone_curve || (
+        filter.tone_curve.rgb.length === 0 &&
+        filter.tone_curve.r.length === 0 &&
+        filter.tone_curve.g.length === 0 &&
+        filter.tone_curve.b.length === 0
+      ));
+
+    if (isIdentity) {
+      setPreview(null);
+    }
     setError(null);
     setLoading(true);
 
