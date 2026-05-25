@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::processing::gpu::context::GpuContext;
 use crate::processing::lut::Lut3D;
 use crate::queue::TaskQueue;
 use sqlx::SqlitePool;
@@ -19,6 +20,8 @@ pub struct AppState {
     pub font_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
     pub export_pool: Arc<rayon::ThreadPool>,
+    /// 全局 GPU 上下文。Tauri setup 阶段一次性初始化，进程生命周期内长存。
+    pub gpu: Arc<GpuContext>,
     pub task_queue: TaskQueue,
     pub cover_queue: Arc<crate::cover_queue::CoverQueue>,
     /// 统一限制缩略图生成和 EXIF 提取的总并发数（固定 4），
@@ -75,6 +78,8 @@ impl AppState {
 
         let budget_mb: u64 = 1600;
 
+        let gpu = Arc::new(GpuContext::new().await?);
+
         let state = Arc::new(AppState {
             pool,
             data_dir,
@@ -85,6 +90,7 @@ impl AppState {
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),
             export_pool,
+            gpu,
             task_queue: TaskQueue::new(2),
             cover_queue: Arc::new(crate::cover_queue::CoverQueue::new(
                 (logical_cpus / 2).max(2),

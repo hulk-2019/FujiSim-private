@@ -19,6 +19,14 @@ impl GpuContext {
             .await
             .ok_or_else(|| AppError::other("no GPU adapter found"))?;
 
+        let info = adapter.get_info();
+        tracing::info!(
+            backend = ?info.backend,
+            name = %info.name,
+            device_type = ?info.device_type,
+            "GPU adapter selected"
+        );
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
