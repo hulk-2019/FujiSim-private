@@ -147,7 +147,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     const token = ++previewTokenCounter;
     currentTokenRef.current = token;
 
-    setPreview(null);
+    // Don't clear preview — keep showing current effect until new one is ready.
+    // This avoids flashing the unedited original between slider drags.
+    // Only clear on asset switch (handled by the focused?.id change effect).
     setError(null);
     setLoading(true);
 
@@ -218,6 +220,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 
     return () => clearTimeout(handle);
   }, [focused?.id, filter]);
+
+  // Clear preview when switching to a different photo, so old effect doesn't persist.
+  useEffect(() => {
+    setPreview(null);
+    setRawOriginalSrc(null);
+  }, [focused?.id]);
 
   // 切换素材时拉取 RAW 嵌入原图。声明顺序故意放在 getPreview effect 之后，
   // 这样 currentTokenRef 已是最新 token，避免与 getPreview 在 backend 端的
@@ -360,7 +368,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
               >
                 {displaySrc && (
                   <img
-                    key={displaySrc}
                     ref={imgRef}
                     src={displaySrc}
                     alt="preview"
