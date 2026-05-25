@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fujisim_lib::processing::gpu::context::GpuContext;
 use fujisim_lib::processing::gpu::process_image_gpu;
@@ -8,7 +10,11 @@ use std::sync::Arc;
 fn make_img(w: u32, h: u32) -> ImageBuffer<Rgb<u16>, Vec<u16>> {
     let mut img = ImageBuffer::new(w, h);
     for (x, y, px) in img.enumerate_pixels_mut() {
-        *px = Rgb([(x * 200) as u16, (y * 200) as u16, ((x + y) * 100) as u16]);
+        *px = Rgb([
+            ((x as u64 * 65535 / w as u64) as u16),
+            ((y as u64 * 65535 / h as u64) as u16),
+            ((((x + y) as u64 * 65535 / (w + h) as u64) / 2) as u16),
+        ]);
     }
     img
 }
@@ -43,6 +49,11 @@ fn bench(c: &mut Criterion) {
     c.bench_function("gpu_export_6k", |b| {
         b.iter(|| {
             black_box(process_image_gpu(&gpu, &big, &settings, None).unwrap());
+        })
+    });
+    c.bench_function("cpu_export_6k", |b| {
+        b.iter(|| {
+            black_box(process_image_cpu(&big, &settings, None).unwrap());
         })
     });
 }
