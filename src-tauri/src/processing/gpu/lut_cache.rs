@@ -4,6 +4,7 @@ use crate::error::Result;
 use crate::processing::gpu::context::GpuContext;
 use crate::processing::gpu::upload;
 use crate::processing::lut::Lut3D;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -20,15 +21,15 @@ impl GpuLutCache {
         path: &Path,
         cpu_lut: &Lut3D,
     ) -> Result<Arc<wgpu::Texture>> {
-        if let Some(tex) = self.map.lock().unwrap().get(path).cloned() {
-            return Ok(tex);
+        let mut map = self.map.lock().unwrap();
+        match map.entry(path.to_path_buf()) {
+            Entry::Occupied(e) => Ok(e.get().clone()),
+            Entry::Vacant(e) => {
+                let tex = Arc::new(upload_lut3d(gpu, cpu_lut)?);
+                e.insert(tex.clone());
+                Ok(tex)
+            }
         }
-        let tex = Arc::new(upload_lut3d(gpu, cpu_lut)?);
-        self.map
-            .lock()
-            .unwrap()
-            .insert(path.to_path_buf(), tex.clone());
-        Ok(tex)
     }
 
     pub fn evict(&self, path: &Path) {
@@ -52,7 +53,8 @@ fn upload_lut3d(gpu: &GpuContext, lut: &Lut3D) -> Result<wgpu::Texture> {
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    // Pack: lut.data is Vec<f32> with RGB triplets in bgr-major order.
+    // Pack: lut.data is Vec<f32> with RGB triplets in BGR-major order
+    // (blue outermost, per .cube file convention).
     // Each texel is 4 × f16 (rgba). Total texels = n³.
     let total = (n * n * n) as usize;
     let mut buf = vec![0u16; total * 4];
