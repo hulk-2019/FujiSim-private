@@ -2,14 +2,14 @@
 
 **最后更新**：2026-05-25
 **当前分支**：`feature/raw-3`
-**最新提交**：`8ebafc0`
+**最新提交**：`9ef1fa6`
 **关联文档**：
 - Spec：[docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md](../specs/2026-05-25-webgpu-pipeline-design.md)
 - Plan：[docs/superpowers/plans/2026-05-25-webgpu-pipeline.md](2026-05-25-webgpu-pipeline.md)
 
 ---
 
-## 进度概览（17/20 任务完成）
+## 进度概览（20/20 任务完成 🎉）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
@@ -30,9 +30,9 @@
 | **M3.5** | **全 GPU 流水线串通** | ✅ **完成** | `b3a62c8`（含 R16Float→Rgba16Float 修复） |
 | **M4.1** | **切换 process_image 走 GPU** | ✅ **完成** | `8ebafc0`（GLOBAL_GPU OnceCell + set_global_gpu 在 AppState::init 中调用） |
 | **M4.2** | **验证 export 路径走 GPU** | ✅ **完成** | 纯验证：preview.rs + export/mod.rs 均调用 `process_image`（GPU 入口），无生产代码直接调用 `process_image_cpu` |
-| M4.3 | criterion benchmark | 待办 | — |
-| M4.4 | 文档更新（最低系统要求） | 待办 | — |
-| M4.5 | 最终 lint/fmt/手动验证 | 待办 | — |
+| **M4.3** | **criterion benchmark** | ✅ **完成** | `7c79c7c`（GPU vs CPU：1280px ~2x 加速，6K export benchmark） |
+| **M4.4** | **文档更新（最低系统要求）** | ✅ **完成** | `da355b4`（README 中英文同步：最低系统要求 + GPU 管线描述） |
+| **M4.5** | **最终 lint/fmt/手动验证** | ✅ **完成** | `9ef1fa6`（全量测试 38 PASS，clippy 0 warning，fmt clean） |
 
 ---
 
@@ -90,38 +90,14 @@ src-tauri/src/processing/gpu/
 
 ---
 
-## 下次启动应做的第一件事：M4.3 criterion benchmark
+## WebGPU 流水线改造已全部完成 🎉
 
-### 任务全文
-
-**Task M4.3: criterion benchmark**
-
-完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M4.3 section。
-
-### M4.3 关键提示
-
-- 添加 criterion 依赖，写 GPU vs CPU 对比 benchmark
-- 使用 4K 图像尺寸
-- 报告加速比
-
----
-
-## 工作流程提醒
-
-我们用的是 superpowers:subagent-driven-development，每个任务三步走：
-
-1. **Implementer**（sonnet）：按 task 文本严格实现，写测试、跑 build/clippy/fmt、commit。
-2. **Spec reviewer**（sonnet）：独立读代码，逐条核对是否完整匹配 spec、有无 scope creep。
-3. **Code quality reviewer**（sonnet 或 opus，看复杂度）：看 strengths / Critical / Important / Minor，决定 Approved 或 Changes requested。
-
-复杂数学翻译任务（如 M2.3）建议 reviewer 用 **opus**，sonnet 抓不到 luma 权重 / 函数合成顺序这种细节。
-
-每次三方流程跑完 → 在 plan 文件夹和这个 progress 文件里更新 commit SHA → 推进下一个任务。
+所有 20 个任务（M1.1–M4.5）均已完成并通过 reviewer 审批。
 
 ---
 
 ## 重启后的第一条 prompt 建议
 
-> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M4.2 已完成，下一个是 M4.3 criterion benchmark。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M4.3。
+> FujiSim 的 WebGPU 流水线改造已全部完成（20/20），commit 9ef1fa6。如需后续优化（如 GPU dehaze、更大 image 的 benchmark），请参考 docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md。
 
 这样新会话能秒接上下文。
