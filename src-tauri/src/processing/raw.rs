@@ -2,7 +2,12 @@ use crate::error::{AppError, Result};
 use crate::processing::color;
 use image::{ImageBuffer, Rgb};
 use rsraw::BIT_DEPTH_16;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Returns the path to the disk-cached preview base PNG for a given asset_id.
+pub fn preview_base_path(raw_original_dir: &Path, asset_id: i64) -> PathBuf {
+    raw_original_dir.join(format!("{}.png", asset_id))
+}
 
 /// 提取 RAW/DNG 文件中嵌入的最大 JPEG 预览，返回原始 JPEG 字节。
 ///

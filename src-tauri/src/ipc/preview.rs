@@ -45,6 +45,7 @@ pub async fn get_preview(
     let export_pool = state.export_pool.clone();
     let sem = state.preview_sem.clone();
     let preview_token = state.preview_token.clone();
+    let raw_original_dir = state.raw_original_dir.clone();
 
     let permit = sem
         .acquire_owned()
@@ -59,28 +60,33 @@ pub async fn get_preview(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         export_pool.install(|| {
-            use crate::asset::format::{classify, FileKind};
-            let src = match classify(&path) {
-                FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(&path, max_edge)?,
-                _ => processing::load_image_rgb16(&path)?,
+            let cache_path = processing::raw::preview_base_path(&raw_original_dir, asset_id);
+
+            // Try disk cache first: if we have a pre-decoded+resized PNG, read it directly.
+            let resized = if cache_path.exists() {
+                match crate::vips_io::decode_to_rgb16(&cache_path) {
+                    Ok(img) => img,
+                    Err(_) => {
+                        // Corrupted cache file — fall through to full decode
+                        decode_and_resize(&path, max_edge)?
+                    }
+                }
+            } else {
+                decode_and_resize(&path, max_edge)?
             };
-            // 解码完成后再检查一次（RAW 解码是最耗时的部分）
+
+            // Check token after decode (decode is the most expensive part)
             if preview_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
             }
-            let (w, h) = src.dimensions();
-            let resized = if let Some(me) = max_edge {
-                let scale = (me as f32 / w.max(h) as f32).min(1.0);
-                if scale < 1.0 {
-                    let nw = (w as f32 * scale).round().max(1.0) as u32;
-                    let nh = (h as f32 * scale).round().max(1.0) as u32;
-                    crate::vips_io::resize_rgb16(&src, nw, nh)?
-                } else {
-                    src
+
+            // Save to disk cache for future preview requests (skip if we just read from cache)
+            if !cache_path.exists() {
+                if let Err(e) = resized.save(&cache_path) {
+                    tracing::warn!("failed to cache preview base for asset {}: {}", asset_id, e);
                 }
-            } else {
-                src
-            };
+            }
+
             let (rw, rh) = resized.dimensions();
             let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
             let jpeg =
@@ -98,6 +104,32 @@ pub async fn get_preview(
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
+}
+
+fn decode_and_resize(
+    path: &std::path::Path,
+    max_edge: Option<u32>,
+) -> crate::error::Result<image::ImageBuffer<image::Rgb<u16>, Vec<u16>>> {
+    use crate::asset::format::{classify, FileKind};
+    use crate::processing;
+    let src = match classify(path) {
+        FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(path, max_edge)?,
+        _ => processing::load_image_rgb16(path)?,
+    };
+    let (w, h) = src.dimensions();
+    let resized = if let Some(me) = max_edge {
+        let scale = (me as f32 / w.max(h) as f32).min(1.0);
+        if scale < 1.0 {
+            let nw = (w as f32 * scale).round().max(1.0) as u32;
+            let nh = (h as f32 * scale).round().max(1.0) as u32;
+            crate::vips_io::resize_rgb16(&src, nw, nh)?
+        } else {
+            src
+        }
+    } else {
+        src
+    };
+    Ok(resized)
 }
 
 /// 返回封面图缓存目录的绝对路径，供前端拼接 convertFileSrc 使用。
