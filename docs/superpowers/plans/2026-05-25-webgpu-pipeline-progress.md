@@ -2,14 +2,14 @@
 
 **最后更新**：2026-05-25
 **当前分支**：`feature/raw-3`
-**最新提交**：`d6df95b`
+**最新提交**：`0aa2bee`
 **关联文档**：
 - Spec：[docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md](../specs/2026-05-25-webgpu-pipeline-design.md)
 - Plan：[docs/superpowers/plans/2026-05-25-webgpu-pipeline.md](2026-05-25-webgpu-pipeline.md)
 
 ---
 
-## 进度概览（11/16 任务完成）
+## 进度概览（13/16 任务完成）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
@@ -23,9 +23,9 @@
 | M2.4 | color_fused host code + 缓存 pipeline | ✅ 完成 | `3d32942` |
 | M2.5 | 数值回归测试 vs CPU pipeline | ✅ 完成 | `bd6b911` |
 | M2.6 | process_image_gpu 入口（CPU tail 兜底） | ✅ 完成 | `e90de34` |
-| **M3.1** | **GPU LUT 缓存 + lut3d.wgsl** | ✅ **完成** | `8008bff` + `d6df95b`（修复 TOCTOU race） |
-| M3.2 | box blur (H/V) + sharpen.wgsl | 待办 | — |
-| M3.3 | sharpen pass host code | 待办 | — |
+| M3.1 | GPU LUT 缓存 + lut3d.wgsl | ✅ 完成 | `8008bff` + `d6df95b`（修复 TOCTOU race） |
+| **M3.2** | **box blur (H/V) + sharpen.wgsl** | ✅ **完成** | `0b1b0bc` |
+| **M3.3** | **sharpen pass host code** | ✅ **完成** | `0aa2bee` |
 | M3.4 | grain.wgsl + 确定性测试 | 待办 | — |
 | M3.5 | 全 GPU 流水线串通 | 待办 | — |
 | M4.1 | 切换 process_image 走 GPU | 待办 | — |
@@ -48,13 +48,17 @@ src-tauri/src/processing/gpu/
 ├── uniforms.rs         # FilterUniforms 144 字节 std140 布局
 ├── upload.rs           # upload_rgb16_as_rgba16f / readback_rgba16f_as_rgb16 + f16 helpers
 ├── passes/
-│   ├── mod.rs          # pub mod color_fused / lut3d
+│   ├── mod.rs          # pub mod color_fused / lut3d / sharpen
 │   ├── color_fused.rs  # create_pipeline / dispatch / run_color_fused_only
-│   └── lut3d.rs        # create_pipeline / dispatch for 3D LUT trilinear sampling
+│   ├── lut3d.rs        # create_pipeline / dispatch for 3D LUT trilinear sampling
+│   └── sharpen.rs      # SharpenPipelines + create_pipelines + dispatch (box blur H/V + merge)
 └── shaders/
+    ├── box_blur_h.wgsl # 水平盒式模糊 → luma (Rec.709) → R16Float
+    ├── box_blur_v.wgsl # 垂直盒式模糊 (R16Float → R16Float)
     ├── color_fused.wgsl
     ├── lut3d.wgsl
-    └── passthrough.wgsl
+    ├── passthrough.wgsl
+    └── sharpen.wgsl    # merge: clarity + sharpness 公式 (delta = dc + ds)
 ```
 
 `SharedState` 现在携带 `pub gpu: Arc<GpuContext>`，在 `AppState::init` 中通过 `pollster::block_on(GpuContext::new())` 初始化。
@@ -86,19 +90,19 @@ src-tauri/src/processing/gpu/
 
 ---
 
-## 下次启动应做的第一件事：M3.2 box blur + sharpen.wgsl
+## 下次启动应做的第一件事：M3.4 grain.wgsl + 确定性测试
 
 ### 任务全文
 
-**Task M3.2: WGSL box blur (H + V) for clarity/sharpness**
+**Task M3.4: grain.wgsl + deterministic test**
 
-完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M3.2 section。
+完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M3.4 section。
 
-### M3.2 关键提示
+### M3.4 关键提示
 
-- box_blur_h.wgsl 和 box_blur_v.wgsl 分离水平/垂直模糊，输出单通道 luma（R16Float）
-- sharpen.wgsl 读模糊结果 + 原图，按 clarity/sharpness 参数融合
-- 注意 Rec.709 luma 权重：0.2126 R + 0.7152 G + 0.0722 B
+- grain 效果需要确定性：相同输入 + 相同 seed → 相同输出
+- WGSL 需要实现简单的伪随机数生成器（如 LCG）
+- 注意 grain_size 参数影响噪声颗粒大小
 
 ---
 
@@ -118,6 +122,6 @@ src-tauri/src/processing/gpu/
 
 ## 重启后的第一条 prompt 建议
 
-> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.1 已完成（commit d6df95b），下一个是 M3.2 box blur + sharpen.wgsl。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M3.2。
+> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M3.3 已完成（commit 0aa2bee），下一个是 M3.4 grain.wgsl + 确定性测试。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M3.4。
 
 这样新会话能秒接上下文。
