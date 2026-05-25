@@ -1,10 +1,16 @@
-//! GPU device + queue + pipeline cache. Lives for the entire process.
+//! GPU device + queue + pipeline cache.
 
 use crate::error::{AppError, Result};
+
+pub struct Pipelines {
+    pub color_fused: wgpu::ComputePipeline,
+    pub color_fused_bgl: wgpu::BindGroupLayout,
+}
 
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    pub pipelines: Pipelines,
 }
 
 impl GpuContext {
@@ -40,6 +46,15 @@ impl GpuContext {
             .await
             .map_err(|e| AppError::other(format!("request_device: {e}")))?;
 
-        Ok(Self { device, queue })
+        let (color_fused, color_fused_bgl) = super::passes::color_fused::create_pipeline(&device)?;
+
+        Ok(Self {
+            device,
+            queue,
+            pipelines: Pipelines {
+                color_fused,
+                color_fused_bgl,
+            },
+        })
     }
 }

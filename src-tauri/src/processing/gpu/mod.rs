@@ -5,6 +5,7 @@
 
 pub mod context;
 pub mod curves_bake;
+pub mod passes;
 pub mod passthrough;
 pub mod uniforms;
 pub mod upload;

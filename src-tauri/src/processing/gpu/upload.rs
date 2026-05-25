@@ -160,7 +160,7 @@ fn align_up(v: u32, align: u32) -> u32 {
 }
 
 /// IEEE 754 half-precision (binary16) helpers — wgpu's rgba16f format.
-fn f32_to_f16_bits(f: f32) -> u16 {
+pub(super) fn f32_to_f16_bits(f: f32) -> u16 {
     let bits = f.to_bits();
     let sign = ((bits >> 16) & 0x8000) as u16;
     let exp = ((bits >> 23) & 0xff) as i32;
