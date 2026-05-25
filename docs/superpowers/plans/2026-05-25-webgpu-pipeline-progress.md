@@ -2,14 +2,14 @@
 
 **最后更新**：2026-05-25
 **当前分支**：`feature/raw-3`
-**最新提交**：`3d32942`
+**最新提交**：`bd6b911`
 **关联文档**：
 - Spec：[docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md](../specs/2026-05-25-webgpu-pipeline-design.md)
 - Plan：[docs/superpowers/plans/2026-05-25-webgpu-pipeline.md](2026-05-25-webgpu-pipeline.md)
 
 ---
 
-## 进度概览（8/16 任务完成）
+## 进度概览（9/16 任务完成）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
@@ -21,8 +21,8 @@
 | M2.2 | FilterUniforms 结构（std140） | ✅ 完成 | `6a7b3f7` + `b0247f8`（修复 std140 vec4 对齐） |
 | M2.3 | color_fused.wgsl 写步骤 [1]–[10] | ✅ 完成 | `5788d13` + `a154533`（修复 3 处 CPU↔GPU 数学不匹配） |
 | M2.4 | color_fused host code + 缓存 pipeline | ✅ 完成 | `3d32942` |
-| **M2.5** | **数值回归测试 vs CPU pipeline** | ⏸ **下一站** | — |
-| M2.6 | process_image_gpu 入口（CPU tail 兜底） | 待办 | — |
+| M2.5 | 数值回归测试 vs CPU pipeline | ✅ 完成 | `bd6b911` |
+| **M2.6** | **process_image_gpu 入口（CPU tail 兜底）** | ⏸ **下一站** | — |
 | M3.1 | GPU LUT 缓存 + lut3d.wgsl | 待办 | — |
 | M3.2 | box blur (H/V) + sharpen.wgsl | 待办 | — |
 | M3.3 | sharpen pass host code | 待办 | — |
