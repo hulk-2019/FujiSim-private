@@ -41,24 +41,9 @@ pub fn process_image_gpu(
         current = passes::lut3d::dispatch(gpu, &current, &lut_tex, w, h)?;
     }
 
-    // 3. dehaze (CPU detour) — only if non-zero.
+    // 3. dehaze (GPU pipeline — no CPU detour).
     if settings.dehaze != 0 {
-        let mut intermediate = upload::readback_rgba16f_as_rgb16(gpu, &current)?;
-        let mut buf: Vec<f32> = Vec::with_capacity((w * h * 3) as usize);
-        for px in intermediate.pixels() {
-            buf.push((px.0[0] as f32) / 65535.0);
-            buf.push((px.0[1] as f32) / 65535.0);
-            buf.push((px.0[2] as f32) / 65535.0);
-        }
-        crate::processing::dehaze::apply_dehaze(&mut buf, w, h, settings.dehaze);
-        for (i, px) in intermediate.pixels_mut().enumerate() {
-            *px = image::Rgb([
-                (buf[i * 3] * 65535.0).round().clamp(0.0, 65535.0) as u16,
-                (buf[i * 3 + 1] * 65535.0).round().clamp(0.0, 65535.0) as u16,
-                (buf[i * 3 + 2] * 65535.0).round().clamp(0.0, 65535.0) as u16,
-            ]);
-        }
-        current = upload::upload_rgb16_as_rgba16f(gpu, &intermediate, "after_dehaze")?;
+        current = passes::dehaze::dispatch(gpu, &current, settings.dehaze, w, h)?;
     }
 
     // 4. sharpen (clarity + sharpness in one merge step).

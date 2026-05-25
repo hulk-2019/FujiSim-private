@@ -2,6 +2,7 @@
 
 use crate::error::{AppError, Result};
 use image::{ImageBuffer, Rgb};
+use rayon::prelude::*;
 use std::sync::Arc;
 
 use super::context::GpuContext;
@@ -32,18 +33,19 @@ pub fn upload_rgb16_as_rgba16f(
         view_formats: &[],
     });
 
-    // Convert u16 → f16 (rgba). Half the data: 16-bit float per channel.
+    // Convert u16 → f16 (rgba). Parallel for large images.
     let total = (w as usize) * (h as usize) * 4;
     let mut data: Vec<u16> = vec![0u16; total];
-    for (i, px) in src.pixels().enumerate() {
-        let r = (px.0[0] as f32) / 65535.0;
-        let g = (px.0[1] as f32) / 65535.0;
-        let b = (px.0[2] as f32) / 65535.0;
-        data[i * 4] = f32_to_f16_bits(r);
-        data[i * 4 + 1] = f32_to_f16_bits(g);
-        data[i * 4 + 2] = f32_to_f16_bits(b);
-        data[i * 4 + 3] = f32_to_f16_bits(1.0);
-    }
+    let src_raw = src.as_raw();
+    data.par_chunks_mut(4).enumerate().for_each(|(i, out)| {
+        let r = (src_raw[i * 3] as f32) / 65535.0;
+        let g = (src_raw[i * 3 + 1] as f32) / 65535.0;
+        let b = (src_raw[i * 3 + 2] as f32) / 65535.0;
+        out[0] = f32_to_f16_bits(r);
+        out[1] = f32_to_f16_bits(g);
+        out[2] = f32_to_f16_bits(b);
+        out[3] = f32_to_f16_bits(1.0);
+    });
     let bytes: &[u8] = bytemuck::cast_slice(&data);
 
     gpu.queue.write_texture(
@@ -126,33 +128,28 @@ pub fn readback_rgba16f_as_rgb16(
         .map_err(|e| AppError::other(format!("map recv: {e}")))?
         .map_err(|e| AppError::other(format!("map: {e:?}")))?;
     let data = slice.get_mapped_range();
-
-    let mut out: ImageBuffer<Rgb<u16>, Vec<u16>> = ImageBuffer::new(w, h);
-    let row_bytes = (w * 8) as usize;
+    // Copy mapped data to a plain Vec so rayon can access it (BufferView is not Send)
     let padded = padded_bpr as usize;
-    for y in 0..h {
-        let row_start = (y as usize) * padded;
-        let row = &data[row_start..row_start + row_bytes];
-        let halfs: &[u16] = bytemuck::cast_slice(row);
-        for x in 0..w {
-            let i = (x as usize) * 4;
-            let r = f16_bits_to_f32(halfs[i]);
-            let g = f16_bits_to_f32(halfs[i + 1]);
-            let b = f16_bits_to_f32(halfs[i + 2]);
-            out.put_pixel(
-                x,
-                y,
-                Rgb([
-                    (r.clamp(0.0, 1.0) * 65535.0).round() as u16,
-                    (g.clamp(0.0, 1.0) * 65535.0).round() as u16,
-                    (b.clamp(0.0, 1.0) * 65535.0).round() as u16,
-                ]),
-            );
-        }
-    }
+    let mapped_bytes: Vec<u8> = data.to_vec();
     drop(data);
     buffer.unmap();
-    Ok(out)
+    let data_u16: &[u16] = bytemuck::cast_slice(&mapped_bytes);
+    let padded_u16 = padded / 2; // padded bytes → u16 element count per row
+
+    let mut out_raw: Vec<u16> = vec![0u16; (w * h * 3) as usize];
+    out_raw.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        let row_start = (i / w as usize) * padded_u16;
+        let x_off = (i % w as usize) * 4;
+        let halfs_start = row_start + x_off;
+        let r = f16_bits_to_f32(data_u16[halfs_start]);
+        let g = f16_bits_to_f32(data_u16[halfs_start + 1]);
+        let b = f16_bits_to_f32(data_u16[halfs_start + 2]);
+        px[0] = (r.clamp(0.0, 1.0) * 65535.0).round() as u16;
+        px[1] = (g.clamp(0.0, 1.0) * 65535.0).round() as u16;
+        px[2] = (b.clamp(0.0, 1.0) * 65535.0).round() as u16;
+    });
+    ImageBuffer::from_raw(w, h, out_raw)
+        .ok_or_else(|| AppError::Vips("readback buffer size mismatch".into()))
 }
 
 fn align_up(v: u32, align: u32) -> u32 {

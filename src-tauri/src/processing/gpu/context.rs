@@ -11,6 +11,7 @@ pub struct Pipelines {
     pub sharpen: super::passes::sharpen::SharpenPipelines,
     pub grain: wgpu::ComputePipeline,
     pub grain_bgl: wgpu::BindGroupLayout,
+    pub dehaze: super::passes::dehaze::pipelines::DehazePipelines,
 }
 
 pub struct GpuContext {
@@ -56,6 +57,7 @@ impl GpuContext {
         let (lut3d, lut3d_bgl) = super::passes::lut3d::create_pipeline(&device)?;
         let sharpen = super::passes::sharpen::create_pipelines(&device)?;
         let (grain, grain_bgl) = super::passes::grain::create_pipeline(&device)?;
+        let dehaze = super::passes::dehaze::pipelines::create_pipelines(&device)?;
 
         Ok(Self {
             device,
@@ -69,6 +71,7 @@ impl GpuContext {
                 sharpen,
                 grain,
                 grain_bgl,
+                dehaze,
             },
         })
     }
