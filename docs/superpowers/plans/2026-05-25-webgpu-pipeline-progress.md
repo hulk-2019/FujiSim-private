@@ -9,7 +9,7 @@
 
 ---
 
-## 进度概览（16/20 任务完成）
+## 进度概览（17/20 任务完成）
 
 | # | 任务 | 状态 | Commit |
 |---|---|---|---|
@@ -29,7 +29,7 @@
 | M3.4 | grain.wgsl + 确定性测试 | ✅ 完成 | `623024e` |
 | **M3.5** | **全 GPU 流水线串通** | ✅ **完成** | `b3a62c8`（含 R16Float→Rgba16Float 修复） |
 | **M4.1** | **切换 process_image 走 GPU** | ✅ **完成** | `8ebafc0`（GLOBAL_GPU OnceCell + set_global_gpu 在 AppState::init 中调用） |
-| M4.2 | 验证 export 路径走 GPU | 待办 | — |
+| **M4.2** | **验证 export 路径走 GPU** | ✅ **完成** | 纯验证：preview.rs + export/mod.rs 均调用 `process_image`（GPU 入口），无生产代码直接调用 `process_image_cpu` |
 | M4.3 | criterion benchmark | 待办 | — |
 | M4.4 | 文档更新（最低系统要求） | 待办 | — |
 | M4.5 | 最终 lint/fmt/手动验证 | 待办 | — |
@@ -90,18 +90,19 @@ src-tauri/src/processing/gpu/
 
 ---
 
-## 下次启动应做的第一件事：M4.2 验证 export 路径走 GPU
+## 下次启动应做的第一件事：M4.3 criterion benchmark
 
 ### 任务全文
 
-**Task M4.2: Verify export path uses GPU**
+**Task M4.3: criterion benchmark**
 
-完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M4.2 section。
+完整任务文本在 [plan 文档](2026-05-25-webgpu-pipeline.md) 的 Task M4.3 section。
 
-### M4.2 关键提示
+### M4.3 关键提示
 
-- 确保 export 路径通过 `process_image`（而非直接调用 `process_image_cpu`）
-- 如果 export 调用了 CPU 路径，改为使用 `process_image` 入口
+- 添加 criterion 依赖，写 GPU vs CPU 对比 benchmark
+- 使用 4K 图像尺寸
+- 报告加速比
 
 ---
 
@@ -121,6 +122,6 @@ src-tauri/src/processing/gpu/
 
 ## 重启后的第一条 prompt 建议
 
-> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M4.1 已完成（commit 8ebafc0），下一个是 M4.2 验证 export 路径走 GPU。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M4.2。
+> 我之前在做 FujiSim 的 WebGPU 流水线改造（spec/plan 在 docs/superpowers），M4.2 已完成，下一个是 M4.3 criterion benchmark。请读 docs/superpowers/plans/2026-05-25-webgpu-pipeline-progress.md 了解进度，然后按 subagent-driven-development 流程继续推进 M4.3。
 
 这样新会话能秒接上下文。
