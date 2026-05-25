@@ -31,6 +31,18 @@ FujiSim is built with **Tauri 2** (Rust backend + React 18 frontend), keeping th
 
 ---
 
+## Minimum System Requirements
+
+FujiSim's color pipeline runs on the GPU via wgpu (Metal on macOS, DX12 on Windows, Vulkan on Linux). Minimum supported configurations:
+
+- **macOS**: 10.13+ (Metal capable)
+- **Windows**: 10+ (DX12 capable)
+- **Linux**: GPU driver supporting Vulkan or OpenGL 4.0+
+
+If your system has no compatible GPU, FujiSim will refuse to start with a "no GPU adapter found" error — there is no CPU fallback.
+
+---
+
 ## ✨ Implemented Features
 
 ### 📁 F1 Asset Management
@@ -59,7 +71,7 @@ FujiSim is built with **Tauri 2** (Rust backend + React 18 frontend), keeping th
 - **Color Chrome Effect**: Increases color depth (None / Weak / Strong).
 - **Advanced Tuning Panel**: Adjustments for Highlights / Shadows / Saturation / Clarity / Sharpness, as well as White Balance Shift (R-axis / B-axis, -9 to +9).
 - **Preset Management**: User custom preset CRUD, built-in presets independently protected; Preset tab displays system presets and user customs synchronously (including LUT entries).
-- **Real-time Preview**: 80ms debounce response, long edge 1280 hardware-level scaling, supports A/B view comparison (hold button to instantly view original image).
+- **Real-time Preview**: 80ms debounce + GPU-accelerated color pipeline (wgpu + WGSL); ~25ms per frame on integrated GPUs, faster on discrete. Long edge 1280 hardware-level scaling, supports A/B view comparison (hold button to instantly view original image).
 
 ### 📤 F4 Batch Generation & Export
 - **Bounded Concurrency**: Background asynchronous batch export, internally using a dedicated `rayon::ThreadPool` capped at **2 concurrent images**. Each image still uses pixel-level parallelism inside, but the outer cap keeps peak memory predictable on large RAWs (~1.4 GB peak on 6000×4000 instead of CPU-cores × image-size).
