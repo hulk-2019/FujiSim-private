@@ -23,6 +23,9 @@ pub struct FilterUniforms {
     pub black: f32,
     // Step [5] curve toggles (LUT-driven; 0 = skip per-channel sample)
     pub has_master_curve: u32,
+    // Explicit padding: has_master_curve sits at offset 36 (after 9 × f32).
+    // WGSL naga inserts 8 bytes here so split_hi vec4 starts at offset 48 (16-byte aligned).
+    pub _pad_after_has_master_curve: [u32; 2],
     // Step [6] split toning + global channel shift (vec4 for std140 alignment)
     pub split_hi_r: f32,
     pub split_hi_g: f32,
@@ -74,6 +77,7 @@ impl FilterUniforms {
                 .as_ref()
                 .map(|tc| !tc.rgb.is_empty())
                 .unwrap_or(false) as u32,
+            _pad_after_has_master_curve: [0, 0],
             split_hi_r: p.split_highlight.0,
             split_hi_g: p.split_highlight.1,
             split_hi_b: p.split_highlight.2,
@@ -113,8 +117,43 @@ mod tests {
         assert_eq!(u.height, 853);
         assert_eq!(u.has_master_curve, 0);
         assert_eq!(u.monochrome, 0);
-        // bytemuck::bytes_of must succeed (proves Pod is satisfied at runtime).
-        let bytes = bytemuck::bytes_of(&u);
-        assert_eq!(bytes.len(), std::mem::size_of::<FilterUniforms>());
+        // bytemuck::Pod proven at compile time; instead check WGSL std140 invariants:
+        let size = std::mem::size_of::<FilterUniforms>();
+        assert_eq!(
+            size % 16,
+            0,
+            "FilterUniforms size {size} must be a multiple of 16 for WGSL uniform binding"
+        );
+        assert_eq!(
+            size, 144,
+            "FilterUniforms size changed; update WGSL shader if intentional"
+        );
+        // vec4 fields must be at 16-byte-aligned offsets.
+        // offset_of! is stable from 1.77; use manual address arithmetic for MSRV 1.75.
+        let base = &u as *const _ as usize;
+        let off_split_hi = (&u.split_hi_r as *const _ as usize) - base;
+        let off_split_sh = (&u.split_sh_r as *const _ as usize) - base;
+        let off_channel = (&u.channel_shift_r as *const _ as usize) - base;
+        let off_mono_tint = (&u.mono_tint_r as *const _ as usize) - base;
+        assert_eq!(
+            off_split_hi % 16,
+            0,
+            "split_hi_r offset {off_split_hi} not 16-byte aligned"
+        );
+        assert_eq!(
+            off_split_sh % 16,
+            0,
+            "split_sh_r offset {off_split_sh} not 16-byte aligned"
+        );
+        assert_eq!(
+            off_channel % 16,
+            0,
+            "channel_shift_r offset {off_channel} not 16-byte aligned"
+        );
+        assert_eq!(
+            off_mono_tint % 16,
+            0,
+            "mono_tint_r offset {off_mono_tint} not 16-byte aligned"
+        );
     }
 }
