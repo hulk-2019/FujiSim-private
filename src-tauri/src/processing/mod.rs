@@ -30,7 +30,7 @@ pub mod raw;
 pub mod saturation;
 pub mod tone;
 
-pub use pipeline::{process_image, FilterSettings};
+pub use pipeline::{process_image, process_image_cpu, set_global_gpu, FilterSettings};
 
 /// 加载图片到 16-bit linear RGB。
 ///

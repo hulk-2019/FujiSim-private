@@ -101,6 +101,10 @@ impl AppState {
             preview_token: Arc::new(AtomicU64::new(0)),
             preview_sem: Arc::new(Semaphore::new(1)),
         });
+
+        // Populate the global GPU OnceCell so process_image routes through GPU.
+        crate::processing::set_global_gpu(state.gpu.clone());
+
         seed_builtin_presets(&state.pool).await?;
         Ok(state)
     }

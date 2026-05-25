@@ -15,6 +15,29 @@ use image::{ImageBuffer, Rgb};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::processing::gpu;
+use once_cell::sync::OnceCell;
+
+static GLOBAL_GPU: OnceCell<Arc<gpu::context::GpuContext>> = OnceCell::new();
+
+pub fn set_global_gpu(g: Arc<gpu::context::GpuContext>) {
+    let _ = GLOBAL_GPU.set(g);
+}
+
+/// Public entry. Uses GPU when available; falls back to CPU.
+pub fn process_image(
+    src: &ImageBuffer<Rgb<u16>, Vec<u16>>,
+    settings: &FilterSettings,
+    lut: Option<&Lut3D>,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    if let Some(gpu_ctx) = GLOBAL_GPU.get() {
+        gpu::process_image_gpu(gpu_ctx, src, settings, lut)
+    } else {
+        process_image_cpu(src, settings, lut)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurvePoint {
@@ -148,7 +171,7 @@ impl Default for FilterSettings {
 /// 像素遍历使用 [`rayon::par_chunks_mut`] 并行，每个像素独立计算可线性扩展到多核。
 ///
 /// `lut` 由调用方传入（可为 `None`），避免每次调用都从磁盘重新加载。
-pub fn process_image(
+pub fn process_image_cpu(
     src: &ImageBuffer<Rgb<u16>, Vec<u16>>,
     settings: &FilterSettings,
     lut: Option<&Lut3D>,
