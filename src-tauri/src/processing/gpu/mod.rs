@@ -19,9 +19,7 @@ use crate::processing::lut::Lut3D;
 use crate::processing::pipeline::FilterSettings;
 use image::{ImageBuffer, Rgb};
 
-/// GPU pipeline entry. Currently runs only steps [1]-[10] on GPU,
-/// then hands off to the existing CPU code for [11]-[14] via a small
-/// helper. Will be expanded in M3 to keep more steps on the GPU.
+/// Full GPU pipeline: color_fused → lut3d → dehaze(CPU) → sharpen → grain → readback.
 pub fn process_image_gpu(
     gpu: &context::GpuContext,
     src: &ImageBuffer<Rgb<u16>, Vec<u16>>,
@@ -31,23 +29,69 @@ pub fn process_image_gpu(
     if lut.is_none() && settings.is_identity() {
         return Ok(src.clone());
     }
-    // Step [1]-[10] on GPU.
-    let after_color = passes::color_fused::run_color_fused_only(gpu, src, settings)?;
+    let (w, h) = src.dimensions();
 
-    // Steps [11]-[14] still on CPU. Build a "rest only" settings:
-    //   - skip steps [1]-[10] (already applied) by clearing those fields
-    //   - keep LUT, dehaze, clarity, sharpness, grain
-    let rest = FilterSettings {
-        base_simulation: "Pass-Through".into(),
-        // keep:
-        dehaze: settings.dehaze,
-        clarity: settings.clarity,
-        sharpness: settings.sharpness,
-        grain_effect: settings.grain_effect.clone(),
-        grain_size: settings.grain_size.clone(),
-        lut_file_path: settings.lut_file_path.clone(),
-        // zero everything else so CPU only runs the tail:
-        ..Default::default()
-    };
-    crate::processing::pipeline::process_image(&after_color, &rest, lut)
+    // 1. Upload + color_fused.
+    let in_tex = upload::upload_rgb16_as_rgba16f(gpu, src, "src")?;
+    let mut current = passes::color_fused::dispatch(gpu, &in_tex, settings, w, h)?;
+
+    // 2. lut3d (if any).
+    if let (Some(cpu_lut), Some(path)) = (lut, settings.lut_file_path.as_ref()) {
+        let lut_tex = gpu.pipelines.lut_cache.get_or_upload(gpu, path, cpu_lut)?;
+        current = passes::lut3d::dispatch(gpu, &current, &lut_tex, w, h)?;
+    }
+
+    // 3. dehaze (CPU detour) — only if non-zero.
+    if settings.dehaze != 0 {
+        let mut intermediate = upload::readback_rgba16f_as_rgb16(gpu, &current)?;
+        let mut buf: Vec<f32> = Vec::with_capacity((w * h * 3) as usize);
+        for px in intermediate.pixels() {
+            buf.push((px.0[0] as f32) / 65535.0);
+            buf.push((px.0[1] as f32) / 65535.0);
+            buf.push((px.0[2] as f32) / 65535.0);
+        }
+        crate::processing::dehaze::apply_dehaze(&mut buf, w, h, settings.dehaze);
+        for (i, px) in intermediate.pixels_mut().enumerate() {
+            *px = image::Rgb([
+                (buf[i * 3] * 65535.0).round().clamp(0.0, 65535.0) as u16,
+                (buf[i * 3 + 1] * 65535.0).round().clamp(0.0, 65535.0) as u16,
+                (buf[i * 3 + 2] * 65535.0).round().clamp(0.0, 65535.0) as u16,
+            ]);
+        }
+        current = upload::upload_rgb16_as_rgba16f(gpu, &intermediate, "after_dehaze")?;
+    }
+
+    // 4. sharpen (clarity + sharpness in one merge step).
+    let res_scale = ((w.max(h) as f32) / 1920.0).max(1.0);
+    let need_sharpen = settings.clarity != 0 || settings.sharpness != 0;
+    if need_sharpen {
+        let cr = ((8.0 * res_scale).round() as i32).max(1);
+        let sr = ((2.0 * res_scale).round() as i32).max(1);
+        current = passes::sharpen::dispatch(
+            gpu,
+            &current,
+            &passes::sharpen::SharpenArgs {
+                width: w,
+                height: h,
+                clarity_amount: settings.clarity as f32 / 100.0,
+                clarity_radius: cr,
+                sharpness_amount: settings.sharpness as f32 / 100.0,
+                sharpness_radius: sr,
+            },
+        )?;
+    }
+
+    // 5. grain.
+    let grain_strength =
+        crate::processing::grain::GrainStrength::parse(settings.grain_effect.as_deref());
+    if !matches!(
+        grain_strength,
+        crate::processing::grain::GrainStrength::None
+    ) {
+        let size = crate::processing::grain::GrainSize::parse(settings.grain_size.as_deref());
+        let cell = size.cell() * (res_scale.round() as u32).max(1);
+        current = passes::grain::dispatch(gpu, &current, w, h, grain_strength, cell)?;
+    }
+
+    upload::readback_rgba16f_as_rgb16(gpu, &current)
 }

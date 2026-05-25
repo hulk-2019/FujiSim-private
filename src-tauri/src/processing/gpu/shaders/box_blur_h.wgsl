@@ -1,6 +1,6 @@
 struct Params { width: u32, height: u32, radius: i32, _pad: u32 };
 @group(0) @binding(0) var src: texture_2d<f32>;
-@group(0) @binding(1) var dst: texture_storage_2d<r16float, write>;
+@group(0) @binding(1) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var<uniform> p: Params;
 
 @compute @workgroup_size(16, 16, 1)
