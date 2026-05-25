@@ -4,5 +4,6 @@
 //! `docs/superpowers/specs/2026-05-25-webgpu-pipeline-design.md` for the design.
 
 pub mod context;
+pub mod curves_bake;
 pub mod passthrough;
 pub mod upload;
