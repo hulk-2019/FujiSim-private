@@ -5,6 +5,9 @@ use crate::error::{AppError, Result};
 pub struct Pipelines {
     pub color_fused: wgpu::ComputePipeline,
     pub color_fused_bgl: wgpu::BindGroupLayout,
+    pub lut3d: wgpu::ComputePipeline,
+    pub lut3d_bgl: wgpu::BindGroupLayout,
+    pub lut_cache: super::lut_cache::GpuLutCache,
 }
 
 pub struct GpuContext {
@@ -47,6 +50,7 @@ impl GpuContext {
             .map_err(|e| AppError::other(format!("request_device: {e}")))?;
 
         let (color_fused, color_fused_bgl) = super::passes::color_fused::create_pipeline(&device)?;
+        let (lut3d, lut3d_bgl) = super::passes::lut3d::create_pipeline(&device)?;
 
         Ok(Self {
             device,
@@ -54,6 +58,9 @@ impl GpuContext {
             pipelines: Pipelines {
                 color_fused,
                 color_fused_bgl,
+                lut3d,
+                lut3d_bgl,
+                lut_cache: Default::default(),
             },
         })
     }
