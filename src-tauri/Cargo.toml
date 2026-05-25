@@ -66,3 +66,10 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "gpu_pipeline"
+harness = false
