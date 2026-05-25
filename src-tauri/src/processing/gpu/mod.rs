@@ -9,3 +9,6 @@ pub mod passes;
 pub mod passthrough;
 pub mod uniforms;
 pub mod upload;
+
+#[cfg(test)]
+mod tests;
