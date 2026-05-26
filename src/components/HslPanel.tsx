@@ -19,7 +19,7 @@ type HslAttr = "hue" | "sat" | "lum";
 function attrConfig(attr: HslAttr) {
   switch (attr) {
     case "hue":
-      return { min: -180, max: 180, label: "hsl.hue" };
+      return { min: -100, max: 100, label: "hsl.hue" };
     case "sat":
       return { min: -100, max: 100, label: "hsl.saturation" };
     case "lum":
@@ -34,14 +34,14 @@ export function HslPanel() {
 
   return (
     <Tabs defaultValue="hue" className="flex flex-col">
-      <TabsList className="w-full flex-shrink-0 mb-2">
-        <TabsTrigger value="hue" className="flex-1">
+      <TabsList className="w-full flex-shrink-0 mb-2 h-7 text-xs">
+        <TabsTrigger value="hue" className="flex-1 h-5">
           {t("hsl.hue")}
         </TabsTrigger>
-        <TabsTrigger value="sat" className="flex-1">
+        <TabsTrigger value="sat" className="flex-1 h-5">
           {t("hsl.saturation")}
         </TabsTrigger>
-        <TabsTrigger value="lum" className="flex-1">
+        <TabsTrigger value="lum" className="flex-1 h-5">
           {t("hsl.luminance")}
         </TabsTrigger>
       </TabsList>
@@ -59,7 +59,7 @@ export function HslPanel() {
                       className="inline-block h-3 w-3 rounded-full shrink-0 border border-zinc-700/50"
                       style={{ backgroundColor: range.color }}
                     />
-                    <div className="flex-1 overflow-hidden">
+                    <div className="flex-1">
                       <SliderRow
                         label={t(`hsl.${range.key}`)}
                         value={(filter[field] as number) ?? 0}
