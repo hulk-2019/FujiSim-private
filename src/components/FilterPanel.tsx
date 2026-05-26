@@ -1,6 +1,27 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Save, Info, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, SlidersHorizontal, Stamp, ScrollText, Palette, type LucideIcon } from "lucide-react";
+import {
+  Save,
+  Info,
+  Camera,
+  Aperture,
+  Timer,
+  Ruler,
+  Calendar,
+  HardDrive,
+  Star,
+  FileType,
+  ImageIcon,
+  SlidersHorizontal,
+  Stamp,
+  ScrollText,
+  Palette,
+  Sun,
+  Droplets,
+  Wrench,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,7 +50,6 @@ import { HslPanel } from "@/components/HslPanel";
 import { useTranslation } from "react-i18next";
 import { CurvesEditor } from "@/components/CurvesEditor";
 import type { ToneCurvePoints } from "@/types";
-
 
 export function FilterPanel() {
   const { t } = useTranslation();
@@ -83,113 +103,288 @@ export function FilterPanel() {
       wb_shift_b: filter.wb_shift_b,
       lut_file_path: filter.lut_file_path ?? null,
       is_builtin: false,
-      category_id: saveCategoryId === "__none__" ? null : Number(saveCategoryId),
+      category_id:
+        saveCategoryId === "__none__" ? null : Number(saveCategoryId),
     });
     setSaveOpen(false);
     await refreshPresets();
   }
 
-
   return (
     <aside className="w-full h-full bg-transparent flex text-sm overflow-hidden">
-      <Tabs defaultValue="adjust" className="flex-1 flex flex-row-reverse overflow-hidden">
+      <Tabs
+        defaultValue="adjust"
+        className="flex-1 flex flex-row-reverse overflow-hidden"
+      >
         <TabsList className="flex flex-col h-full w-11 flex-shrink-0 items-stretch gap-1 rounded-none bg-zinc-900/50 border-l border-zinc-800/60 p-1">
-          <SideTabTrigger value="adjust" label={t("filterPanel.tabs.adjust")} icon={<SlidersHorizontal size={16} />} />
-          <SideTabTrigger value="hsl" label={t("hsl.title")} icon={<Palette size={16} />} />
-          <SideTabTrigger value="watermark" label={t("filterPanel.tabs.watermark")} icon={<Stamp size={16} />} />
-          <SideTabTrigger value="info" label={t("filterPanel.tabs.info")} icon={<ScrollText size={16} />} />
+          <SideTabTrigger
+            value="adjust"
+            label={t("filterPanel.tabs.adjust")}
+            icon={<SlidersHorizontal size={16} />}
+          />
+          <SideTabTrigger
+            value="watermark"
+            label={t("filterPanel.tabs.watermark")}
+            icon={<Stamp size={16} />}
+          />
+          <SideTabTrigger
+            value="info"
+            label={t("filterPanel.tabs.info")}
+            icon={<ScrollText size={16} />}
+          />
         </TabsList>
 
-        <TabsContent value="adjust" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
+        <TabsContent
+          value="adjust"
+          className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+        >
           <ScrollArea className="flex-1">
-            <div className="px-0 py-0">
-            <Section title={t("editor.sections.basic")}>
-          {filter.base_simulation === PASS_THROUGH_SIM && filter.lut_file_path && (
-            <p className="mb-2 text-[10px] text-zinc-500">{t("filterPanel.lutAppliedNotice")}</p>
-          )}
-          <SliderRow
-            label={t("filterPanel.exposure")}
-            value={filter.exposure}
-            min={-5} max={5} step={0.05}
-            display={(v) => v.toFixed(2)}
-            onChange={(v) => setFilter({ exposure: v })}
-          />
-          <SliderRow
-            label={t("filterPanel.contrast")}
-            value={filter.contrast}
-            min={-100} max={100} step={1}
-            display={(v) => v.toFixed(0)}
-            onChange={(v) => setFilter({ contrast: v })}
-          />
-          <SliderRow
-            label={t("filterPanel.brightness")}
-            value={filter.brightness}
-            min={-100} max={100} step={1}
-            display={(v) => v.toFixed(0)}
-            onChange={(v) => setFilter({ brightness: v })}
-          />
-        </Section>
-
-        <Section title={t("editor.sections.light")}>
-          <SliderRow label={t("filterPanel.highlight")} value={filter.highlight_tone} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ highlight_tone: v })} />
-          <SliderRow label={t("filterPanel.shadow")}    value={filter.shadow_tone}    min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ shadow_tone: v })} />
-          <SliderRow label={t("filterPanel.white")}     value={filter.white}          min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ white: v })} />
-          <SliderRow label={t("filterPanel.black")}     value={filter.black}          min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ black: v })} />
-          <SliderRow label={t("filterPanel.dehaze")}    value={filter.dehaze}         min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ dehaze: v })} />
-        </Section>
-
-        <Section title={t("editor.sections.color")}>
-          <SliderRow label={t("filterPanel.vibrance")}   value={filter.vibrance}         min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ vibrance: v })} />
-          <SliderRow label={t("filterPanel.saturation")} value={filter.color_saturation} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ color_saturation: v })} />
-          <SliderRow label={t("filterPanel.wbShiftR")} value={filter.wb_shift_r} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_r: v })} />
-          <SliderRow label={t("filterPanel.wbShiftB")} value={filter.wb_shift_b} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_b: v })} />
-        </Section>
-
-        <Section title={t("editor.sections.grain")} defaultOpen={false}>
-          <SliderRow label={t("filterPanel.grainAmount")} value={filter.grain_amount} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_amount: v })} />
-          <SliderRow label={t("filterPanel.grainSize")} value={filter.grain_size} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_size: v })} />
-          <SliderRow label={t("filterPanel.grainRoughness")} value={filter.grain_roughness} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_roughness: v })} />
-          <SliderRow label={t("filterPanel.grainColor")} value={filter.grain_color} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_color: v })} />
-        </Section>
-
-        <Section title={t("editor.sections.detail")}>
-          <SliderRow label={t("filterPanel.clarity")}   value={filter.clarity}   min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ clarity: v })} />
-          <SliderRow label={t("filterPanel.sharpness")} value={filter.sharpness} min={-100} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ sharpness: v })} />
-        </Section>
-
-            <Section title={t("editor.sections.curves")} defaultOpen={false}>
-              <CurvesEditor
-                value={filter.tone_curve}
-                onChange={(tc: ToneCurvePoints) => setFilter({ tone_curve: tc })}
-              />
-            </Section>
+            <div className="px-0 py-0 space-y-2">
+              <Section
+                title={t("editor.sections.basic")}
+                icon={<Sun size={12} />}
+              >
+                {filter.base_simulation === PASS_THROUGH_SIM &&
+                  filter.lut_file_path && (
+                    <p className="mb-2 text-[10px] text-zinc-500">
+                      {t("filterPanel.lutAppliedNotice")}
+                    </p>
+                  )}
+                <SliderRow
+                  label={t("filterPanel.exposure")}
+                  value={filter.exposure}
+                  min={-5}
+                  max={5}
+                  step={0.05}
+                  display={(v) => v.toFixed(2)}
+                  onChange={(v) => setFilter({ exposure: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.contrast")}
+                  value={filter.contrast}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ contrast: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.brightness")}
+                  value={filter.brightness}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ brightness: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.highlight")}
+                  value={filter.highlight_tone}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ highlight_tone: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.shadow")}
+                  value={filter.shadow_tone}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ shadow_tone: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.white")}
+                  value={filter.white}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ white: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.black")}
+                  value={filter.black}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ black: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.dehaze")}
+                  value={filter.dehaze}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ dehaze: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.vibrance")}
+                  value={filter.vibrance}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ vibrance: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.saturation")}
+                  value={filter.color_saturation}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ color_saturation: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.wbShiftR")}
+                  value={filter.wb_shift_r}
+                  min={-9}
+                  max={9}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ wb_shift_r: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.wbShiftB")}
+                  value={filter.wb_shift_b}
+                  min={-9}
+                  max={9}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ wb_shift_b: v })}
+                />
+              </Section>
+              <Section
+                title={t("hsl.title")}
+                icon={<Palette size={12} />}
+                defaultOpen={false}
+              >
+                <HslPanel />
+              </Section>
+              <Section
+                title={t("editor.sections.curves")}
+                icon={<TrendingUp size={12} />}
+                defaultOpen={false}
+              >
+                <CurvesEditor
+                  value={filter.tone_curve}
+                  onChange={(tc: ToneCurvePoints) =>
+                    setFilter({ tone_curve: tc })
+                  }
+                />
+              </Section>
+              <Section
+                title={t("editor.sections.detail")}
+                icon={<Wrench size={12} />}
+              >
+                <SliderRow
+                  label={t("filterPanel.clarity")}
+                  value={filter.clarity}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ clarity: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.sharpness")}
+                  value={filter.sharpness}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ sharpness: v })}
+                />
+              </Section>
+              <Section
+                title={t("editor.sections.grain")}
+                icon={<Droplets size={12} />}
+                defaultOpen={false}
+              >
+                <SliderRow
+                  label={t("filterPanel.grainAmount")}
+                  value={filter.grain_amount}
+                  min={0}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ grain_amount: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.grainSize")}
+                  value={filter.grain_size}
+                  min={0}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ grain_size: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.grainRoughness")}
+                  value={filter.grain_roughness}
+                  min={0}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ grain_roughness: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.grainColor")}
+                  value={filter.grain_color}
+                  min={0}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ grain_color: v })}
+                />
+              </Section>
             </div>
           </ScrollArea>
 
           <div className="flex gap-2 px-3 py-3 border-t border-zinc-800/60">
-            <Button size="sm" variant="outline" onClick={resetFilter} className="flex-1 border-zinc-800 hover:bg-zinc-800">{t("common.reset")}</Button>
-            <Button size="sm" variant="default" onClick={() => setSaveOpen(true)} className="flex-1">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={resetFilter}
+              className="flex-1 border-zinc-800 hover:bg-zinc-800"
+            >
+              {t("common.reset")}
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => setSaveOpen(true)}
+              className="flex-1"
+            >
               <Save size={12} /> {t("filterPanel.saveAsPreset")}
             </Button>
           </div>
         </TabsContent>
 
-        <TabsContent value="hsl" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-          <HslPanel />
-        </TabsContent>
-
-        <TabsContent value="watermark" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
+        <TabsContent
+          value="watermark"
+          className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+        >
           <WatermarkTab />
         </TabsContent>
 
-        <TabsContent value="info" className="flex-1 min-w-0 overflow-y-auto px-3 pb-6 mt-0">
+        <TabsContent
+          value="info"
+          className="flex-1 min-w-0 overflow-y-auto px-3 pb-6 mt-0"
+        >
           {focused ? (
             <div className="space-y-4 text-xs pt-3">
               <div className="rounded-md border border-zinc-800/80 bg-zinc-900/40 p-3 flex gap-3">
                 <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden bg-zinc-900 border border-zinc-800/60 flex items-center justify-center">
                   {(() => {
-                    const thumbSrc = focused.cover_path
-                      ?? (!focused.is_raw ? focused.file_path : null);
+                    const thumbSrc =
+                      focused.cover_path ??
+                      (!focused.is_raw ? focused.file_path : null);
                     return thumbSrc ? (
                       <img
                         src={convertFileSrc(thumbSrc)}
@@ -203,26 +398,78 @@ export function FilterPanel() {
                   })()}
                 </div>
                 <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-zinc-100 font-medium truncate" title={focused.file_name}>{focused.file_name}</p>
-                  <p className="text-zinc-500 break-all leading-relaxed text-[11px]" title={focused.file_path}>{focused.file_path}</p>
+                  <p
+                    className="text-zinc-100 font-medium truncate"
+                    title={focused.file_name}
+                  >
+                    {focused.file_name}
+                  </p>
+                  <p
+                    className="text-zinc-500 break-all leading-relaxed text-[11px]"
+                    title={focused.file_path}
+                  >
+                    {focused.file_path}
+                  </p>
                 </div>
               </div>
 
               <InfoGroup>
-                <InfoRow Icon={Camera}    label={t("filterPanel.metaCamera")}   value={focused.camera_model} />
-                <InfoRow Icon={ImageIcon} label={t("filterPanel.metaLens")}     value={focused.lens_model} />
+                <InfoRow
+                  Icon={Camera}
+                  label={t("filterPanel.metaCamera")}
+                  value={focused.camera_model}
+                />
+                <InfoRow
+                  Icon={ImageIcon}
+                  label={t("filterPanel.metaLens")}
+                  value={focused.lens_model}
+                />
               </InfoGroup>
 
               <InfoGroup>
-                <InfoRow Icon={Aperture} label={t("filterPanel.metaAperture")} value={focused.f_number != null ? `f/${focused.f_number.toFixed(1)}` : null} />
-                <InfoRow Icon={Timer}    label={t("filterPanel.metaShutter")}  value={focused.shutter_speed ? `${focused.shutter_speed}s` : null} />
-                <InfoRow Icon={Ruler}    label={t("filterPanel.metaFocal")}    value={focused.focal_length != null ? `${focused.focal_length}mm` : null} />
+                <InfoRow
+                  Icon={Aperture}
+                  label={t("filterPanel.metaAperture")}
+                  value={
+                    focused.f_number != null
+                      ? `f/${focused.f_number.toFixed(1)}`
+                      : null
+                  }
+                />
+                <InfoRow
+                  Icon={Timer}
+                  label={t("filterPanel.metaShutter")}
+                  value={
+                    focused.shutter_speed ? `${focused.shutter_speed}s` : null
+                  }
+                />
+                <InfoRow
+                  Icon={Ruler}
+                  label={t("filterPanel.metaFocal")}
+                  value={
+                    focused.focal_length != null
+                      ? `${focused.focal_length}mm`
+                      : null
+                  }
+                />
               </InfoGroup>
 
               <InfoGroup>
-                <InfoRow Icon={Calendar}  label={t("filterPanel.metaDate")} value={shortDate(focused.date_taken)} />
-                <InfoRow Icon={HardDrive} label={t("filterPanel.metaSize")} value={formatBytes(focused.file_size)} />
-                <InfoRow Icon={FileType}  label={t("filterPanel.metaType")} value={focused.file_type || (focused.is_raw ? "RAW" : null)} />
+                <InfoRow
+                  Icon={Calendar}
+                  label={t("filterPanel.metaDate")}
+                  value={shortDate(focused.date_taken)}
+                />
+                <InfoRow
+                  Icon={HardDrive}
+                  label={t("filterPanel.metaSize")}
+                  value={formatBytes(focused.file_size)}
+                />
+                <InfoRow
+                  Icon={FileType}
+                  label={t("filterPanel.metaType")}
+                  value={focused.file_type || (focused.is_raw ? "RAW" : null)}
+                />
                 <InfoRow
                   Icon={Star}
                   label={t("filterPanel.metaRating")}
@@ -232,7 +479,11 @@ export function FilterPanel() {
                         <Star
                           key={n}
                           size={11}
-                          className={n <= focused.star_rating ? "text-amber-400 fill-amber-400" : "text-zinc-700"}
+                          className={
+                            n <= focused.star_rating
+                              ? "text-amber-400 fill-amber-400"
+                              : "text-zinc-700"
+                          }
                         />
                       ))}
                     </div>
@@ -252,7 +503,9 @@ export function FilterPanel() {
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent>
           <DialogTitle>{t("filterPanel.savePresetTitle")}</DialogTitle>
-          <DialogDescription>{t("filterPanel.savePresetDesc")}</DialogDescription>
+          <DialogDescription>
+            {t("filterPanel.savePresetDesc")}
+          </DialogDescription>
           <Input
             className="mt-3"
             value={saveName}
@@ -264,17 +517,25 @@ export function FilterPanel() {
               {t("filterPanel.savePresetCategory")}
             </label>
             <Select value={saveCategoryId} onValueChange={setSaveCategoryId}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">{t("editor.presetList.noCategory")}</SelectItem>
+                <SelectItem value="__none__">
+                  {t("editor.presetList.noCategory")}
+                </SelectItem>
                 {categories.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setSaveOpen(false)}>{t("common.cancel")}</Button>
+            <Button variant="ghost" onClick={() => setSaveOpen(false)}>
+              {t("common.cancel")}
+            </Button>
             <Button onClick={saveAsPreset}>{t("common.save")}</Button>
           </div>
         </DialogContent>
@@ -283,7 +544,15 @@ export function FilterPanel() {
   );
 }
 
-function SideTabTrigger({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+function SideTabTrigger({
+  value,
+  label,
+  icon,
+}: {
+  value: string;
+  label: string;
+  icon: React.ReactNode;
+}) {
   return (
     <TabsTrigger
       value={value}
@@ -326,7 +595,10 @@ function InfoRow({
       <span className="text-zinc-500 text-[11px] flex-shrink-0">{label}</span>
       <div className="ml-auto min-w-0 text-right">
         {valueNode ?? (
-          <span className="text-zinc-200 truncate block" title={value ?? undefined}>
+          <span
+            className="text-zinc-200 truncate block"
+            title={value ?? undefined}
+          >
             {value || "—"}
           </span>
         )}

@@ -384,8 +384,6 @@ const en = {
     },
     sections: {
       basic: "Basic",
-      light: "Light",
-      color: "Color",
       grain: "Grain",
       detail: "Detail",
       curves: "Curves",

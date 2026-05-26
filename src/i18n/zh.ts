@@ -384,8 +384,6 @@ const zh = {
     },
     sections: {
       basic: "基础",
-      light: "光线",
-      color: "色彩",
       grain: "颗粒",
       detail: "细节",
       curves: "曲线",

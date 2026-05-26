@@ -28,8 +28,8 @@ export function SliderRow({
   resetValue?: number;
 }) {
   return (
-    <div>
-      <div className="flex justify-between items-baseline">
+    <div className="w-full">
+      <div className="flex justify-between items-baseline mb-2">
         <span className="text-xs text-zinc-300">{label}</span>
         <span className="text-[10px] text-zinc-500 tabular-nums">
           {display ? display(value) : value.toFixed(2)}

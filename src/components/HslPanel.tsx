@@ -1,6 +1,5 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SliderRow } from "@/components/ui/form";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStore } from "@/store";
 import { useTranslation } from "react-i18next";
 
@@ -19,9 +18,12 @@ type HslAttr = "hue" | "sat" | "lum";
 
 function attrConfig(attr: HslAttr) {
   switch (attr) {
-    case "hue": return { min: -180, max: 180, label: "hsl.hue" };
-    case "sat": return { min: -100, max: 100, label: "hsl.saturation" };
-    case "lum": return { min: -100, max: 100, label: "hsl.luminance" };
+    case "hue":
+      return { min: -180, max: 180, label: "hsl.hue" };
+    case "sat":
+      return { min: -100, max: 100, label: "hsl.saturation" };
+    case "lum":
+      return { min: -100, max: 100, label: "hsl.luminance" };
   }
 }
 
@@ -31,27 +33,33 @@ export function HslPanel() {
   const setFilter = useStore((s) => s.setFilter);
 
   return (
-    <Tabs defaultValue="hue" className="flex-1 flex flex-col overflow-hidden">
-      <TabsList className="w-full flex-shrink-0">
-        <TabsTrigger value="hue" className="flex-1">{t("hsl.hue")}</TabsTrigger>
-        <TabsTrigger value="sat" className="flex-1">{t("hsl.saturation")}</TabsTrigger>
-        <TabsTrigger value="lum" className="flex-1">{t("hsl.luminance")}</TabsTrigger>
+    <Tabs defaultValue="hue" className="flex flex-col">
+      <TabsList className="w-full flex-shrink-0 mb-2">
+        <TabsTrigger value="hue" className="flex-1">
+          {t("hsl.hue")}
+        </TabsTrigger>
+        <TabsTrigger value="sat" className="flex-1">
+          {t("hsl.saturation")}
+        </TabsTrigger>
+        <TabsTrigger value="lum" className="flex-1">
+          {t("hsl.luminance")}
+        </TabsTrigger>
       </TabsList>
 
       {(["hue", "sat", "lum"] as HslAttr[]).map((attr) => {
         const config = attrConfig(attr);
         return (
-          <TabsContent key={attr} value={attr} className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
-            <ScrollArea className="flex-1">
-              <div className="px-3 py-3 space-y-3">
-                {HSL_RANGES.map((range) => {
-                  const field = `hsl_${range.key}_${attr}` as keyof typeof filter;
-                  return (
-                    <div key={range.key} className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-3 w-3 rounded-full shrink-0 border border-zinc-700/50"
-                        style={{ backgroundColor: range.color }}
-                      />
+          <TabsContent key={attr} value={attr} className="mt-0 h-">
+            <div className="space-y-3">
+              {HSL_RANGES.map((range) => {
+                const field = `hsl_${range.key}_${attr}` as keyof typeof filter;
+                return (
+                  <div key={range.key} className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 rounded-full shrink-0 border border-zinc-700/50"
+                      style={{ backgroundColor: range.color }}
+                    />
+                    <div className="flex-1 overflow-hidden">
                       <SliderRow
                         label={t(`hsl.${range.key}`)}
                         value={(filter[field] as number) ?? 0}
@@ -62,10 +70,10 @@ export function HslPanel() {
                         onChange={(v) => setFilter({ [field]: v })}
                       />
                     </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
+                  </div>
+                );
+              })}
+            </div>
           </TabsContent>
         );
       })}
