@@ -8,7 +8,7 @@ use crate::processing::{
     color::{self, f_to_u16, u16_to_f},
     curves::{self, ToneCurve},
     fuji,
-    grain::{self, GrainSize, GrainStrength},
+    grain::{self},
     lut::Lut3D,
 };
 use image::{ImageBuffer, Rgb};
@@ -62,9 +62,13 @@ pub struct ToneCurvePoints {
 pub struct FilterSettings {
     pub base_simulation: String,
     #[serde(default)]
-    pub grain_effect: Option<String>,
+    pub grain_amount: f32,
     #[serde(default)]
-    pub grain_size: Option<String>,
+    pub grain_size: f32,
+    #[serde(default)]
+    pub grain_roughness: f32,
+    #[serde(default)]
+    pub grain_color: f32,
     #[serde(default)]
     pub exposure: f32,
     #[serde(default)]
@@ -117,7 +121,7 @@ impl FilterSettings {
             && self.sharpness == 0
             && self.wb_shift_r == 0
             && self.wb_shift_b == 0
-            && matches!(self.grain_effect.as_deref(), None | Some("None"))
+            && self.grain_amount == 0.0
             && self.tone_curve.as_ref().map_or(true, |tc| {
                 tc.rgb.is_empty() && tc.r.is_empty() && tc.g.is_empty() && tc.b.is_empty()
             })
@@ -128,8 +132,10 @@ impl Default for FilterSettings {
     fn default() -> Self {
         Self {
             base_simulation: "Pass-Through".into(),
-            grain_effect: None,
-            grain_size: None,
+            grain_amount: 0.0,
+            grain_size: 0.0,
+            grain_roughness: 0.0,
+            grain_color: 0.0,
             exposure: 0.0,
             contrast: 0,
             brightness: 0,
@@ -361,13 +367,20 @@ pub fn process_image_cpu(
     }
 
     // [14] 颗粒：最后做，保证颗粒不会被锐化算法当作"细节"二次放大
-    let strength = GrainStrength::parse(settings.grain_effect.as_deref());
-    let size = GrainSize::parse(settings.grain_size.as_deref());
-    // 以 1920px 为基准缩放 cell，保证颗粒视觉大小与预览一致
-    let base_cell = size.cell();
-    let scale_factor = (w.max(h) as f32 / 1920.0).max(1.0).round() as u32;
-    let scaled_size = grain::GrainSize::Fixed(base_cell * scale_factor);
-    grain::apply_grain(&mut buf, w, h, strength, scaled_size, 0xC0FFEEu64);
+    if settings.grain_amount > 0.0 {
+        let scale_factor = (w.max(h) as f32 / 1920.0).max(1.0).round() as u32;
+        grain::apply_grain(
+            &mut buf,
+            w,
+            h,
+            settings.grain_amount,
+            settings.grain_size,
+            settings.grain_roughness,
+            settings.grain_color,
+            scale_factor,
+            0xC0FFEEu64,
+        );
+    }
 
     // 浮点缓冲区写回 16-bit RGB（按行并行）
     let mut out: ImageBuffer<Rgb<u16>, Vec<u16>> = ImageBuffer::new(w, h);
