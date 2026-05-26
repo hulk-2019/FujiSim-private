@@ -1,7 +1,7 @@
 // color_fused.wgsl — GPU translation of CPU pipeline steps [1]–[10].
 //
 // Uniform field order MUST stay in sync with FilterUniforms in
-// src-tauri/src/processing/gpu/uniforms.rs (std140 layout, 144 bytes).
+// src-tauri/src/processing/gpu/uniforms.rs (std140 layout, 240 bytes).
 // naga inserts 8 bytes of padding after has_master_curve automatically
 // because split_hi is a vec4<f32> (16-byte aligned). Do NOT add explicit
 // padding here.
@@ -19,6 +19,30 @@ struct Uniforms {
     fade: f32,
     monochrome: u32,
     mono_tint: vec4<f32>,
+    hsl_red_hue: f32,
+    hsl_red_sat: f32,
+    hsl_red_lum: f32,
+    hsl_orange_hue: f32,
+    hsl_orange_sat: f32,
+    hsl_orange_lum: f32,
+    hsl_yellow_hue: f32,
+    hsl_yellow_sat: f32,
+    hsl_yellow_lum: f32,
+    hsl_green_hue: f32,
+    hsl_green_sat: f32,
+    hsl_green_lum: f32,
+    hsl_aqua_hue: f32,
+    hsl_aqua_sat: f32,
+    hsl_aqua_lum: f32,
+    hsl_blue_hue: f32,
+    hsl_blue_sat: f32,
+    hsl_blue_lum: f32,
+    hsl_purple_hue: f32,
+    hsl_purple_sat: f32,
+    hsl_purple_lum: f32,
+    hsl_magenta_hue: f32,
+    hsl_magenta_sat: f32,
+    hsl_magenta_lum: f32,
     width: u32, height: u32,
     _pad: vec2<u32>,
 };
@@ -134,6 +158,77 @@ fn apply_saturation(c: vec3<f32>, amount: f32) -> vec3<f32> {
     return hsl_to_rgb(hsl);
 }
 
+// [7c] HSL per-channel adjustment: Gaussian-weighted hue/sat/lum shifts for 8 color ranges.
+// Matches CPU hsl_adjust.rs (HUE_CENTERS=[0,45,90,135,180,225,270,315], sigma=30).
+fn hue_distance(h: f32, center: f32) -> f32 {
+    let d = abs(h - center);
+    return select(d, 360.0 - d, d > 180.0);
+}
+
+fn apply_hsl_adjust(r: f32, g: f32, b: f32, u: Uniforms) -> vec3<f32> {
+    // Hue centers in degrees (Red=0, Orange=45, Yellow=90, Green=135,
+    // Aqua=180, Blue=225, Purple=270, Magenta=315).
+    let centers = array<f32, 8>(0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0);
+    let hue_shifts = array<f32, 8>(
+        u.hsl_red_hue, u.hsl_orange_hue, u.hsl_yellow_hue, u.hsl_green_hue,
+        u.hsl_aqua_hue, u.hsl_blue_hue, u.hsl_purple_hue, u.hsl_magenta_hue,
+    );
+    let sat_shifts = array<f32, 8>(
+        u.hsl_red_sat, u.hsl_orange_sat, u.hsl_yellow_sat, u.hsl_green_sat,
+        u.hsl_aqua_sat, u.hsl_blue_sat, u.hsl_purple_sat, u.hsl_magenta_sat,
+    );
+    let lum_shifts = array<f32, 8>(
+        u.hsl_red_lum, u.hsl_orange_lum, u.hsl_yellow_lum, u.hsl_green_lum,
+        u.hsl_aqua_lum, u.hsl_blue_lum, u.hsl_purple_lum, u.hsl_magenta_lum,
+    );
+
+    // Early exit: if all shifts are zero, skip.
+    var any_nonzero = false;
+    for (var i: u32 = 0u; i < 8u; i = i + 1u) {
+        if (hue_shifts[i] != 0.0 || sat_shifts[i] != 0.0 || lum_shifts[i] != 0.0) {
+            any_nonzero = true;
+            break;
+        }
+    }
+    if (!any_nonzero) { return vec3<f32>(r, g, b); }
+
+    let hsl = rgb_to_hsl(vec3<f32>(r, g, b));
+    let h_deg = hsl.x * 360.0;
+    let s = hsl.y;
+    let l = hsl.z;
+
+    // Gaussian weights (sigma=30, inv_two_sigma_sq = 1/(2*30*30) = 1/1800)
+    let inv_two_sigma_sq = 1.0 / 1800.0;
+    var weights = array<f32, 8>(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    var w_sum = 0.0;
+    for (var i: u32 = 0u; i < 8u; i = i + 1u) {
+        let dist = hue_distance(h_deg, centers[i]);
+        let w = exp(-dist * dist * inv_two_sigma_sq);
+        weights[i] = w;
+        w_sum = w_sum + w;
+    }
+    if (w_sum < 1e-6) { return vec3<f32>(r, g, b); }
+    let inv_w_sum = 1.0 / w_sum;
+
+    // Weighted average shifts
+    var hue_delta = 0.0;
+    var sat_delta = 0.0;
+    var lum_delta = 0.0;
+    for (var i: u32 = 0u; i < 8u; i = i + 1u) {
+        let wn = weights[i] * inv_w_sum;
+        hue_delta = hue_delta + wn * hue_shifts[i];
+        sat_delta = sat_delta + wn * sat_shifts[i];
+        lum_delta = lum_delta + wn * lum_shifts[i];
+    }
+
+    // Apply shifts (matches CPU hsl_adjust.rs)
+    let new_h = ((h_deg + hue_delta) % 360.0 + 360.0) % 360.0 / 360.0;
+    let new_s = clamp(s + sat_delta / 100.0, 0.0, 1.0);
+    let new_l = clamp(l + lum_delta / 100.0, 0.0, 1.0);
+
+    return hsl_to_rgb(vec3<f32>(new_h, new_s, new_l));
+}
+
 @compute @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= u.width || gid.y >= u.height) { return; }
@@ -187,6 +282,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // possibly out-of-range values after channel_shift.
     c = apply_vibrance(c, u.vibrance);
     c = apply_saturation(c, u.saturation);
+
+    // [7c] HSL per-channel adjustment (Gaussian-weighted hue/sat/lum shifts).
+    let hsl_result = apply_hsl_adjust(c.r, c.g, c.b, u);
+    c = vec3<f32>(hsl_result.r, hsl_result.g, hsl_result.b);
 
     // [9] Fade: blend toward cream floor (matches CPU profile.fade logic).
     // Step [8] (Color Chrome Effect) was removed from the project (commit 673e55f).
