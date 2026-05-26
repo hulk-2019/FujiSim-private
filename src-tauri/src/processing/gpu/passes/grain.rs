@@ -2,7 +2,6 @@
 
 use crate::error::Result;
 use crate::processing::gpu::context::GpuContext;
-use crate::processing::grain::GrainStrength;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -11,12 +10,12 @@ use wgpu::util::DeviceExt;
 struct Params {
     width: u32,
     height: u32,
-    cell: u32,
+    scale_factor: u32,
     seed: u32,
-    amount: f32,
-    _pad0: u32,
-    _pad1: u32,
-    _pad2: u32,
+    grain_amount: f32,
+    grain_size: f32,
+    grain_roughness: f32,
+    grain_color: f32,
 }
 
 pub fn create_pipeline(
@@ -77,15 +76,18 @@ pub fn create_pipeline(
     Ok((pipeline, bgl))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn dispatch(
     gpu: &GpuContext,
     src: &wgpu::Texture,
     width: u32,
     height: u32,
-    strength: GrainStrength,
-    cell: u32,
+    grain_amount: f32,
+    grain_size: f32,
+    grain_roughness: f32,
+    grain_color: f32,
+    scale_factor: u32,
 ) -> Result<Arc<wgpu::Texture>> {
-    let amount = strength.amount();
     let dst = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("grain_dst"),
         size: wgpu::Extent3d {
@@ -105,12 +107,12 @@ pub fn dispatch(
     let p = Params {
         width,
         height,
-        cell: cell.max(1),
+        scale_factor,
         seed: 0xC0FFEE,
-        amount,
-        _pad0: 0,
-        _pad1: 0,
-        _pad2: 0,
+        grain_amount,
+        grain_size,
+        grain_roughness,
+        grain_color,
     };
     let ubuf = gpu
         .device

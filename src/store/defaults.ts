@@ -6,8 +6,10 @@ import type { FilterSettings } from "../types";
  */
 export const DEFAULT_FILTER: FilterSettings = {
   base_simulation: "Pass-Through",
-  grain_effect: "None",
-  grain_size: "Small",
+  grain_amount: 0,
+  grain_size: 0,
+  grain_roughness: 0,
+  grain_color: 0,
   exposure: 0,
   contrast: 0,
   brightness: 0,

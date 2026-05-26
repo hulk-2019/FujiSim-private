@@ -1281,7 +1281,6 @@ dependencies = [
  "libvips",
  "once_cell",
  "pollster",
- "rand",
  "rayon",
  "rsraw",
  "serde",

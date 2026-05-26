@@ -68,8 +68,10 @@ export type FilterPreset = {
   id: number;
   name: string;
   base_simulation: string;
-  grain_effect?: string | null;
-  grain_size?: string | null;
+  grain_amount: number;
+  grain_size: number;
+  grain_roughness: number;
+  grain_color: number;
   exposure: number;
   contrast: number;
   brightness: number;
@@ -107,8 +109,10 @@ export type ToneCurvePoints = {
 /** 用户当前在 UI 上看到的滤镜参数。每次调整滑块都会 patch 这个对象 */
 export type FilterSettings = {
   base_simulation: string;
-  grain_effect?: string | null;
-  grain_size?: string | null;
+  grain_amount: number;
+  grain_size: number;
+  grain_roughness: number;
+  grain_color: number;
   exposure: number;
   contrast: number;
   brightness: number;

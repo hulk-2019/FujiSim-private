@@ -167,7 +167,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       filter.sharpness === 0 &&
       filter.wb_shift_r === 0 &&
       filter.wb_shift_b === 0 &&
-      (!filter.grain_effect || filter.grain_effect === "None") &&
+      filter.grain_amount === 0 &&
       (!filter.tone_curve || (
         filter.tone_curve.rgb.length === 0 &&
         filter.tone_curve.r.length === 0 &&
@@ -199,7 +199,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         filter.sharpness === 0 &&
         filter.wb_shift_r === 0 &&
         filter.wb_shift_b === 0 &&
-        (!filter.grain_effect || filter.grain_effect === "None") &&
+        filter.grain_amount === 0 &&
         (!filter.tone_curve || (
           filter.tone_curve.rgb.length === 0 &&
           filter.tone_curve.r.length === 0 &&

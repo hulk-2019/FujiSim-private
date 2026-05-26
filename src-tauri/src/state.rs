@@ -118,8 +118,10 @@ async fn seed_builtin_presets(pool: &SqlitePool) -> Result<()> {
         let preset = NewFilterPreset {
             name: (*name).to_string(),
             base_simulation: (*name).to_string(),
-            grain_effect: None,
-            grain_size: None,
+            grain_amount: 0.0,
+            grain_size: 0.0,
+            grain_roughness: 0.0,
+            grain_color: 0.0,
             exposure: 0.0,
             contrast: 0,
             brightness: 0,

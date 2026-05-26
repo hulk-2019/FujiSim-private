@@ -7,8 +7,10 @@ import { DEFAULT_FILTER } from "../defaults";
 function presetToFilter(preset: FilterPreset): FilterSettings {
   return {
     base_simulation: preset.base_simulation,
-    grain_effect: preset.grain_effect ?? "None",
-    grain_size: preset.grain_size ?? "Small",
+    grain_amount: preset.grain_amount,
+    grain_size: preset.grain_size,
+    grain_roughness: preset.grain_roughness,
+    grain_color: preset.grain_color,
     exposure: preset.exposure,
     contrast: preset.contrast,
     brightness: preset.brightness,

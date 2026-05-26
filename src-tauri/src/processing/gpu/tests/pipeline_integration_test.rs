@@ -78,7 +78,10 @@ fn full_pipeline_with_grain() {
     let img = make_test_image(64, 64);
     let s = FilterSettings {
         base_simulation: "Acros".into(),
-        grain_effect: Some("Strong".into()),
+        grain_amount: 80.0,
+        grain_size: 30.0,
+        grain_roughness: 40.0,
+        grain_color: 50.0,
         ..Default::default()
     };
     let gpu_out = process_image_gpu(&gpu, &img, &s, None).unwrap();

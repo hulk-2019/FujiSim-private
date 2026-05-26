@@ -11,8 +11,10 @@ pub struct FilterPreset {
     pub id: i64,
     pub name: String,
     pub base_simulation: String,
-    pub grain_effect: Option<String>,
-    pub grain_size: Option<String>,
+    pub grain_amount: f64,
+    pub grain_size: f64,
+    pub grain_roughness: f64,
+    pub grain_color: f64,
     pub exposure: f64,
     pub contrast: i64,
     pub brightness: i64,
@@ -38,8 +40,10 @@ pub struct FilterPreset {
 pub struct NewFilterPreset {
     pub name: String,
     pub base_simulation: String,
-    pub grain_effect: Option<String>,
-    pub grain_size: Option<String>,
+    pub grain_amount: f64,
+    pub grain_size: f64,
+    pub grain_roughness: f64,
+    pub grain_color: f64,
     pub exposure: f64,
     pub contrast: i64,
     pub brightness: i64,
@@ -63,12 +67,14 @@ pub struct NewFilterPreset {
 /// 这样应用启动种子内置预设和用户保存自定义预设可以走同一条路径。
 pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPreset> {
     sqlx::query(
-        r#"INSERT INTO filter_presets (name,base_simulation,grain_effect,grain_size,exposure,contrast,brightness,highlight_tone,shadow_tone,white,black,dehaze,vibrance,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        r#"INSERT INTO filter_presets (name,base_simulation,grain_amount,grain_size,grain_roughness,grain_color,exposure,contrast,brightness,highlight_tone,shadow_tone,white,black,dehaze,vibrance,color_saturation,clarity,sharpness,wb_shift_r,wb_shift_b,lut_file_path,is_builtin,category_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(name) DO UPDATE SET
              base_simulation=excluded.base_simulation,
-             grain_effect=excluded.grain_effect,
+             grain_amount=excluded.grain_amount,
              grain_size=excluded.grain_size,
+             grain_roughness=excluded.grain_roughness,
+             grain_color=excluded.grain_color,
              exposure=excluded.exposure,
              contrast=excluded.contrast,
              brightness=excluded.brightness,
@@ -89,8 +95,10 @@ pub async fn upsert(pool: &SqlitePool, p: &NewFilterPreset) -> Result<FilterPres
     )
     .bind(&p.name)
     .bind(&p.base_simulation)
-    .bind(&p.grain_effect)
-    .bind(&p.grain_size)
+    .bind(p.grain_amount)
+    .bind(p.grain_size)
+    .bind(p.grain_roughness)
+    .bind(p.grain_color)
     .bind(p.exposure)
     .bind(p.contrast)
     .bind(p.brightness)

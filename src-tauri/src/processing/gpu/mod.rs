@@ -67,15 +67,19 @@ pub fn process_image_gpu(
     }
 
     // 5. grain.
-    let grain_strength =
-        crate::processing::grain::GrainStrength::parse(settings.grain_effect.as_deref());
-    if !matches!(
-        grain_strength,
-        crate::processing::grain::GrainStrength::None
-    ) {
-        let size = crate::processing::grain::GrainSize::parse(settings.grain_size.as_deref());
-        let cell = size.cell() * (res_scale.round() as u32).max(1);
-        current = passes::grain::dispatch(gpu, &current, w, h, grain_strength, cell)?;
+    if settings.grain_amount > 0.0 {
+        let scale_factor = (res_scale.round() as u32).max(1);
+        current = passes::grain::dispatch(
+            gpu,
+            &current,
+            w,
+            h,
+            settings.grain_amount,
+            settings.grain_size,
+            settings.grain_roughness,
+            settings.grain_color,
+            scale_factor,
+        )?;
     }
 
     upload::readback_rgba16f_as_rgb16(gpu, &current)

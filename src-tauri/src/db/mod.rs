@@ -67,6 +67,9 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "CREATE INDEX IF NOT EXISTS idx_filter_presets_category ON filter_presets(category_id)",
         "CREATE INDEX IF NOT EXISTS idx_user_luts_category      ON user_luts(category_id)",
         "DROP TABLE IF EXISTS filter_presets",
+        "ALTER TABLE filter_presets ADD COLUMN grain_amount REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE filter_presets ADD COLUMN grain_roughness REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE filter_presets ADD COLUMN grain_color REAL NOT NULL DEFAULT 0.0",
         "ALTER TABLE filter_presets DROP COLUMN color_chrome_effect",
     ] {
         let _ = sqlx::query(sql).execute(pool).await;
@@ -240,8 +243,10 @@ CREATE TABLE IF NOT EXISTS filter_presets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     base_simulation TEXT NOT NULL,
-    grain_effect TEXT,
-    grain_size TEXT,
+    grain_amount REAL NOT NULL DEFAULT 0.0,
+    grain_size REAL NOT NULL DEFAULT 0.0,
+    grain_roughness REAL NOT NULL DEFAULT 0.0,
+    grain_color REAL NOT NULL DEFAULT 0.0,
     exposure REAL NOT NULL DEFAULT 0,
     contrast INTEGER NOT NULL DEFAULT 0,
     brightness INTEGER NOT NULL DEFAULT 0,

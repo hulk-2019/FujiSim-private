@@ -23,14 +23,12 @@ import { useStore } from "@/store";
 import { api } from "@/api";
 import { PASS_THROUGH_SIM } from "@/types";
 import { formatBytes, shortDate } from "@/lib/utils";
-import { Label, SliderRow } from "@/components/ui/form";
+import { SliderRow } from "@/components/ui/form";
 import { WatermarkTab } from "@/components/WatermarkTab";
 import { useTranslation } from "react-i18next";
 import { CurvesEditor } from "@/components/CurvesEditor";
 import type { ToneCurvePoints } from "@/types";
 
-const GRAIN_EFFECTS = ["None", "Weak", "Medium", "Strong"];
-const GRAIN_SIZES = ["Small", "Large"];
 
 export function FilterPanel() {
   const { t } = useTranslation();
@@ -64,8 +62,10 @@ export function FilterPanel() {
     await api.savePreset({
       name: saveName.trim(),
       base_simulation: filter.base_simulation,
-      grain_effect: filter.grain_effect ?? null,
-      grain_size: filter.grain_size ?? null,
+      grain_amount: filter.grain_amount,
+      grain_size: filter.grain_size,
+      grain_roughness: filter.grain_roughness,
+      grain_color: filter.grain_color,
       exposure: filter.exposure,
       contrast: filter.contrast,
       brightness: filter.brightness,
@@ -88,8 +88,6 @@ export function FilterPanel() {
     await refreshPresets();
   }
 
-  const grainEffectLabel = (v: string) => t(`filterPanel.strengthLabels.${v.toLowerCase()}` as any, { defaultValue: v });
-  const grainSizeLabel   = (v: string) => t(`filterPanel.sizeLabels.${v.toLowerCase()}` as any, { defaultValue: v });
 
   return (
     <aside className="w-full h-full bg-transparent flex text-sm overflow-hidden">
@@ -145,27 +143,11 @@ export function FilterPanel() {
           <SliderRow label={t("filterPanel.wbShiftB")} value={filter.wb_shift_b} min={-9} max={9} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ wb_shift_b: v })} />
         </Section>
 
-        <Section title={t("editor.sections.effects")}>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>{t("filterPanel.grainStrength")}</Label>
-              <Select value={filter.grain_effect ?? "None"} onValueChange={(v) => setFilter({ grain_effect: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {GRAIN_EFFECTS.map((g) => <SelectItem key={g} value={g}>{grainEffectLabel(g)}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{t("filterPanel.grainSize")}</Label>
-              <Select value={filter.grain_size ?? "Small"} onValueChange={(v) => setFilter({ grain_size: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {GRAIN_SIZES.map((g) => <SelectItem key={g} value={g}>{grainSizeLabel(g)}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <Section title={t("editor.sections.grain")} defaultOpen={false}>
+          <SliderRow label={t("filterPanel.grainAmount")} value={filter.grain_amount} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_amount: v })} />
+          <SliderRow label={t("filterPanel.grainSize")} value={filter.grain_size} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_size: v })} />
+          <SliderRow label={t("filterPanel.grainRoughness")} value={filter.grain_roughness} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_roughness: v })} />
+          <SliderRow label={t("filterPanel.grainColor")} value={filter.grain_color} min={0} max={100} step={1} display={(v) => v.toFixed(0)} onChange={(v) => setFilter({ grain_color: v })} />
         </Section>
 
         <Section title={t("editor.sections.detail")}>
