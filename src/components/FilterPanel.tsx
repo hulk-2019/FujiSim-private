@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Save, Info, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, SlidersHorizontal, Stamp, ScrollText, type LucideIcon } from "lucide-react";
+import { Save, Info, Camera, Aperture, Timer, Ruler, Calendar, HardDrive, Star, FileType, ImageIcon, SlidersHorizontal, Stamp, ScrollText, Palette, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +25,7 @@ import { PASS_THROUGH_SIM } from "@/types";
 import { formatBytes, shortDate } from "@/lib/utils";
 import { SliderRow } from "@/components/ui/form";
 import { WatermarkTab } from "@/components/WatermarkTab";
+import { HslPanel } from "@/components/HslPanel";
 import { useTranslation } from "react-i18next";
 import { CurvesEditor } from "@/components/CurvesEditor";
 import type { ToneCurvePoints } from "@/types";
@@ -94,6 +95,7 @@ export function FilterPanel() {
       <Tabs defaultValue="adjust" className="flex-1 flex flex-row-reverse overflow-hidden">
         <TabsList className="flex flex-col h-full w-11 flex-shrink-0 items-stretch gap-1 rounded-none bg-zinc-900/50 border-l border-zinc-800/60 p-1">
           <SideTabTrigger value="adjust" label={t("filterPanel.tabs.adjust")} icon={<SlidersHorizontal size={16} />} />
+          <SideTabTrigger value="hsl" label={t("hsl.title")} icon={<Palette size={16} />} />
           <SideTabTrigger value="watermark" label={t("filterPanel.tabs.watermark")} icon={<Stamp size={16} />} />
           <SideTabTrigger value="info" label={t("filterPanel.tabs.info")} icon={<ScrollText size={16} />} />
         </TabsList>
@@ -170,6 +172,10 @@ export function FilterPanel() {
               <Save size={12} /> {t("filterPanel.saveAsPreset")}
             </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="hsl" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">
+          <HslPanel />
         </TabsContent>
 
         <TabsContent value="watermark" className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col">

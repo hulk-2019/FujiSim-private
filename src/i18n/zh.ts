@@ -393,6 +393,20 @@ const zh = {
       info: "信息",
     },
   },
+  hsl: {
+    title: "HSL",
+    hue: "色相",
+    saturation: "饱和度",
+    luminance: "明度",
+    red: "红",
+    orange: "橙",
+    yellow: "黄",
+    green: "绿",
+    aqua: "浅蓝",
+    blue: "蓝",
+    purple: "紫",
+    magenta: "品红",
+  },
   settings: {
     title: "设置",
     tabs: {

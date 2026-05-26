@@ -168,6 +168,30 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       filter.wb_shift_r === 0 &&
       filter.wb_shift_b === 0 &&
       filter.grain_amount === 0 &&
+      filter.hsl_red_hue === 0 &&
+      filter.hsl_red_sat === 0 &&
+      filter.hsl_red_lum === 0 &&
+      filter.hsl_orange_hue === 0 &&
+      filter.hsl_orange_sat === 0 &&
+      filter.hsl_orange_lum === 0 &&
+      filter.hsl_yellow_hue === 0 &&
+      filter.hsl_yellow_sat === 0 &&
+      filter.hsl_yellow_lum === 0 &&
+      filter.hsl_green_hue === 0 &&
+      filter.hsl_green_sat === 0 &&
+      filter.hsl_green_lum === 0 &&
+      filter.hsl_aqua_hue === 0 &&
+      filter.hsl_aqua_sat === 0 &&
+      filter.hsl_aqua_lum === 0 &&
+      filter.hsl_blue_hue === 0 &&
+      filter.hsl_blue_sat === 0 &&
+      filter.hsl_blue_lum === 0 &&
+      filter.hsl_purple_hue === 0 &&
+      filter.hsl_purple_sat === 0 &&
+      filter.hsl_purple_lum === 0 &&
+      filter.hsl_magenta_hue === 0 &&
+      filter.hsl_magenta_sat === 0 &&
+      filter.hsl_magenta_lum === 0 &&
       (!filter.tone_curve || (
         filter.tone_curve.rgb.length === 0 &&
         filter.tone_curve.r.length === 0 &&
@@ -200,6 +224,30 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         filter.wb_shift_r === 0 &&
         filter.wb_shift_b === 0 &&
         filter.grain_amount === 0 &&
+        filter.hsl_red_hue === 0 &&
+        filter.hsl_red_sat === 0 &&
+        filter.hsl_red_lum === 0 &&
+        filter.hsl_orange_hue === 0 &&
+        filter.hsl_orange_sat === 0 &&
+        filter.hsl_orange_lum === 0 &&
+        filter.hsl_yellow_hue === 0 &&
+        filter.hsl_yellow_sat === 0 &&
+        filter.hsl_yellow_lum === 0 &&
+        filter.hsl_green_hue === 0 &&
+        filter.hsl_green_sat === 0 &&
+        filter.hsl_green_lum === 0 &&
+        filter.hsl_aqua_hue === 0 &&
+        filter.hsl_aqua_sat === 0 &&
+        filter.hsl_aqua_lum === 0 &&
+        filter.hsl_blue_hue === 0 &&
+        filter.hsl_blue_sat === 0 &&
+        filter.hsl_blue_lum === 0 &&
+        filter.hsl_purple_hue === 0 &&
+        filter.hsl_purple_sat === 0 &&
+        filter.hsl_purple_lum === 0 &&
+        filter.hsl_magenta_hue === 0 &&
+        filter.hsl_magenta_sat === 0 &&
+        filter.hsl_magenta_lum === 0 &&
         (!filter.tone_curve || (
           filter.tone_curve.rgb.length === 0 &&
           filter.tone_curve.r.length === 0 &&

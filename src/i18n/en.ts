@@ -393,6 +393,20 @@ const en = {
       info: "Info",
     },
   },
+  hsl: {
+    title: "HSL",
+    hue: "Hue",
+    saturation: "Saturation",
+    luminance: "Luminance",
+    red: "Red",
+    orange: "Orange",
+    yellow: "Yellow",
+    green: "Green",
+    aqua: "Aqua",
+    blue: "Blue",
+    purple: "Purple",
+    magenta: "Magenta",
+  },
   settings: {
     title: "Settings",
     tabs: {
