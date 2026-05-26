@@ -9,6 +9,7 @@ use crate::processing::{
     curves::{self, ToneCurve},
     fuji,
     grain::{self},
+    hsl_adjust,
     lut::Lut3D,
 };
 use image::{ImageBuffer, Rgb};
@@ -98,6 +99,54 @@ pub struct FilterSettings {
     #[serde(default)]
     pub wb_shift_b: i32,
     #[serde(default)]
+    pub hsl_red_hue: f32,
+    #[serde(default)]
+    pub hsl_red_sat: f32,
+    #[serde(default)]
+    pub hsl_red_lum: f32,
+    #[serde(default)]
+    pub hsl_orange_hue: f32,
+    #[serde(default)]
+    pub hsl_orange_sat: f32,
+    #[serde(default)]
+    pub hsl_orange_lum: f32,
+    #[serde(default)]
+    pub hsl_yellow_hue: f32,
+    #[serde(default)]
+    pub hsl_yellow_sat: f32,
+    #[serde(default)]
+    pub hsl_yellow_lum: f32,
+    #[serde(default)]
+    pub hsl_green_hue: f32,
+    #[serde(default)]
+    pub hsl_green_sat: f32,
+    #[serde(default)]
+    pub hsl_green_lum: f32,
+    #[serde(default)]
+    pub hsl_aqua_hue: f32,
+    #[serde(default)]
+    pub hsl_aqua_sat: f32,
+    #[serde(default)]
+    pub hsl_aqua_lum: f32,
+    #[serde(default)]
+    pub hsl_blue_hue: f32,
+    #[serde(default)]
+    pub hsl_blue_sat: f32,
+    #[serde(default)]
+    pub hsl_blue_lum: f32,
+    #[serde(default)]
+    pub hsl_purple_hue: f32,
+    #[serde(default)]
+    pub hsl_purple_sat: f32,
+    #[serde(default)]
+    pub hsl_purple_lum: f32,
+    #[serde(default)]
+    pub hsl_magenta_hue: f32,
+    #[serde(default)]
+    pub hsl_magenta_sat: f32,
+    #[serde(default)]
+    pub hsl_magenta_lum: f32,
+    #[serde(default)]
     pub tone_curve: Option<ToneCurvePoints>,
     #[serde(default)]
     pub lut_file_path: Option<PathBuf>,
@@ -122,6 +171,30 @@ impl FilterSettings {
             && self.wb_shift_r == 0
             && self.wb_shift_b == 0
             && self.grain_amount == 0.0
+            && self.hsl_red_hue == 0.0
+            && self.hsl_red_sat == 0.0
+            && self.hsl_red_lum == 0.0
+            && self.hsl_orange_hue == 0.0
+            && self.hsl_orange_sat == 0.0
+            && self.hsl_orange_lum == 0.0
+            && self.hsl_yellow_hue == 0.0
+            && self.hsl_yellow_sat == 0.0
+            && self.hsl_yellow_lum == 0.0
+            && self.hsl_green_hue == 0.0
+            && self.hsl_green_sat == 0.0
+            && self.hsl_green_lum == 0.0
+            && self.hsl_aqua_hue == 0.0
+            && self.hsl_aqua_sat == 0.0
+            && self.hsl_aqua_lum == 0.0
+            && self.hsl_blue_hue == 0.0
+            && self.hsl_blue_sat == 0.0
+            && self.hsl_blue_lum == 0.0
+            && self.hsl_purple_hue == 0.0
+            && self.hsl_purple_sat == 0.0
+            && self.hsl_purple_lum == 0.0
+            && self.hsl_magenta_hue == 0.0
+            && self.hsl_magenta_sat == 0.0
+            && self.hsl_magenta_lum == 0.0
             && self.tone_curve.as_ref().map_or(true, |tc| {
                 tc.rgb.is_empty() && tc.r.is_empty() && tc.g.is_empty() && tc.b.is_empty()
             })
@@ -150,6 +223,30 @@ impl Default for FilterSettings {
             sharpness: 0,
             wb_shift_r: 0,
             wb_shift_b: 0,
+            hsl_red_hue: 0.0,
+            hsl_red_sat: 0.0,
+            hsl_red_lum: 0.0,
+            hsl_orange_hue: 0.0,
+            hsl_orange_sat: 0.0,
+            hsl_orange_lum: 0.0,
+            hsl_yellow_hue: 0.0,
+            hsl_yellow_sat: 0.0,
+            hsl_yellow_lum: 0.0,
+            hsl_green_hue: 0.0,
+            hsl_green_sat: 0.0,
+            hsl_green_lum: 0.0,
+            hsl_aqua_hue: 0.0,
+            hsl_aqua_sat: 0.0,
+            hsl_aqua_lum: 0.0,
+            hsl_blue_hue: 0.0,
+            hsl_blue_sat: 0.0,
+            hsl_blue_lum: 0.0,
+            hsl_purple_hue: 0.0,
+            hsl_purple_sat: 0.0,
+            hsl_purple_lum: 0.0,
+            hsl_magenta_hue: 0.0,
+            hsl_magenta_sat: 0.0,
+            hsl_magenta_lum: 0.0,
             tone_curve: None,
             lut_file_path: None,
         }
@@ -319,6 +416,56 @@ pub fn process_image_cpu(
             g = ng;
             b = nb;
         }
+
+        chunk[0] = r.clamp(0.0, 1.0);
+        chunk[1] = g.clamp(0.0, 1.0);
+        chunk[2] = b.clamp(0.0, 1.0);
+    });
+
+    // [7c] HSL adjustment (whole-image, operates on RGB f32 buffer)
+    {
+        let params = hsl_adjust::HslParams {
+            hue_shifts: [
+                settings.hsl_red_hue,
+                settings.hsl_orange_hue,
+                settings.hsl_yellow_hue,
+                settings.hsl_green_hue,
+                settings.hsl_aqua_hue,
+                settings.hsl_blue_hue,
+                settings.hsl_purple_hue,
+                settings.hsl_magenta_hue,
+            ],
+            sat_shifts: [
+                settings.hsl_red_sat,
+                settings.hsl_orange_sat,
+                settings.hsl_yellow_sat,
+                settings.hsl_green_sat,
+                settings.hsl_aqua_sat,
+                settings.hsl_blue_sat,
+                settings.hsl_purple_sat,
+                settings.hsl_magenta_sat,
+            ],
+            lum_shifts: [
+                settings.hsl_red_lum,
+                settings.hsl_orange_lum,
+                settings.hsl_yellow_lum,
+                settings.hsl_green_lum,
+                settings.hsl_aqua_lum,
+                settings.hsl_blue_lum,
+                settings.hsl_purple_lum,
+                settings.hsl_magenta_lum,
+            ],
+        };
+        if !params.is_identity() {
+            hsl_adjust::apply_hsl_adjust_rgb(&mut buf, &params);
+        }
+    }
+
+    // Second pixel pass: fade, monochrome, LUT
+    buf.par_chunks_mut(3).for_each(|chunk| {
+        let mut r = chunk[0];
+        let mut g = chunk[1];
+        let mut b = chunk[2];
 
         // [9] 褪色：往全图掺一点点亮灰（蓝偏一点点），实现"奶油色调"
         if profile.fade > 0.0 {

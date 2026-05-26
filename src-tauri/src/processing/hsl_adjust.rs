@@ -55,11 +55,26 @@ fn hue_distance(h: f32, center: f32) -> f32 {
 ///
 /// 使用 `rayon::par_chunks_mut(4)` 并行处理每个像素。
 pub fn apply_hsl_adjust(buf: &mut [f32], params: &HslParams) {
+    apply_hsl_adjust_with_stride(buf, 4, params);
+}
+
+/// 对 RGB f32 像素缓冲区施加 HSL 分段调整。
+///
+/// - `buf`：RGB 交织的 f32 缓冲区，长度必须是 3 的倍数
+/// - `params`：8 区间的色相/饱和度/明度偏移
+///
+/// 使用 `rayon::par_chunks_mut(3)` 并行处理每个像素。
+pub fn apply_hsl_adjust_rgb(buf: &mut [f32], params: &HslParams) {
+    apply_hsl_adjust_with_stride(buf, 3, params);
+}
+
+/// 通用 HSL 分段调整，支持任意通道步长（3 = RGB，4 = RGBA）。
+fn apply_hsl_adjust_with_stride(buf: &mut [f32], stride: usize, params: &HslParams) {
     if params.is_identity() {
         return;
     }
 
-    buf.par_chunks_mut(4).for_each(|px| {
+    buf.par_chunks_mut(stride).for_each(|px| {
         let r = px[0];
         let g = px[1];
         let b = px[2];
@@ -105,7 +120,7 @@ pub fn apply_hsl_adjust(buf: &mut [f32], params: &HslParams) {
         px[0] = nr;
         px[1] = ng;
         px[2] = nb;
-        // px[3] (alpha) 保持不变
+        // stride==4 时 px[3] (alpha) 保持不变
     });
 }
 
