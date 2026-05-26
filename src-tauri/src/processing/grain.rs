@@ -1,105 +1,78 @@
-use rand::{rngs::StdRng, Rng, SeedableRng};
+//! Grain (film grain) effect — CPU implementation.
 
-/// 颗粒强度档位。富士机内菜单同名：Off/Weak/Strong；这里多加一档 Medium 让滑块更有渐变感。
-#[derive(Debug, Clone, Copy)]
-pub enum GrainStrength {
-    None,
-    Weak,
-    Medium,
-    Strong,
-}
-
-/// 颗粒尺寸。Small=每像素一个颗粒；Large=每 2×2 像素一组颗粒；Fixed=指定 cell 大小。
-#[derive(Debug, Clone, Copy)]
-pub enum GrainSize {
-    Small,
-    Large,
-    Fixed(u32),
-}
-
-impl GrainStrength {
-    /// 从前端传入的字符串解析。任何无法识别的值都按 `None` 处理（不抛错）。
-    pub fn parse(s: Option<&str>) -> GrainStrength {
-        match s.unwrap_or("None") {
-            "Weak" => GrainStrength::Weak,
-            "Medium" => GrainStrength::Medium,
-            "Strong" => GrainStrength::Strong,
-            _ => GrainStrength::None,
-        }
-    }
-    /// 颗粒振幅（0..1 空间内）。数值是反复试出来的，让 Weak 看得见但不刺眼，Strong 接近 ISO6400 胶片质感。
-    pub fn amount(self) -> f32 {
-        match self {
-            GrainStrength::None => 0.0,
-            GrainStrength::Weak => 0.012,
-            GrainStrength::Medium => 0.024,
-            GrainStrength::Strong => 0.040,
-        }
-    }
-}
-
-impl GrainSize {
-    pub fn parse(s: Option<&str>) -> GrainSize {
-        match s.unwrap_or("Small") {
-            "Large" => GrainSize::Large,
-            _ => GrainSize::Small,
-        }
-    }
-    /// 一个颗粒覆盖多少像素的边长（2 表示 2×2 块）。
-    pub fn cell(self) -> u32 {
-        match self {
-            GrainSize::Small => 1,
-            GrainSize::Large => 2,
-            GrainSize::Fixed(n) => n.max(1),
-        }
-    }
-}
-
-/// 把胶片颗粒合成到一张连续的 RGB 浮点缓冲区（`[r, g, b, r, g, b, ...]`）。
+/// Apply grain noise to a raw RGB buffer.
 ///
-/// 实现要点：
-/// - 使用 Box-Muller 变换生成正态分布噪声，比均匀噪声更接近胶片视觉感受；
-/// - 同一颗粒在 RGB 三通道使用相同的 delta，得到"中性灰颗粒"而不是彩色噪点；
-/// - 用 `4*L*(1-L)` 作为亮度掩膜：中灰处颗粒最重，纯黑/纯白处几乎为零，符合胶片化学特性；
-/// - `seed` 固定时输出可复现，便于"导出图像和预览图像颗粒位置一致"。
+/// # Parameters (all 0–100 sliders)
+///
+/// - `grain_amount`   → amplitude = (amount/100)² × 0.12
+/// - `grain_size`     → cell_size = 1 + (size/100) × 3   (1 px – 4 px)
+/// - `grain_roughness`→ roughness_mix = roughness/100
+/// - `grain_color`    → color_independence = color/100
+/// - `scale_factor`   → multiplier for cell_size at high resolutions
+/// - `seed`           → deterministic seed
 pub fn apply_grain(
     buf: &mut [f32],
     width: u32,
     height: u32,
-    strength: GrainStrength,
-    size: GrainSize,
+    grain_amount: f32,
+    grain_size: f32,
+    grain_roughness: f32,
+    grain_color: f32,
+    scale_factor: u32,
     seed: u64,
 ) {
-    let amp = strength.amount();
-    if amp <= 0.0 {
+    if grain_amount <= 0.0 {
         return;
     }
-    let mut rng = StdRng::seed_from_u64(seed);
-    let cell = size.cell();
-    // 颗粒图按 cell 尺寸缩水，再在合成时按 cell 复制，从而得到"大颗粒"
-    let cells_w = width.div_ceil(cell);
-    let cells_h = height.div_ceil(cell);
-    let mut noise = vec![0.0f32; (cells_w * cells_h) as usize];
-    for v in noise.iter_mut() {
-        // Box-Muller：u1, u2 ~ U(0,1)  →  z ~ N(0,1)
-        let u1: f32 = rng.gen();
-        let u2: f32 = rng.gen();
-        let z = (-2.0 * (u1.max(1e-6)).ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
-        *v = z * amp;
-    }
+
+    let amount = (grain_amount / 100.0).clamp(0.0, 1.0);
+    let size = (grain_size / 100.0).clamp(0.0, 1.0);
+    let roughness_mix = (grain_roughness / 100.0).clamp(0.0, 1.0);
+    let color_independence = (grain_color / 100.0).clamp(0.0, 1.0);
+
+    let amplitude = amount * amount * 0.12;
+    let base_cell = 1.0 + size * 3.0;
+    let cell_size = base_cell * scale_factor as f32;
+
     for y in 0..height {
-        let cy = y / cell;
         for x in 0..width {
-            let cx = x / cell;
-            let n = noise[(cy * cells_w + cx) as usize];
-            let i = ((y * width + x) * 3) as usize;
-            // Rec.709 亮度权重；掩膜峰值在 L=0.5（中灰）处，纯白/黑两端逼近 0
-            let l = 0.2126 * buf[i] + 0.7152 * buf[i + 1] + 0.0722 * buf[i + 2];
-            let mask = 4.0 * l * (1.0 - l);
-            let delta = n * mask;
-            buf[i] = (buf[i] + delta).clamp(0.0, 1.0);
-            buf[i + 1] = (buf[i + 1] + delta).clamp(0.0, 1.0);
-            buf[i + 2] = (buf[i + 2] + delta).clamp(0.0, 1.0);
+            let cx = (x as f32 / cell_size).floor() as u64;
+            let cy = (y as f32 / cell_size).floor() as u64;
+
+            // First layer noise (cell-based)
+            let s1 = cx.wrapping_mul(374761393).wrapping_add(cy.wrapping_mul(668265263)).wrapping_add(seed);
+            let noise1 = hash_to_f32(s1) * 2.0 - 1.0;
+
+            // Second layer fine noise (pixel-based)
+            let s2 = (x as u64).wrapping_mul(127).wrapping_add((y as u64).wrapping_mul(311)).wrapping_add(seed);
+            let noise2 = hash_to_f32(s2) * 2.0 - 1.0;
+
+            // Roughness blends the two layers
+            let noise = noise1 * (1.0 - roughness_mix) + noise2 * roughness_mix;
+
+            // Per-channel offsets with color independence
+            let r_offset = noise * amplitude;
+            let g_seed = s2.wrapping_add(7919);
+            let b_seed = s2.wrapping_add(104729);
+            let g_n = hash_to_f32(g_seed) * 2.0 - 1.0;
+            let b_n = hash_to_f32(b_seed) * 2.0 - 1.0;
+            let g_offset = (noise * (1.0 - color_independence) + g_n * color_independence) * amplitude;
+            let b_offset = (noise * (1.0 - color_independence) + b_n * color_independence) * amplitude;
+
+            let idx = ((y * width + x) * 3) as usize;
+            if idx + 2 < buf.len() {
+                buf[idx] = (buf[idx] + r_offset).clamp(0.0, 1.0);
+                buf[idx + 1] = (buf[idx + 1] + g_offset).clamp(0.0, 1.0);
+                buf[idx + 2] = (buf[idx + 2] + b_offset).clamp(0.0, 1.0);
+            }
         }
     }
+}
+
+/// Multiply-hash → [0, 1) f32.
+fn hash_to_f32(hash: u64) -> f32 {
+    let h = hash.wrapping_mul(0x45d9f3b);
+    let h = (h ^ (h >> 16)).wrapping_mul(0x45d9f3b);
+    let h = h ^ (h >> 16);
+    (h as f32) / (u32::MAX as f32)
 }

@@ -44,7 +44,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 wgpu = "23"
-rand = "0.8"
 pollster = "0.3"
 splines = "5.0.0"
 trash = "5"
