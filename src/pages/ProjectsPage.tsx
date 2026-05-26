@@ -232,24 +232,59 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const covers = summary.cover_paths.slice(0, 4);
 
+  function renderCovers() {
+    if (covers.length === 1) {
+      return (
+        <div className="aspect-[4/3] bg-zinc-800 overflow-hidden">
+          <img src={convertFileSrc(covers[0])} className="w-full h-full object-cover" alt="" />
+        </div>
+      );
+    }
+    if (covers.length === 2) {
+      return (
+        <div className="grid grid-cols-2 aspect-[4/3]">
+          {covers.map((c, i) => (
+            <div key={i} className="bg-zinc-800 overflow-hidden">
+              <img src={convertFileSrc(c)} className="w-full h-full object-cover" alt="" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (covers.length === 3) {
+      return (
+        <div className="grid grid-cols-2 grid-rows-2 aspect-[4/3]">
+          <div className="bg-zinc-800 overflow-hidden">
+            <img src={convertFileSrc(covers[0])} className="w-full h-full object-cover" alt="" />
+          </div>
+          <div className="bg-zinc-800 overflow-hidden">
+            <img src={convertFileSrc(covers[1])} className="w-full h-full object-cover" alt="" />
+          </div>
+          <div className="col-span-2 flex justify-center bg-zinc-900">
+            <div className="w-1/2 bg-zinc-800 overflow-hidden">
+              <img src={convertFileSrc(covers[2])} className="w-full h-full object-cover" alt="" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="grid grid-cols-2 aspect-[4/3]">
+        {covers.map((c, i) => (
+          <div key={i} className="bg-zinc-800 overflow-hidden">
+            <img src={convertFileSrc(c)} className="w-full h-full object-cover" alt="" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className="rounded-xl bg-zinc-900 hover:bg-zinc-800/80 cursor-pointer overflow-hidden group relative"
       onClick={onClick}
     >
-      <div className="grid grid-cols-2 aspect-[4/3]">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="bg-zinc-800 overflow-hidden">
-            {covers[i] ? (
-              <img
-                src={convertFileSrc(covers[i])}
-                className="w-full h-full object-cover"
-                alt=""
-              />
-            ) : null}
-          </div>
-        ))}
-      </div>
+      {renderCovers()}
       <div className="px-3 py-2 flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-zinc-100 truncate">{summary.name}</p>

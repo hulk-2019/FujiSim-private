@@ -43,7 +43,9 @@
       "Bash(ls /Users/ry2019/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/subagent-driven-development/)",
       "Read(//Users/ry2019/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/subagent-driven-development/**)",
       "Bash(cargo clippy *)",
-      "Bash(pnpm tsc *)"
+      "Bash(pnpm tsc *)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo test *)"
     ]
   }
 }
