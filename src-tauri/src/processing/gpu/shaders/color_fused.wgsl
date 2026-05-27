@@ -236,9 +236,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // [1] WB shift: multiplicative gain per axis (matches CPU apply_wb_shift).
     // wb_shift_r/g/b are i32 cast to f32 (range -100..100); each step ≈ 0.5% gain.
+    let l_in = luma709(c);
     c.r = c.r * (1.0 + u.wb_shift_r * 0.005);
     c.g = c.g * (1.0 + u.wb_shift_g * 0.005);
     c.b = c.b * (1.0 + u.wb_shift_b * 0.005);
+    // Normalize so output luma = input luma, preventing brightness shifts.
+    let l_out = luma709(c);
+    if (l_out > 1e-6) { c = c * (l_in / l_out); }
 
     // [2] Exposure: linear gain 2^EV (matches CPU apply_exposure_pixel).
     let gain = pow(2.0, u.exposure);

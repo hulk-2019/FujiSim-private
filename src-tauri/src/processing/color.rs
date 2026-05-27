@@ -87,14 +87,22 @@ pub fn luminance(r: f32, g: f32, b: f32) -> f32 {
     0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-/// 白平衡偏移：R/G/B 三轴乘性增益。
+/// 白平衡偏移：R/G/B 三轴乘性增益，再按 Rec.709 luma 归一化以保持亮度不变。
 /// 范围 -100..+100，每档约 0.5% 增益，极值 ±50% 增益变化。
 #[inline(always)]
 pub fn apply_wb_shift(r: f32, g: f32, b: f32, shift_r: i32, shift_g: i32, shift_b: i32) -> (f32, f32, f32) {
+    let l_in = luminance(r, g, b);
     let kr = 1.0 + shift_r as f32 * 0.005;
     let kg = 1.0 + shift_g as f32 * 0.005;
     let kb = 1.0 + shift_b as f32 * 0.005;
-    (r * kr, g * kg, b * kb)
+    let (nr, ng, nb) = (r * kr, g * kg, b * kb);
+    let l_out = luminance(nr, ng, nb);
+    if l_out > 1e-6 {
+        let scale = l_in / l_out;
+        (nr * scale, ng * scale, nb * scale)
+    } else {
+        (nr, ng, nb)
+    }
 }
 
 /// 以亮度为锚的饱和度调整。
