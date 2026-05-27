@@ -13,6 +13,11 @@ import { useHistogramSync } from "@/hooks/useHistogramSync";
 
 let previewTokenCounter = 0;
 
+const INTERACTIVE_PREVIEW_MAX_EDGE = 1280;
+const SETTLED_PREVIEW_MAX_EDGE = 1920;
+const INTERACTIVE_PREVIEW_DELAY_MS = 80;
+const SETTLED_PREVIEW_DELAY_MS = 250;
+
 type PreviewImage = {
   blobUrl: string;
   width: number;
@@ -55,6 +60,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const setEyedropperMode = useStore((s) => s.setEyedropperMode);
   const setFilter = useStore((s) => s.setFilter);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
+  const isAdjustingFilter = useStore((s) => s.isAdjustingFilter);
 
   useHistogramSync(focusedId, filter);
 
@@ -200,13 +206,16 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         });
     }
 
+    const previewMaxEdge = isAdjustingFilter ? INTERACTIVE_PREVIEW_MAX_EDGE : SETTLED_PREVIEW_MAX_EDGE;
+    const previewDelay = isAdjustingFilter ? INTERACTIVE_PREVIEW_DELAY_MS : SETTLED_PREVIEW_DELAY_MS;
+
     const handle = setTimeout(async () => {
       const isIdentity = isIdentityFilter(filter);
 
       if (currentTokenRef.current !== token) return;
 
       const doPreview = async () => {
-        const r = await api.getPreview(focused.id, filter, 1920, token);
+        const r = await api.getPreview(focused.id, filter, previewMaxEdge, token);
         if (currentTokenRef.current !== token) return;
         const src = convertFileSrc(r.path);
         if (isIdentity && focused.is_raw) {
@@ -249,10 +258,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
           setLoading(false);
         }
       }
-    }, 250);
+    }, previewDelay);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, filter]);
+  }, [focused?.id, filter, isAdjustingFilter]);
 
   // Clear preview when switching to a different photo, so old effect doesn't persist.
   useEffect(() => {
