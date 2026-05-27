@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 
+const DISK_PREVIEW_BASE_MAX_EDGE: u32 = 1920;
+
 /// 预览结果。前端用 convertFileSrc(path) 加载本地文件，零 IPC 传输开销。
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -50,6 +52,10 @@ pub async fn get_preview(
 
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
+    let native_max_edge = asset
+        .width
+        .zip(asset.height)
+        .map(|(w, h)| w.max(h).max(1) as u32);
     let settings = settings.unwrap_or_default();
     let lut = super::cached_lut(&state, settings.lut_file_path.as_deref())?;
     let export_pool = state.export_pool.clone();
@@ -70,7 +76,17 @@ pub async fn get_preview(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         export_pool.install(|| {
-            let resized = load_preview_base(&state_for_render, asset_id, &path, max_edge, true)?;
+            let persist_to_disk = max_edge
+                .map(|edge| edge >= DISK_PREVIEW_BASE_MAX_EDGE)
+                .unwrap_or(true);
+            let resized = load_preview_base(
+                &state_for_render,
+                asset_id,
+                &path,
+                max_edge,
+                native_max_edge,
+                persist_to_disk,
+            )?;
 
             // Check token after decode (decode is the most expensive part)
             if preview_token.load(Ordering::SeqCst) != token {
@@ -108,6 +124,7 @@ pub(crate) fn load_preview_base(
     asset_id: i64,
     path: &std::path::Path,
     max_edge: Option<u32>,
+    native_max_edge: Option<u32>,
     persist_to_disk: bool,
 ) -> Result<Arc<Rgb16Image>> {
     let key = PreviewBaseCacheKey { asset_id, max_edge };
@@ -120,7 +137,13 @@ pub(crate) fn load_preview_base(
 
     let cache_path = processing::raw::preview_base_path(&state.raw_original_dir, asset_id);
     let img = if cache_path.exists() {
-        match crate::vips_io::decode_to_rgb16(&cache_path).and_then(|img| resize_to_max_edge(img, max_edge)) {
+        match crate::vips_io::decode_to_rgb16(&cache_path).and_then(|img| {
+            if disk_base_satisfies_request(&img, max_edge, native_max_edge) {
+                resize_to_max_edge(img, max_edge)
+            } else {
+                Err(AppError::other("cached preview base is smaller than requested"))
+            }
+        }) {
             Ok(img) => img,
             Err(_) => decode_and_resize(path, max_edge)?,
         }
@@ -144,6 +167,20 @@ pub(crate) fn load_preview_base(
         cache.insert(key, img.clone());
     }
     Ok(img)
+}
+
+fn disk_base_satisfies_request(
+    img: &Rgb16Image,
+    max_edge: Option<u32>,
+    native_max_edge: Option<u32>,
+) -> bool {
+    let Some(requested_max_edge) = max_edge else {
+        return true;
+    };
+    let requested_output_edge = native_max_edge
+        .map(|native| native.min(requested_max_edge))
+        .unwrap_or(requested_max_edge);
+    img.width().max(img.height()) >= requested_output_edge
 }
 
 fn decode_and_resize(

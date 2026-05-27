@@ -25,6 +25,10 @@ pub async fn compute_histogram(
 
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
+    let native_max_edge = asset
+        .width
+        .zip(asset.height)
+        .map(|(w, h)| w.max(h).max(1) as u32);
     let settings = settings.unwrap_or_default();
     let lut = super::cached_lut(&state, settings.lut_file_path.as_deref())?;
     let export_pool = state.export_pool.clone();
@@ -44,8 +48,14 @@ pub async fn compute_histogram(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         export_pool.install(|| {
-            let resized =
-                super::preview::load_preview_base(&state_for_render, asset_id, &path, Some(512), false)?;
+            let resized = super::preview::load_preview_base(
+                &state_for_render,
+                asset_id,
+                &path,
+                Some(512),
+                native_max_edge,
+                false,
+            )?;
 
             if histogram_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
