@@ -30,6 +30,7 @@ pub mod pipeline;
 pub mod raw;
 pub mod saturation;
 pub mod tone;
+pub mod white_balance;
 
 pub use pipeline::{process_image, process_image_cpu, set_global_gpu, FilterSettings};
 

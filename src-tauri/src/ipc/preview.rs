@@ -1,4 +1,4 @@
-//! 实时预览渲染和封面缓存目录。
+//! 实时预览渲染、封面缓存目录、白平衡与取色器。
 
 use crate::db::assets;
 use crate::error::{AppError, Result};
@@ -147,4 +147,56 @@ pub async fn get_cover_dir(state: State<'_, SharedState>) -> Result<String> {
 pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> Result<()> {
     state.cover_queue.set_concurrency(n);
     Ok(())
+}
+
+/// 使用 Gray World 算法计算自动白平衡偏移量。
+///
+/// 返回 `(wb_shift_r, wb_shift_b)`，范围 -100..100。
+#[tauri::command]
+pub async fn auto_white_balance(
+    state: State<'_, SharedState>,
+    asset_id: i64,
+) -> Result<(f32, f32)> {
+    let asset = assets::get(&state.pool, asset_id).await?;
+    let path = PathBuf::from(&asset.file_path);
+    let export_pool = state.export_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        export_pool.install(|| {
+            let img = processing::load_image_rgb16(&path)?;
+            Ok(processing::white_balance::auto_white_balance(&img))
+        })
+    })
+    .await
+    .map_err(|e| AppError::other(e.to_string()))?
+}
+
+/// 从指定资产的源图像中采样 (x, y) 位置的像素 RGB 值。
+///
+/// 返回 `(R, G, B)`，范围 0..65535（16-bit）。
+#[tauri::command]
+pub async fn eyedrop_color(
+    state: State<'_, SharedState>,
+    asset_id: i64,
+    x: u32,
+    y: u32,
+) -> Result<(f32, f32, f32)> {
+    let asset = assets::get(&state.pool, asset_id).await?;
+    let path = PathBuf::from(&asset.file_path);
+    let export_pool = state.export_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        export_pool.install(|| {
+            let img = processing::load_image_rgb16(&path)?;
+            let (w, h) = img.dimensions();
+            if x >= w || y >= h {
+                return Err(AppError::other(format!(
+                    "eyedrop out of bounds: ({x}, {y}) exceeds ({w}, {h})"
+                )));
+            }
+            Ok(processing::white_balance::eyedrop_color(&img, x, y))
+        })
+    })
+    .await
+    .map_err(|e| AppError::other(e.to_string()))?
 }

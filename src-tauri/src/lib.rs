@@ -106,6 +106,8 @@ pub fn run() {
             ipc::get_raw_original,
             ipc::get_cover_dir,
             ipc::set_cover_concurrency,
+            ipc::auto_white_balance,
+            ipc::eyedrop_color,
             ipc::start_batch_export,
             ipc::get_task,
             ipc::list_fuji_simulations,
