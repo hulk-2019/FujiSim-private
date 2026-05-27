@@ -108,6 +108,7 @@ pub fn run() {
             ipc::set_cover_concurrency,
             ipc::auto_white_balance,
             ipc::eyedrop_color,
+            ipc::compute_histogram,
             ipc::start_batch_export,
             ipc::get_task,
             ipc::list_fuji_simulations,
