@@ -32,7 +32,7 @@ function drawHistogram(
 
   if (!data) return;
 
-  const { r, g, b } = data;
+  const { r, g, b, luma } = data;
   const bins = 256;
 
   // Apply sqrt compression to each bin to prevent sharp peaks
@@ -41,18 +41,24 @@ function drawHistogram(
   const sqrtR = r.map((v) => Math.sqrt(v));
   const sqrtG = g.map((v) => Math.sqrt(v));
   const sqrtB = b.map((v) => Math.sqrt(v));
+  const sqrtLuma = luma.map((v) => Math.sqrt(v));
 
-  // Global max across compressed channels
-  let maxVal = 0;
+  // Global max for RGB uses the joint max so additive blending stays balanced.
+  let rgbMax = 0;
   for (let i = 0; i < bins; i++) {
-    maxVal = Math.max(maxVal, sqrtR[i], sqrtG[i], sqrtB[i]);
+    rgbMax = Math.max(rgbMax, sqrtR[i], sqrtG[i], sqrtB[i]);
   }
-  if (maxVal === 0) return;
+  // Luma uses its own max — sharing rgbMax would crush luma flat
+  // because luma distributions are typically narrower/taller per bin.
+  let lumaMax = 0;
+  for (let i = 0; i < bins; i++) {
+    lumaMax = Math.max(lumaMax, sqrtLuma[i]);
+  }
 
-  // Additive blend so overlapping regions produce natural secondaries
-  ctx.globalCompositeOperation = "lighter";
+  if (rgbMax === 0 && lumaMax === 0) return;
 
-  const drawChannel = (channel: number[], color: string) => {
+  const drawChannel = (channel: number[], maxVal: number, color: string) => {
+    if (maxVal === 0) return;
     ctx.beginPath();
     ctx.moveTo(0, h);
     for (let i = 0; i < bins; i++) {
@@ -66,9 +72,15 @@ function drawHistogram(
     ctx.fill();
   };
 
-  drawChannel(sqrtR, "rgba(180,40,40,0.65)");
-  drawChannel(sqrtG, "rgba(40,150,40,0.65)");
-  drawChannel(sqrtB, "rgba(40,60,180,0.65)");
+  // 1) Luma underneath, source-over (gray fill, no blending)
+  ctx.globalCompositeOperation = "source-over";
+  drawChannel(sqrtLuma, lumaMax, "rgba(220,220,220,0.35)");
+
+  // 2) RGB on top with additive blend so overlaps form natural secondaries
+  ctx.globalCompositeOperation = "lighter";
+  drawChannel(sqrtR, rgbMax, "rgba(180,40,40,0.65)");
+  drawChannel(sqrtG, rgbMax, "rgba(40,150,40,0.65)");
+  drawChannel(sqrtB, rgbMax, "rgba(40,60,180,0.65)");
 
   ctx.globalCompositeOperation = "source-over";
 }
