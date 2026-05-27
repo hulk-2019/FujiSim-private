@@ -186,7 +186,13 @@ export type ImportReport = {
   skipped: number;
 };
 
-export type HistogramData = { r: number[]; g: number[]; b: number[]; luma: number[] };
+export type HistogramData = {
+  r: number[];
+  g: number[];
+  b: number[];
+  luma: number[];
+  totalPixels: number;
+};
 
 /** 预览渲染结果。`path` 是本地文件路径，前端用 convertFileSrc(path) 加载 */
 export type PreviewResult = {
