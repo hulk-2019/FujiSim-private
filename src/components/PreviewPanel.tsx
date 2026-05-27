@@ -42,6 +42,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const eyedropperMode = useStore((s) => s.eyedropperMode);
   const setEyedropperMode = useStore((s) => s.setEyedropperMode);
   const setFilter = useStore((s) => s.setFilter);
+  const setHistogram = useStore((s) => s.setHistogram);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
   const [preview, setPreview] = useState<{
@@ -146,6 +147,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   useEffect(() => {
     if (!focused) {
       setPreview(null);
+      setHistogram(null);
       setLoading(false);
       return;
     }
@@ -275,6 +277,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         const src = convertFileSrc(r.path);
         setPreview({ blobUrl: src, width: r.width, height: r.height });
         setPreviewSize({ width: r.width, height: r.height }, focused.id);
+        setHistogram(r.histogram);
         setLoading(false);
       };
 

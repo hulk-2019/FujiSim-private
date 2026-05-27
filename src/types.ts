@@ -186,11 +186,14 @@ export type ImportReport = {
   skipped: number;
 };
 
+export type HistogramData = { r: number[]; g: number[]; b: number[]; luma: number[] };
+
 /** 预览渲染结果。`path` 是本地文件路径，前端用 convertFileSrc(path) 加载 */
 export type PreviewResult = {
   path: string;
   width: number;
   height: number;
+  histogram: HistogramData;
 };
 
 /** 批量导出进度事件，由后端通过 `export:progress` Tauri Event 推送 */

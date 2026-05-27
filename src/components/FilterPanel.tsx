@@ -48,6 +48,7 @@ import { api } from "@/api";
 import { PASS_THROUGH_SIM } from "@/types";
 import { formatBytes, shortDate } from "@/lib/utils";
 import { SliderRow } from "@/components/ui/form";
+import { Histogram } from "@/components/Histogram";
 import { WatermarkTab } from "@/components/WatermarkTab";
 import { HslPanel } from "@/components/HslPanel";
 import { useTranslation } from "react-i18next";
@@ -65,6 +66,7 @@ export function FilterPanel() {
   const focusedId = useStore((s) => s.focusedId);
   const eyedropperMode = useStore((s) => s.eyedropperMode);
   const setEyedropperMode = useStore((s) => s.setEyedropperMode);
+  const histogram = useStore((s) => s.histogram);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
   const [wbMode, setWbMode] = useState<"reset" | "auto">("reset");
@@ -148,6 +150,7 @@ export function FilterPanel() {
         >
           <ScrollArea className="flex-1">
             <div className="px-0 py-0 space-y-2">
+              <Histogram data={histogram} />
               <Section
                 title={t("editor.sections.whiteBalance")}
                 icon={<Thermometer size={12} />}

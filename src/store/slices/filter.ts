@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { HistogramData } from "../../types";
 import type { EyedropperMode } from "../types";
 import type { FilterPreset, FilterSettings } from "../../types";
 import type { AppState, FilterSlice } from "../types";
@@ -34,10 +35,12 @@ function presetToFilter(preset: FilterPreset): FilterSettings {
 
 export const createFilterSlice: StateCreator<AppState, [], [], FilterSlice> = (set, get) => ({
   filter: { ...DEFAULT_FILTER },
+  histogram: null,
   eyedropperMode: DEFAULT_EYEDROPPER_MODE,
 
   setFilter: (patch) => set({ filter: { ...get().filter, ...patch } }),
   resetFilter: () => set({ filter: { ...DEFAULT_FILTER } }),
   applyPreset: (preset) => set({ filter: presetToFilter(preset) }),
   setEyedropperMode: (mode: EyedropperMode) => set({ eyedropperMode: mode }),
+  setHistogram: (data: HistogramData | null) => set({ histogram: data }),
 });

@@ -24,6 +24,7 @@ pub mod dehaze;
 pub mod fuji;
 pub mod gpu;
 pub mod grain;
+pub mod histogram;
 pub mod hsl_adjust;
 pub mod lut;
 pub mod pipeline;

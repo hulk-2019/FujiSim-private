@@ -9,6 +9,7 @@ import type {
   BatchTask,
   FilterPreset,
   FilterSettings,
+  HistogramData,
   PresetCategory,
   UserFont,
   UserLut,
@@ -54,12 +55,13 @@ export interface AssetSlice {
  */
 export interface FilterSlice {
   filter: FilterSettings;
+  histogram: HistogramData | null;
   eyedropperMode: EyedropperMode;
   setFilter: (patch: Partial<FilterSettings>) => void;
   resetFilter: () => void;
-  /** 把一个预设的所有字段一次性写入当前 filter */
   applyPreset: (preset: FilterPreset) => void;
   setEyedropperMode: (mode: EyedropperMode) => void;
+  setHistogram: (data: HistogramData | null) => void;
 }
 
 /**
