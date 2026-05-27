@@ -1,3 +1,4 @@
+import type { EyedropperMode } from "./types";
 import type { FilterSettings } from "../types";
 
 /**
@@ -51,3 +52,5 @@ export const DEFAULT_FILTER: FilterSettings = {
   lut_file_path: null,
   tone_curve: null,
 };
+
+export const DEFAULT_EYEDROPPER_MODE: EyedropperMode = 'none';

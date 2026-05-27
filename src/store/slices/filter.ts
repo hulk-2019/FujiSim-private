@@ -1,7 +1,8 @@
 import type { StateCreator } from "zustand";
+import type { EyedropperMode } from "../types";
 import type { FilterPreset, FilterSettings } from "../../types";
 import type { AppState, FilterSlice } from "../types";
-import { DEFAULT_FILTER } from "../defaults";
+import { DEFAULT_FILTER, DEFAULT_EYEDROPPER_MODE } from "../defaults";
 
 /** 从预设中提取可直接写入 filter 的字段，补全可选字段的默认值 */
 function presetToFilter(preset: FilterPreset): FilterSettings {
@@ -32,8 +33,10 @@ function presetToFilter(preset: FilterPreset): FilterSettings {
 
 export const createFilterSlice: StateCreator<AppState, [], [], FilterSlice> = (set, get) => ({
   filter: { ...DEFAULT_FILTER },
+  eyedropperMode: DEFAULT_EYEDROPPER_MODE,
 
   setFilter: (patch) => set({ filter: { ...get().filter, ...patch } }),
   resetFilter: () => set({ filter: { ...DEFAULT_FILTER } }),
   applyPreset: (preset) => set({ filter: presetToFilter(preset) }),
+  setEyedropperMode: (mode: EyedropperMode) => set({ eyedropperMode: mode }),
 });

@@ -1,3 +1,5 @@
+export type EyedropperMode = 'none' | 'white-balance';
+
 import type {
   Album,
   AlbumSummary,
@@ -52,10 +54,12 @@ export interface AssetSlice {
  */
 export interface FilterSlice {
   filter: FilterSettings;
+  eyedropperMode: EyedropperMode;
   setFilter: (patch: Partial<FilterSettings>) => void;
   resetFilter: () => void;
   /** 把一个预设的所有字段一次性写入当前 filter */
   applyPreset: (preset: FilterPreset) => void;
+  setEyedropperMode: (mode: EyedropperMode) => void;
 }
 
 /**
