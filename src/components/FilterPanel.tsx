@@ -16,6 +16,7 @@ import {
   Stamp,
   ScrollText,
   Palette,
+  Pipette,
   Sun,
   Droplets,
   Wrench,
@@ -60,6 +61,8 @@ export function FilterPanel() {
   const categories = useStore((s) => s.categories);
   const assets = useStore((s) => s.assets);
   const focusedId = useStore((s) => s.focusedId);
+  const eyedropperMode = useStore((s) => s.eyedropperMode);
+  const setEyedropperMode = useStore((s) => s.setEyedropperMode);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
   const [saveOpen, setSaveOpen] = useState(false);
@@ -140,6 +143,59 @@ export function FilterPanel() {
         >
           <ScrollArea className="flex-1">
             <div className="px-0 py-0 space-y-2">
+              <Section
+                title={t("editor.sections.whiteBalance")}
+                icon={<Palette size={12} />}
+              >
+                <div className="flex gap-1.5 mb-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 h-6 text-[10px] border-zinc-800 hover:bg-zinc-800"
+                    onClick={() => setFilter({ wb_shift_r: 0, wb_shift_b: 0 })}
+                  >
+                    {t("filterPanel.wbReset")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 h-6 text-[10px] border-zinc-800 hover:bg-zinc-800"
+                    onClick={async () => {
+                      if (!focusedId) return;
+                      const result = await api.autoWhiteBalance(focusedId);
+                      setFilter({ wb_shift_r: result.wbShiftR, wb_shift_b: result.wbShiftB });
+                    }}
+                  >
+                    {t("filterPanel.wbAuto")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={eyedropperMode === 'white-balance' ? 'default' : 'outline'}
+                    className="h-6 w-6 p-0 border-zinc-800 hover:bg-zinc-800"
+                    onClick={() => setEyedropperMode(eyedropperMode === 'white-balance' ? 'none' : 'white-balance')}
+                  >
+                    <Pipette size={12} />
+                  </Button>
+                </div>
+                <SliderRow
+                  label={t("filterPanel.temperature")}
+                  value={filter.wb_shift_b}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ wb_shift_b: v })}
+                />
+                <SliderRow
+                  label={t("filterPanel.tint")}
+                  value={filter.wb_shift_r}
+                  min={-100}
+                  max={100}
+                  step={1}
+                  display={(v) => v.toFixed(0)}
+                  onChange={(v) => setFilter({ wb_shift_r: v })}
+                />
+              </Section>
               <Section
                 title={t("editor.sections.basic")}
                 icon={<Sun size={12} />}
@@ -239,24 +295,6 @@ export function FilterPanel() {
                   step={1}
                   display={(v) => v.toFixed(0)}
                   onChange={(v) => setFilter({ color_saturation: v })}
-                />
-                <SliderRow
-                  label={t("filterPanel.wbShiftR")}
-                  value={filter.wb_shift_r}
-                  min={-9}
-                  max={9}
-                  step={1}
-                  display={(v) => v.toFixed(0)}
-                  onChange={(v) => setFilter({ wb_shift_r: v })}
-                />
-                <SliderRow
-                  label={t("filterPanel.wbShiftB")}
-                  value={filter.wb_shift_b}
-                  min={-9}
-                  max={9}
-                  step={1}
-                  display={(v) => v.toFixed(0)}
-                  onChange={(v) => setFilter({ wb_shift_b: v })}
                 />
               </Section>
               <Section
