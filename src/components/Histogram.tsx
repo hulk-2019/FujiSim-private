@@ -1,6 +1,15 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { HistogramData, Asset } from "@/types";
+import {
+  ANIM_DURATION_MS,
+  cloneFrame,
+  drawHistogram,
+  lerpFrame,
+  makeZeros,
+  sqrtify,
+  type HistFrame,
+} from "@/lib/histogramDraw";
 
 /** Below this fraction, shadow/highlight clipping is negligible and not flagged. */
 const CLIP_THRESHOLD = 0.005;
@@ -9,90 +18,6 @@ interface HistogramProps {
   data: HistogramData | null;
   asset?: Asset | null;
   height?: number;
-}
-
-function drawHistogram(
-  canvas: HTMLCanvasElement,
-  container: HTMLDivElement,
-  data: HistogramData | null,
-  height: number,
-  enabled: { r: boolean; g: boolean; b: boolean; luma: boolean },
-) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = container.clientWidth;
-  const h = height;
-
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  // Background
-  ctx.fillStyle = "rgb(24 24 27)";
-  ctx.fillRect(0, 0, w, h);
-
-  if (!data) return;
-
-  const { r, g, b, luma } = data;
-  const bins = 256;
-
-  // Apply sqrt compression to each bin to prevent sharp peaks
-  // (e.g. highlight clipping) from dominating the display.
-  // This matches Lightroom's approach where the y-axis is non-linear.
-  const sqrtR = r.map((v) => Math.sqrt(v));
-  const sqrtG = g.map((v) => Math.sqrt(v));
-  const sqrtB = b.map((v) => Math.sqrt(v));
-  const sqrtLuma = luma.map((v) => Math.sqrt(v));
-
-  // RGB max only considers enabled RGB channels
-  let rgbMax = 0;
-  for (let i = 0; i < bins; i++) {
-    if (enabled.r) rgbMax = Math.max(rgbMax, sqrtR[i]);
-    if (enabled.g) rgbMax = Math.max(rgbMax, sqrtG[i]);
-    if (enabled.b) rgbMax = Math.max(rgbMax, sqrtB[i]);
-  }
-  // Luma uses its own max — sharing rgbMax would crush luma flat
-  // because luma distributions are typically narrower/taller per bin.
-  let lumaMax = 0;
-  if (enabled.luma) {
-    for (let i = 0; i < bins; i++) {
-      lumaMax = Math.max(lumaMax, sqrtLuma[i]);
-    }
-  }
-
-  if (rgbMax === 0 && lumaMax === 0) return;
-
-  const drawChannel = (channel: number[], maxVal: number, color: string) => {
-    if (maxVal === 0) return;
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    for (let i = 0; i < bins; i++) {
-      const x = (i / (bins - 1)) * w;
-      const y = h - (channel[i] / maxVal) * (h - 1);
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(w, h);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-  };
-
-  // 1) Luma underneath, source-over (gray fill, no blending)
-  ctx.globalCompositeOperation = "source-over";
-  if (enabled.luma) drawChannel(sqrtLuma, lumaMax, "rgba(220,220,220,0.35)");
-
-  // 2) RGB on top with additive blend so overlaps form natural secondaries
-  ctx.globalCompositeOperation = "lighter";
-  if (enabled.r) drawChannel(sqrtR, rgbMax, "rgba(180,40,40,0.65)");
-  if (enabled.g) drawChannel(sqrtG, rgbMax, "rgba(40,150,40,0.65)");
-  if (enabled.b) drawChannel(sqrtB, rgbMax, "rgba(40,60,180,0.65)");
-
-  ctx.globalCompositeOperation = "source-over";
 }
 
 export function Histogram({ data, asset = null, height = 120 }: HistogramProps) {
@@ -111,12 +36,77 @@ export function Histogram({ data, asset = null, height = 120 }: HistogramProps) 
 
   const handleResize = useCallback(() => setResizeKey((k) => k + 1), []);
 
-  useEffect(() => {
+  // === Animation state machine ===
+  const displayedRef = useRef<HistFrame | null>(null);
+  const targetRef = useRef<HistFrame | null>(null);
+  const animFromRef = useRef<HistFrame | null>(null);
+  const animStartRef = useRef<number>(0);
+  const rafRef = useRef<number | null>(null);
+
+  const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-    drawHistogram(canvas, container, data, height, enabled);
-  }, [data, height, resizeKey, enabled]);
+    drawHistogram(canvas, container, displayedRef.current, height, enabled);
+  }, [enabled, height]);
+
+  // Start or continue the animation loop. No-op if already running.
+  const ensureRaf = useCallback(() => {
+    if (rafRef.current != null) return;
+    const tick = (now: number) => {
+      const from = animFromRef.current;
+      const target = targetRef.current;
+      if (!from || !target) {
+        rafRef.current = null;
+        return;
+      }
+      const t = Math.min(1, (now - animStartRef.current) / ANIM_DURATION_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      displayedRef.current = lerpFrame(from, target, eased);
+      redraw();
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        displayedRef.current = target;
+        rafRef.current = null;
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [redraw]);
+
+  // Data updates: snapshot current displayed as `from`, set new target, kick RAF.
+  useEffect(() => {
+    if (!data) {
+      targetRef.current = null;
+      displayedRef.current = null;
+      animFromRef.current = null;
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      redraw();
+      return;
+    }
+    const newTarget = sqrtify(data);
+    animFromRef.current = displayedRef.current
+      ? cloneFrame(displayedRef.current)
+      : makeZeros();
+    targetRef.current = newTarget;
+    animStartRef.current = performance.now();
+    ensureRaf();
+  }, [data, redraw, ensureRaf]);
+
+  // Enabled toggle / resize: just redraw with current displayed frame, no animation.
+  useEffect(() => {
+    redraw();
+  }, [enabled, resizeKey, redraw]);
+
+  // Cleanup on unmount.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
