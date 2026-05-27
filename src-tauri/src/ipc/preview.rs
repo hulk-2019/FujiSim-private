@@ -10,6 +10,7 @@ use tauri::State;
 
 /// 预览结果。前端用 convertFileSrc(path) 加载本地文件，零 IPC 传输开销。
 #[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PreviewResult {
     pub path: String,
     pub width: u32,
