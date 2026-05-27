@@ -2,7 +2,6 @@
 
 use crate::db::assets;
 use crate::error::{AppError, Result};
-use crate::processing::histogram;
 use crate::processing::{self, FilterSettings};
 use crate::state::SharedState;
 use serde::Serialize;
@@ -15,7 +14,6 @@ pub struct PreviewResult {
     pub path: String,
     pub width: u32,
     pub height: u32,
-    pub histogram: histogram::HistogramData,
 }
 
 /// `thumbnail:done` 事件载荷：单张封面写盘完成。
@@ -96,7 +94,6 @@ pub async fn get_preview(
 
             let (rw, rh) = resized.dimensions();
             let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
-            let hist = histogram::compute(&processed);
             let jpeg =
                 crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, 88)?;
             let out_path =
@@ -107,7 +104,6 @@ pub async fn get_preview(
                 path: out_path.to_string_lossy().to_string(),
                 width: rw,
                 height: rh,
-                histogram: hist,
             })
         })
     })
