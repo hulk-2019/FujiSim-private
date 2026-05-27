@@ -16,6 +16,7 @@ function drawHistogram(
   container: HTMLDivElement,
   data: HistogramData | null,
   height: number,
+  enabled: { r: boolean; g: boolean; b: boolean; luma: boolean },
 ) {
   const dpr = window.devicePixelRatio || 1;
   const w = container.clientWidth;
@@ -48,16 +49,20 @@ function drawHistogram(
   const sqrtB = b.map((v) => Math.sqrt(v));
   const sqrtLuma = luma.map((v) => Math.sqrt(v));
 
-  // Global max for RGB uses the joint max so additive blending stays balanced.
+  // RGB max only considers enabled RGB channels
   let rgbMax = 0;
   for (let i = 0; i < bins; i++) {
-    rgbMax = Math.max(rgbMax, sqrtR[i], sqrtG[i], sqrtB[i]);
+    if (enabled.r) rgbMax = Math.max(rgbMax, sqrtR[i]);
+    if (enabled.g) rgbMax = Math.max(rgbMax, sqrtG[i]);
+    if (enabled.b) rgbMax = Math.max(rgbMax, sqrtB[i]);
   }
   // Luma uses its own max — sharing rgbMax would crush luma flat
   // because luma distributions are typically narrower/taller per bin.
   let lumaMax = 0;
-  for (let i = 0; i < bins; i++) {
-    lumaMax = Math.max(lumaMax, sqrtLuma[i]);
+  if (enabled.luma) {
+    for (let i = 0; i < bins; i++) {
+      lumaMax = Math.max(lumaMax, sqrtLuma[i]);
+    }
   }
 
   if (rgbMax === 0 && lumaMax === 0) return;
@@ -79,19 +84,27 @@ function drawHistogram(
 
   // 1) Luma underneath, source-over (gray fill, no blending)
   ctx.globalCompositeOperation = "source-over";
-  drawChannel(sqrtLuma, lumaMax, "rgba(220,220,220,0.35)");
+  if (enabled.luma) drawChannel(sqrtLuma, lumaMax, "rgba(220,220,220,0.35)");
 
   // 2) RGB on top with additive blend so overlaps form natural secondaries
   ctx.globalCompositeOperation = "lighter";
-  drawChannel(sqrtR, rgbMax, "rgba(180,40,40,0.65)");
-  drawChannel(sqrtG, rgbMax, "rgba(40,150,40,0.65)");
-  drawChannel(sqrtB, rgbMax, "rgba(40,60,180,0.65)");
+  if (enabled.r) drawChannel(sqrtR, rgbMax, "rgba(180,40,40,0.65)");
+  if (enabled.g) drawChannel(sqrtG, rgbMax, "rgba(40,150,40,0.65)");
+  if (enabled.b) drawChannel(sqrtB, rgbMax, "rgba(40,60,180,0.65)");
 
   ctx.globalCompositeOperation = "source-over";
 }
 
 export function Histogram({ data, asset = null, height = 120 }: HistogramProps) {
   const { t } = useTranslation();
+  const [enabled, setEnabled] = useState({ luma: true, r: true, g: true, b: true });
+
+  const toggleChannel = useCallback(
+    (key: "luma" | "r" | "g" | "b") =>
+      setEnabled((prev) => ({ ...prev, [key]: !prev[key] })),
+    [],
+  );
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [resizeKey, setResizeKey] = useState(0);
@@ -102,8 +115,8 @@ export function Histogram({ data, asset = null, height = 120 }: HistogramProps) 
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-    drawHistogram(canvas, container, data, height);
-  }, [data, height, resizeKey]);
+    drawHistogram(canvas, container, data, height, enabled);
+  }, [data, height, resizeKey, enabled]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -117,11 +130,31 @@ export function Histogram({ data, asset = null, height = 120 }: HistogramProps) 
 
   return (
     <div className="w-full">
-      <div className="flex items-center gap-3 px-2 py-1 text-[10px] text-zinc-400">
-        <ChannelDot color="rgb(220,220,220)" label={t("histogram.channels.luma")} />
-        <ChannelDot color="rgb(220,80,80)" label={t("histogram.channels.r")} />
-        <ChannelDot color="rgb(80,200,80)" label={t("histogram.channels.g")} />
-        <ChannelDot color="rgb(100,120,220)" label={t("histogram.channels.b")} />
+      <div className="flex items-center gap-3 px-2 py-1 text-[10px]">
+        <ChannelDot
+          color="rgb(220,220,220)"
+          label={t("histogram.channels.luma")}
+          enabled={enabled.luma}
+          onToggle={() => toggleChannel("luma")}
+        />
+        <ChannelDot
+          color="rgb(220,80,80)"
+          label={t("histogram.channels.r")}
+          enabled={enabled.r}
+          onToggle={() => toggleChannel("r")}
+        />
+        <ChannelDot
+          color="rgb(80,200,80)"
+          label={t("histogram.channels.g")}
+          enabled={enabled.g}
+          onToggle={() => toggleChannel("g")}
+        />
+        <ChannelDot
+          color="rgb(100,120,220)"
+          label={t("histogram.channels.b")}
+          enabled={enabled.b}
+          onToggle={() => toggleChannel("b")}
+        />
       </div>
       <div ref={containerRef} className="relative w-full rounded overflow-hidden">
         <canvas ref={canvasRef} />
@@ -157,15 +190,32 @@ export function Histogram({ data, asset = null, height = 120 }: HistogramProps) 
   );
 }
 
-function ChannelDot({ color, label }: { color: string; label: string }) {
+function ChannelDot({
+  color,
+  label,
+  enabled,
+  onToggle,
+}: {
+  color: string;
+  label: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1">
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={enabled}
+      className={`inline-flex items-center gap-1 border-0 bg-transparent p-0 cursor-pointer transition-opacity ${
+        enabled ? "text-zinc-300" : "text-zinc-600"
+      }`}
+    >
       <span
-        className="inline-block w-2 h-2 rounded-full"
-        style={{ backgroundColor: color }}
+        className="inline-block w-2 h-2 rounded-full transition-opacity"
+        style={{ backgroundColor: color, opacity: enabled ? 1 : 0.3 }}
       />
       {label}
-    </span>
+    </button>
   );
 }
 
