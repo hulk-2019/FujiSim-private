@@ -38,6 +38,11 @@ pub struct AppState {
     /// 快速切换时旧请求拿到 permit 后发现 token 过期立即退出，新请求才真正解码，
     /// 避免多个 RAW 解码同时占满 CPU。
     pub preview_sem: Arc<Semaphore>,
+    /// 当前直方图请求的 token（单调递增）。与 preview_token 平行，
+    /// compute_histogram 在解码完成后检查是否仍是最新值，
+    /// 不是则返回 preview_cancelled，前端静默丢弃。
+    /// 不复用 preview_token 是因为两条通道共用 token 会互相误杀。
+    pub histogram_token: Arc<AtomicU64>,
 }
 
 /// 共享状态别名。用 `Arc` 包裹以便在 spawn_blocking / rayon 之间廉价克隆。
@@ -100,6 +105,7 @@ impl AppState {
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
             preview_token: Arc::new(AtomicU64::new(0)),
             preview_sem: Arc::new(Semaphore::new(1)),
+            histogram_token: Arc::new(AtomicU64::new(0)),
         });
 
         // Populate the global GPU OnceCell so process_image routes through GPU.
