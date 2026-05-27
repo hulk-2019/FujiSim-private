@@ -1,5 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { HistogramData } from "@/types";
+
+/** Below this fraction, shadow/highlight clipping is negligible and not flagged. */
+const CLIP_THRESHOLD = 0.005;
 
 interface HistogramProps {
   data: HistogramData | null;
@@ -86,6 +90,7 @@ function drawHistogram(
 }
 
 export function Histogram({ data, height = 120 }: HistogramProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [resizeKey, setResizeKey] = useState(0);
@@ -107,9 +112,65 @@ export function Histogram({ data, height = 120 }: HistogramProps) {
     return () => ro.disconnect();
   }, [handleResize]);
 
+  const clip = computeClip(data);
+
   return (
-    <div ref={containerRef} className="w-full rounded overflow-hidden">
-      <canvas ref={canvasRef} />
+    <div className="w-full">
+      <div className="flex items-center gap-3 px-2 py-1 text-[10px] text-zinc-400">
+        <ChannelDot color="rgb(220,220,220)" label={t("histogram.channels.luma")} />
+        <ChannelDot color="rgb(220,80,80)" label={t("histogram.channels.r")} />
+        <ChannelDot color="rgb(80,200,80)" label={t("histogram.channels.g")} />
+        <ChannelDot color="rgb(100,120,220)" label={t("histogram.channels.b")} />
+      </div>
+      <div ref={containerRef} className="relative w-full rounded overflow-hidden">
+        <canvas ref={canvasRef} />
+        {clip.shadow > CLIP_THRESHOLD && (
+          <div
+            role="img"
+            aria-label={t("histogram.shadowClip", { percent: (clip.shadow * 100).toFixed(1) })}
+            className="absolute top-1 left-1 w-0 h-0"
+            style={{
+              borderLeft: "5px solid transparent",
+              borderRight: "5px solid transparent",
+              borderTop: "6px solid rgb(80,140,255)",
+            }}
+            title={t("histogram.shadowClip", { percent: (clip.shadow * 100).toFixed(1) })}
+          />
+        )}
+        {clip.highlight > CLIP_THRESHOLD && (
+          <div
+            role="img"
+            aria-label={t("histogram.highlightClip", { percent: (clip.highlight * 100).toFixed(1) })}
+            className="absolute top-1 right-1 w-0 h-0"
+            style={{
+              borderLeft: "5px solid transparent",
+              borderRight: "5px solid transparent",
+              borderTop: "6px solid rgb(255,90,90)",
+            }}
+            title={t("histogram.highlightClip", { percent: (clip.highlight * 100).toFixed(1) })}
+          />
+        )}
+      </div>
     </div>
   );
+}
+
+function ChannelDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className="inline-block w-2 h-2 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      {label}
+    </span>
+  );
+}
+
+function computeClip(data: HistogramData | null): { shadow: number; highlight: number } {
+  if (!data || data.totalPixels === 0) return { shadow: 0, highlight: 0 };
+  const total = data.totalPixels * 3;
+  const shadow = (data.r[0] + data.g[0] + data.b[0]) / total;
+  const highlight = (data.r[255] + data.g[255] + data.b[255]) / total;
+  return { shadow, highlight };
 }
