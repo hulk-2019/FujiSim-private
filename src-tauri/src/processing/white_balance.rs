@@ -2,17 +2,20 @@
 
 use image::{ImageBuffer, Rgb};
 
-/// 使用 Gray World 算法计算自动白平衡。
+/// Gray World 自动白平衡。
 ///
-/// 返回 `(wb_shift_r, wb_shift_b)`，范围 -100..100。
-pub fn auto_white_balance(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> (f32, f32) {
-    let (width, height) = img.dimensions();
-    let total_pixels = width as f64 * height as f64;
+/// 计算整幅图的 R/G/B 均值，然后求解令三通道均值相等的 wb_shift_r/g/b。
+/// 增益公式：channel * (1 + shift * 0.005) = avg，所以 shift = (avg/channel - 1) / 0.005。
+pub fn auto_white_balance(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> (i32, i32, i32) {
+    let (w, h) = img.dimensions();
+    let n = w as f64 * h as f64;
+    if n < 1.0 {
+        return (0, 0, 0);
+    }
 
-    let mut sum_r: f64 = 0.0;
-    let mut sum_g: f64 = 0.0;
-    let mut sum_b: f64 = 0.0;
-
+    let mut sum_r = 0.0_f64;
+    let mut sum_g = 0.0_f64;
+    let mut sum_b = 0.0_f64;
     for pixel in img.pixels() {
         let Rgb([r, g, b]) = pixel;
         sum_r += f64::from(*r);
@@ -20,18 +23,29 @@ pub fn auto_white_balance(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> (f32, f32) {
         sum_b += f64::from(*b);
     }
 
-    let avg_r = sum_r / total_pixels;
-    let avg_g = sum_g / total_pixels;
-    let avg_b = sum_b / total_pixels;
+    let avg_r = sum_r / n;
+    let avg_g = sum_g / n;
+    let avg_b = sum_b / n;
+    let avg = (avg_r + avg_g + avg_b) / 3.0;
 
-    if avg_g == 0.0 {
-        return (0.0, 0.0);
-    }
+    // shift = ((avg / channel) - 1) / 0.005 = ((avg - channel) / channel) * 200
+    let wb_shift_r = if avg_r > 0.0 {
+        ((avg - avg_r) / avg_r * 200.0).round().clamp(-100.0, 100.0) as i32
+    } else {
+        0
+    };
+    let wb_shift_g = if avg_g > 0.0 {
+        ((avg - avg_g) / avg_g * 200.0).round().clamp(-100.0, 100.0) as i32
+    } else {
+        0
+    };
+    let wb_shift_b = if avg_b > 0.0 {
+        ((avg - avg_b) / avg_b * 200.0).round().clamp(-100.0, 100.0) as i32
+    } else {
+        0
+    };
 
-    let wb_shift_r = ((avg_g - avg_r) / avg_g * 100.0).clamp(-100.0, 100.0) as f32;
-    let wb_shift_b = ((avg_g - avg_b) / avg_g * 100.0).clamp(-100.0, 100.0) as f32;
-
-    (wb_shift_r, wb_shift_b)
+    (wb_shift_r, wb_shift_g, wb_shift_b)
 }
 
 /// 从图像的 (x, y) 位置采样单个像素的 RGB 值。

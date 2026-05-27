@@ -17,6 +17,7 @@ export function SliderRow({
   onChange,
   display,
   resetValue = 0,
+  trackGradient,
 }: {
   label: string;
   value: number;
@@ -26,6 +27,8 @@ export function SliderRow({
   onChange: (v: number) => void;
   display?: (v: number) => string;
   resetValue?: number;
+  /** CSS gradient for the slider track background */
+  trackGradient?: string;
 }) {
   return (
     <div className="w-full">
@@ -35,14 +38,20 @@ export function SliderRow({
           {display ? display(value) : value.toFixed(2)}
         </span>
       </div>
-      <Slider
-        value={[value]}
-        min={min}
-        max={max}
-        step={step}
-        onValueChange={([v]) => onChange(v)}
-        onThumbDoubleClick={() => onChange(resetValue)}
-      />
+      <div
+        className="relative rounded"
+        style={trackGradient ? { background: trackGradient, height: 4 } : undefined}
+      >
+        <Slider
+          value={[value]}
+          min={min}
+          max={max}
+          step={step}
+          onValueChange={([v]) => onChange(v)}
+          onThumbDoubleClick={() => onChange(resetValue)}
+          className={trackGradient ? "[&>span:first-child]:bg-transparent [&>span:first-child>span]:bg-transparent" : undefined}
+        />
+      </div>
     </div>
   );
 }

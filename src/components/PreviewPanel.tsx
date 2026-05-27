@@ -16,6 +16,9 @@ const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
 const MAX_SCALE_ABSOLUTE = 4;  // 绝对最大缩放（400%），保证小图也能放到 4x
 const FIT_FILL = 0.8;
 
+const PIPETTE_CURSOR =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpath d='m2 22 1-1h3l9-9'/%3E%3Cpath d='M3 21v-3l9-9'/%3E%3Cpath d='m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3 3l3.8 3.8'/%3E%3C/svg%3E\") 2 20, crosshair";
+
 export interface PreviewPanelHandle {
   fitToView: () => void;
   setZoomLevel: (scale: number) => void;
@@ -169,6 +172,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       filter.clarity === 0 &&
       filter.sharpness === 0 &&
       filter.wb_shift_r === 0 &&
+      filter.wb_shift_g === 0 &&
       filter.wb_shift_b === 0 &&
       filter.grain_amount === 0 &&
       filter.hsl_red_hue === 0 &&
@@ -421,9 +425,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       try {
         const { r, g, b } = await api.eyedropColor(focusedId, imgX, imgY);
         const avg = (r + g + b) / 3;
-        const wbShiftR = Math.round(Math.max(-100, Math.min(100, ((avg - r) / avg) * 100)));
-        const wbShiftB = Math.round(Math.max(-100, Math.min(100, ((avg - b) / avg) * 100)));
-        setFilter({ wb_shift_r: wbShiftR, wb_shift_b: wbShiftB });
+        if (avg < 1) return;
+        const wbShiftR = Math.round(Math.max(-100, Math.min(100, ((avg - r) / r) * 200)));
+        const wbShiftG = Math.round(Math.max(-100, Math.min(100, ((avg - g) / g) * 200)));
+        const wbShiftB = Math.round(Math.max(-100, Math.min(100, ((avg - b) / b) * 200)));
+        setFilter({ wb_shift_r: wbShiftR, wb_shift_g: wbShiftG, wb_shift_b: wbShiftB });
       } catch (err) {
         console.error('Eyedropper failed:', err);
       } finally {
@@ -476,10 +482,13 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
       <div
         ref={viewportRef}
-        className={`flex-1 relative overflow-hidden bg-zinc-950/20 ${eyedropperMode !== 'none' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+        className={`flex-1 relative overflow-hidden bg-zinc-950/20 ${eyedropperMode !== 'none' ? '' : 'cursor-grab active:cursor-grabbing'}`}
         onClick={handleEyedropperClick}
         {...bind()}
-        style={{ touchAction: "none" }}
+        style={{
+          touchAction: "none",
+          ...(eyedropperMode !== 'none' ? { cursor: PIPETTE_CURSOR } : {}),
+        }}
       >
         {scale !== null && (
           <>

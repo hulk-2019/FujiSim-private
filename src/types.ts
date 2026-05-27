@@ -85,6 +85,7 @@ export type FilterPreset = {
   clarity: number;
   sharpness: number;
   wb_shift_r: number;
+  wb_shift_g: number;
   wb_shift_b: number;
   lut_file_path?: string | null;
   is_builtin: number;
@@ -126,6 +127,7 @@ export type FilterSettings = {
   clarity: number;
   sharpness: number;
   wb_shift_r: number;
+  wb_shift_g: number;
   wb_shift_b: number;
   hsl_red_hue: number;
   hsl_red_sat: number;

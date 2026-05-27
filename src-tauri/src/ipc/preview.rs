@@ -151,12 +151,12 @@ pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> R
 
 /// 使用 Gray World 算法计算自动白平衡偏移量。
 ///
-/// 返回 `(wb_shift_r, wb_shift_b)`，范围 -100..100。
+/// 返回 `(wb_shift_r, wb_shift_g, wb_shift_b)`，范围 -100..100（整数）。
 #[tauri::command]
 pub async fn auto_white_balance(
     state: State<'_, SharedState>,
     asset_id: i64,
-) -> Result<(f32, f32)> {
+) -> Result<(i32, i32, i32)> {
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
     let export_pool = state.export_pool.clone();

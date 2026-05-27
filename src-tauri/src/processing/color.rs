@@ -87,13 +87,14 @@ pub fn luminance(r: f32, g: f32, b: f32) -> f32 {
     0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-/// 白平衡偏移：仿富士机内 -9..+9 的两轴档位。
-/// 每档大约 2% 增益，足以微调肤色冷暖、避免数值过激造成偏色。
+/// 白平衡偏移：R/G/B 三轴乘性增益。
+/// 范围 -100..+100，每档约 0.5% 增益，极值 ±50% 增益变化。
 #[inline(always)]
-pub fn apply_wb_shift(r: f32, g: f32, b: f32, shift_r: i32, shift_b: i32) -> (f32, f32, f32) {
-    let kr = 1.0 + shift_r as f32 * 0.02;
-    let kb = 1.0 + shift_b as f32 * 0.02;
-    (r * kr, g, b * kb)
+pub fn apply_wb_shift(r: f32, g: f32, b: f32, shift_r: i32, shift_g: i32, shift_b: i32) -> (f32, f32, f32) {
+    let kr = 1.0 + shift_r as f32 * 0.005;
+    let kg = 1.0 + shift_g as f32 * 0.005;
+    let kb = 1.0 + shift_b as f32 * 0.005;
+    (r * kr, g * kg, b * kb)
 }
 
 /// 以亮度为锚的饱和度调整。

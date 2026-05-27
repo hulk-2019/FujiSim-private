@@ -2,12 +2,11 @@
 //
 // Uniform field order MUST stay in sync with FilterUniforms in
 // src-tauri/src/processing/gpu/uniforms.rs (std140 layout, 240 bytes).
-// naga inserts 8 bytes of padding after has_master_curve automatically
-// because split_hi is a vec4<f32> (16-byte aligned). Do NOT add explicit
-// padding here.
+// naga inserts 0 bytes of padding after has_master_curve because
+// split_hi is a vec4<f32> that naturally lands at offset 48 (16-byte aligned).
 
 struct Uniforms {
-    wb_shift_r: f32, wb_shift_b: f32,
+    wb_shift_r: f32, wb_shift_b: f32, wb_shift_g: f32, _pad_wb: f32,
     exposure: f32,
     brightness: f32, contrast: f32,
     highlight: f32, shadow: f32, white: f32, black: f32,
@@ -236,9 +235,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var c = textureLoad(src, coord, 0).rgb;
 
     // [1] WB shift: multiplicative gain per axis (matches CPU apply_wb_shift).
-    // wb_shift_r/b are raw i32 cast to f32 (range -9..+9); each step ≈ 2% gain.
-    c.r = c.r * (1.0 + u.wb_shift_r * 0.02);
-    c.b = c.b * (1.0 + u.wb_shift_b * 0.02);
+    // wb_shift_r/g/b are i32 cast to f32 (range -100..100); each step ≈ 0.5% gain.
+    c.r = c.r * (1.0 + u.wb_shift_r * 0.005);
+    c.g = c.g * (1.0 + u.wb_shift_g * 0.005);
+    c.b = c.b * (1.0 + u.wb_shift_b * 0.005);
 
     // [2] Exposure: linear gain 2^EV (matches CPU apply_exposure_pixel).
     let gain = pow(2.0, u.exposure);

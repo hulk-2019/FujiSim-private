@@ -97,6 +97,8 @@ pub struct FilterSettings {
     #[serde(default)]
     pub wb_shift_r: i32,
     #[serde(default)]
+    pub wb_shift_g: i32,
+    #[serde(default)]
     pub wb_shift_b: i32,
     #[serde(default)]
     pub hsl_red_hue: f32,
@@ -169,6 +171,7 @@ impl FilterSettings {
             && self.clarity == 0
             && self.sharpness == 0
             && self.wb_shift_r == 0
+            && self.wb_shift_g == 0
             && self.wb_shift_b == 0
             && self.grain_amount == 0.0
             && self.hsl_red_hue == 0.0
@@ -222,6 +225,7 @@ impl Default for FilterSettings {
             clarity: 0,
             sharpness: 0,
             wb_shift_r: 0,
+            wb_shift_g: 0,
             wb_shift_b: 0,
             hsl_red_hue: 0.0,
             hsl_red_sat: 0.0,
@@ -328,7 +332,7 @@ pub fn process_image_cpu(
         let mut b = u16_to_f(px.0[2]);
 
         // [1] WB shift
-        let (nr, ng, nb) = color::apply_wb_shift(r, g, b, settings.wb_shift_r, settings.wb_shift_b);
+        let (nr, ng, nb) = color::apply_wb_shift(r, g, b, settings.wb_shift_r, settings.wb_shift_g, settings.wb_shift_b);
         r = nr;
         g = ng;
         b = nb;

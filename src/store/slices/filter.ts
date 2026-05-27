@@ -7,6 +7,7 @@ import { DEFAULT_FILTER, DEFAULT_EYEDROPPER_MODE } from "../defaults";
 /** 从预设中提取可直接写入 filter 的字段，补全可选字段的默认值 */
 function presetToFilter(preset: FilterPreset): FilterSettings {
   return {
+    ...DEFAULT_FILTER,
     base_simulation: preset.base_simulation,
     grain_amount: preset.grain_amount,
     grain_size: preset.grain_size,
@@ -25,9 +26,9 @@ function presetToFilter(preset: FilterPreset): FilterSettings {
     clarity: preset.clarity,
     sharpness: preset.sharpness,
     wb_shift_r: preset.wb_shift_r,
+    wb_shift_g: preset.wb_shift_g,
     wb_shift_b: preset.wb_shift_b,
     lut_file_path: preset.lut_file_path ?? null,
-    tone_curve: null,
   };
 }
 

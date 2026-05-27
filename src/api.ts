@@ -162,10 +162,11 @@ export const api = {
   clearAllData: () => invoke<void>("clear_all_data"),
 
   // ===== 白平衡 =====
-  /** Auto white balance using Gray World algorithm. Returns wb_shift_r and wb_shift_b values. */
+  /** Auto white balance using Gray World algorithm. Returns wb_shift_r, wb_shift_g, wb_shift_b values. */
   autoWhiteBalance: (assetId: number) =>
-    invoke<[number, number]>('auto_white_balance', { assetId }).then(([wbShiftR, wbShiftB]) => ({
+    invoke<[number, number, number]>('auto_white_balance', { assetId }).then(([wbShiftR, wbShiftG, wbShiftB]) => ({
       wbShiftR,
+      wbShiftG,
       wbShiftB,
     })),
   /** Sample a pixel's RGB color at coordinates (x, y) on the preview image. */

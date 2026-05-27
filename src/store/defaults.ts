@@ -24,6 +24,7 @@ export const DEFAULT_FILTER: FilterSettings = {
   clarity: 0,
   sharpness: 0,
   wb_shift_r: 0,
+  wb_shift_g: 0,
   wb_shift_b: 0,
   hsl_red_hue: 0,
   hsl_red_sat: 0,

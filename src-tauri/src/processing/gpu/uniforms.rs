@@ -11,6 +11,8 @@ pub struct FilterUniforms {
     // Step [1] white balance
     pub wb_shift_r: f32,
     pub wb_shift_b: f32,
+    pub wb_shift_g: f32,
+    pub _pad_wb: f32,
     // Step [2] exposure
     pub exposure: f32,
     // Step [3] brightness/contrast
@@ -23,9 +25,6 @@ pub struct FilterUniforms {
     pub black: f32,
     // Step [5] curve toggles (LUT-driven; 0 = skip per-channel sample)
     pub has_master_curve: u32,
-    // Explicit padding: has_master_curve sits at offset 36 (after 9 × f32).
-    // WGSL naga inserts 8 bytes here so split_hi vec4 starts at offset 48 (16-byte aligned).
-    pub _pad_after_has_master_curve: [u32; 2],
     // Step [6] split toning + global channel shift (vec4 for std140 alignment)
     pub split_hi_r: f32,
     pub split_hi_g: f32,
@@ -90,6 +89,8 @@ impl FilterUniforms {
         Self {
             wb_shift_r: s.wb_shift_r as f32,
             wb_shift_b: s.wb_shift_b as f32,
+            wb_shift_g: s.wb_shift_g as f32,
+            _pad_wb: 0.0,
             exposure: s.exposure,
             brightness: s.brightness as f32,
             contrast: s.contrast as f32,
@@ -101,7 +102,6 @@ impl FilterUniforms {
             // (user_rgb is now baked into per-channel rows in curves_bake.rs).
             // Kept at 0 for layout stability — do not remove the field.
             has_master_curve: 0,
-            _pad_after_has_master_curve: [0, 0],
             split_hi_r: p.split_highlight.0,
             split_hi_g: p.split_highlight.1,
             split_hi_b: p.split_highlight.2,

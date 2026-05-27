@@ -17,6 +17,7 @@ import {
   ScrollText,
   Palette,
   Pipette,
+  RotateCcw,
   Sun,
   Droplets,
   Wrench,
@@ -65,6 +66,8 @@ export function FilterPanel() {
   const setEyedropperMode = useStore((s) => s.setEyedropperMode);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
+  const [wbMode, setWbMode] = useState<"reset" | "auto">("reset");
+
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveCategoryId, setSaveCategoryId] = useState<string>("__none__");
@@ -103,6 +106,7 @@ export function FilterPanel() {
       clarity: filter.clarity,
       sharpness: filter.sharpness,
       wb_shift_r: filter.wb_shift_r,
+      wb_shift_g: filter.wb_shift_g,
       wb_shift_b: filter.wb_shift_b,
       lut_file_path: filter.lut_file_path ?? null,
       is_builtin: false,
@@ -147,53 +151,69 @@ export function FilterPanel() {
                 title={t("editor.sections.whiteBalance")}
                 icon={<Palette size={12} />}
               >
-                <div className="flex gap-1.5 mb-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 h-6 text-[10px] border-zinc-800 hover:bg-zinc-800"
-                    onClick={() => setFilter({ wb_shift_r: 0, wb_shift_b: 0 })}
-                  >
-                    {t("filterPanel.wbReset")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 h-6 text-[10px] border-zinc-800 hover:bg-zinc-800"
-                    onClick={async () => {
-                      if (!focusedId) return;
-                      const result = await api.autoWhiteBalance(focusedId);
-                      setFilter({ wb_shift_r: result.wbShiftR, wb_shift_b: result.wbShiftB });
+                <div className="flex items-center gap-1.5">
+                  <Select
+                    value={wbMode}
+                    onValueChange={(v) => {
+                      if (v === "auto") {
+                        if (!focusedId) return;
+                        api.autoWhiteBalance(focusedId).then((result) => {
+                          setFilter({ wb_shift_r: result.wbShiftR, wb_shift_g: result.wbShiftG, wb_shift_b: result.wbShiftB });
+                          setWbMode("auto");
+                        });
+                      }
                     }}
                   >
-                    {t("filterPanel.wbAuto")}
+                    <SelectTrigger className="h-6 w-auto gap-1 border-zinc-700 bg-zinc-900 text-[10px] text-zinc-300 px-2 py-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-zinc-700 bg-zinc-900">
+                      <SelectItem value="reset" className="text-[10px] text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100">
+                        {t("filterPanel.wbReset")}
+                      </SelectItem>
+                      <SelectItem value="auto" className="text-[10px] text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100">
+                        {t("filterPanel.wbAuto")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="flex-1" />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 w-6 p-0 border-zinc-700 hover:bg-zinc-800"
+                    onClick={() => { setFilter({ wb_shift_r: 0, wb_shift_g: 0, wb_shift_b: 0 }); setWbMode("reset"); }}
+                    title={t("filterPanel.wbReset")}
+                  >
+                    <RotateCcw size={12} />
                   </Button>
                   <Button
                     size="sm"
-                    variant={eyedropperMode === 'white-balance' ? 'default' : 'outline'}
-                    className="h-6 w-6 p-0 border-zinc-800 hover:bg-zinc-800"
-                    onClick={() => setEyedropperMode(eyedropperMode === 'white-balance' ? 'none' : 'white-balance')}
+                    variant={eyedropperMode === "white-balance" ? "default" : "outline"}
+                    className="h-6 w-6 p-0 border-zinc-700 hover:bg-zinc-800"
+                    onClick={() => setEyedropperMode(eyedropperMode === "white-balance" ? "none" : "white-balance")}
                   >
                     <Pipette size={12} />
                   </Button>
                 </div>
                 <SliderRow
                   label={t("filterPanel.temperature")}
-                  value={filter.wb_shift_b}
+                  value={-filter.wb_shift_b}
                   min={-100}
                   max={100}
                   step={1}
                   display={(v) => v.toFixed(0)}
-                  onChange={(v) => setFilter({ wb_shift_b: v })}
+                  onChange={(v) => { setFilter({ wb_shift_b: -v }); setWbMode("reset"); }}
+                  trackGradient="linear-gradient(to right, #4488ff, #cccc88, #ffcc00)"
                 />
                 <SliderRow
                   label={t("filterPanel.tint")}
-                  value={filter.wb_shift_r}
+                  value={-filter.wb_shift_g}
                   min={-100}
                   max={100}
                   step={1}
                   display={(v) => v.toFixed(0)}
-                  onChange={(v) => setFilter({ wb_shift_r: v })}
+                  onChange={(v) => { setFilter({ wb_shift_g: -v }); setWbMode("reset"); }}
+                  trackGradient="linear-gradient(to right, #44cc44, #cccccc, #cc44cc)"
                 />
               </Section>
               <Section
