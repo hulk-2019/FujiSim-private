@@ -161,6 +161,21 @@ export const api = {
   deleteAllExportTasks: (taskIds: number[]) => invoke<void>("delete_all_export_tasks", { taskIds }),
   clearAllData: () => invoke<void>("clear_all_data"),
 
+  // ===== 白平衡 =====
+  /** Auto white balance using Gray World algorithm. Returns wb_shift_r and wb_shift_b values. */
+  autoWhiteBalance: (assetId: number) =>
+    invoke<[number, number]>('auto_white_balance', { assetId }).then(([wbShiftR, wbShiftB]) => ({
+      wbShiftR,
+      wbShiftB,
+    })),
+  /** Sample a pixel's RGB color at coordinates (x, y) on the preview image. */
+  eyedropColor: (assetId: number, x: number, y: number) =>
+    invoke<[number, number, number]>('eyedrop_color', { assetId, x, y }).then(([r, g, b]) => ({
+      r,
+      g,
+      b,
+    })),
+
   // ===== 用户自定义字体库 =====
   importFonts: (paths: string[]) => invoke<UserFont[]>("import_fonts", { paths }),
   listUserFonts: () => invoke<UserFont[]>("list_user_fonts"),
