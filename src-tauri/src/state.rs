@@ -2,12 +2,71 @@ use crate::error::Result;
 use crate::processing::gpu::context::GpuContext;
 use crate::processing::lut::Lut3D;
 use crate::queue::TaskQueue;
+use image::{ImageBuffer, Rgb};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
+
+pub type Rgb16Image = ImageBuffer<Rgb<u16>, Vec<u16>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PreviewBaseCacheKey {
+    pub asset_id: i64,
+    pub max_edge: Option<u32>,
+}
+
+pub struct PreviewBaseCache {
+    max_items: usize,
+    order: VecDeque<PreviewBaseCacheKey>,
+    map: HashMap<PreviewBaseCacheKey, Arc<Rgb16Image>>,
+}
+
+impl PreviewBaseCache {
+    pub fn new(max_items: usize) -> Self {
+        Self {
+            max_items,
+            order: VecDeque::new(),
+            map: HashMap::new(),
+        }
+    }
+
+    pub fn get(&mut self, key: PreviewBaseCacheKey) -> Option<Arc<Rgb16Image>> {
+        let img = self.map.get(&key)?.clone();
+        self.touch(key);
+        Some(img)
+    }
+
+    pub fn insert(&mut self, key: PreviewBaseCacheKey, img: Arc<Rgb16Image>) {
+        if self.map.contains_key(&key) {
+            self.map.insert(key, img);
+            self.touch(key);
+            return;
+        }
+
+        self.map.insert(key, img);
+        self.order.push_back(key);
+
+        while self.map.len() > self.max_items {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            self.map.remove(&oldest);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.order.clear();
+        self.map.clear();
+    }
+
+    fn touch(&mut self, key: PreviewBaseCacheKey) {
+        self.order.retain(|k| *k != key);
+        self.order.push_back(key);
+    }
+}
 
 pub struct AppState {
     pub pool: SqlitePool,
@@ -19,6 +78,7 @@ pub struct AppState {
     pub cover_dir: PathBuf,
     pub font_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
+    pub preview_base_cache: Mutex<PreviewBaseCache>,
     pub export_pool: Arc<rayon::ThreadPool>,
     /// 全局 GPU 上下文。Tauri setup 阶段一次性初始化，进程生命周期内长存。
     pub gpu: Arc<GpuContext>,
@@ -95,6 +155,7 @@ impl AppState {
             cover_dir,
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),
+            preview_base_cache: Mutex::new(PreviewBaseCache::new(8)),
             export_pool,
             gpu,
             task_queue: TaskQueue::new(2),

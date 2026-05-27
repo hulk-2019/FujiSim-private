@@ -7,7 +7,7 @@
 use crate::db::assets;
 use crate::error::{AppError, Result};
 use crate::processing::histogram::{self, HistogramData};
-use crate::processing::{self, FilterSettings};
+use crate::processing::FilterSettings;
 use crate::state::SharedState;
 use std::path::PathBuf;
 use tauri::State;
@@ -30,7 +30,7 @@ pub async fn compute_histogram(
     let export_pool = state.export_pool.clone();
     let sem = state.preview_sem.clone();
     let histogram_token = state.histogram_token.clone();
-    let raw_original_dir = state.raw_original_dir.clone();
+    let state_for_render = state.inner().clone();
 
     let permit = sem
         .acquire_owned()
@@ -44,16 +44,8 @@ pub async fn compute_histogram(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         export_pool.install(|| {
-            let cache_path = processing::raw::preview_base_path(&raw_original_dir, asset_id);
-
-            let resized = if cache_path.exists() {
-                match crate::vips_io::decode_to_rgb16(&cache_path) {
-                    Ok(img) => resize_to_512(img)?,
-                    Err(_) => decode_and_resize_512(&path)?,
-                }
-            } else {
-                decode_and_resize_512(&path)?
-            };
+            let resized =
+                super::preview::load_preview_base(&state_for_render, asset_id, &path, Some(512), false)?;
 
             if histogram_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
@@ -68,29 +60,4 @@ pub async fn compute_histogram(
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
-}
-
-fn resize_to_512(
-    src: image::ImageBuffer<image::Rgb<u16>, Vec<u16>>,
-) -> Result<image::ImageBuffer<image::Rgb<u16>, Vec<u16>>> {
-    let (w, h) = src.dimensions();
-    let scale = (512.0_f32 / w.max(h) as f32).min(1.0);
-    if scale < 1.0 {
-        let nw = (w as f32 * scale).round().max(1.0) as u32;
-        let nh = (h as f32 * scale).round().max(1.0) as u32;
-        crate::vips_io::resize_rgb16(&src, nw, nh)
-    } else {
-        Ok(src)
-    }
-}
-
-fn decode_and_resize_512(
-    path: &std::path::Path,
-) -> Result<image::ImageBuffer<image::Rgb<u16>, Vec<u16>>> {
-    use crate::asset::format::{classify, FileKind};
-    let src = match classify(path) {
-        FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(path, Some(512))?,
-        _ => processing::load_image_rgb16(path)?,
-    };
-    resize_to_512(src)
 }

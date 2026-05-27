@@ -28,6 +28,9 @@ pub async fn reset_app_data(state: State<'_, SharedState>) -> Result<()> {
     if let Ok(mut cache) = state.lut_cache.lock() {
         cache.clear();
     }
+    if let Ok(mut cache) = state.preview_base_cache.lock() {
+        cache.clear();
+    }
     // 关闭连接池，确保 SQLite 文件句柄释放（WAL 文件也会随之关闭）
     state.pool.close().await;
     // 删除整个数据目录（包含 library.db / library.db-wal / library.db-shm / luts/ / thumbnails/）
@@ -43,6 +46,9 @@ pub async fn reset_app_data(state: State<'_, SharedState>) -> Result<()> {
 pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
     crate::db::tasks::clear_all(&state.pool).await?;
     if let Ok(mut cache) = state.lut_cache.lock() {
+        cache.clear();
+    }
+    if let Ok(mut cache) = state.preview_base_cache.lock() {
         cache.clear();
     }
     // watermarks 目录整体清空
