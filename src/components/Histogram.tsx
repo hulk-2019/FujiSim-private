@@ -1,12 +1,13 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { HistogramData } from "@/types";
+import type { HistogramData, Asset } from "@/types";
 
 /** Below this fraction, shadow/highlight clipping is negligible and not flagged. */
 const CLIP_THRESHOLD = 0.005;
 
 interface HistogramProps {
   data: HistogramData | null;
+  asset?: Asset | null;
   height?: number;
 }
 
@@ -89,7 +90,7 @@ function drawHistogram(
   ctx.globalCompositeOperation = "source-over";
 }
 
-export function Histogram({ data, height = 120 }: HistogramProps) {
+export function Histogram({ data, asset = null, height = 120 }: HistogramProps) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +152,7 @@ export function Histogram({ data, height = 120 }: HistogramProps) {
           />
         )}
       </div>
+      <ExifBar asset={asset} />
     </div>
   );
 }
@@ -173,4 +175,30 @@ function computeClip(data: HistogramData | null): { shadow: number; highlight: n
   const shadow = (data.r[0] + data.g[0] + data.b[0]) / total;
   const highlight = (data.r[255] + data.g[255] + data.b[255]) / total;
   return { shadow, highlight };
+}
+
+function ExifBar({ asset }: { asset: Asset | null }) {
+  if (!asset) return null;
+  const { iso, focal_length, f_number, shutter_speed } = asset;
+  const allMissing =
+    iso == null && focal_length == null && f_number == null && shutter_speed == null;
+  if (allMissing) return null;
+
+  const items = [
+    iso != null ? `ISO ${iso}` : "—",
+    focal_length != null ? `${focal_length}mm` : "—",
+    f_number != null ? `f/${f_number.toFixed(1)}` : "—",
+    shutter_speed != null ? `${shutter_speed}s` : "—",
+  ];
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-zinc-500">
+      {items.map((s, i) => (
+        <span key={i} className="inline-flex items-center gap-2">
+          {i > 0 && <span className="text-zinc-700">·</span>}
+          <span>{s}</span>
+        </span>
+      ))}
+    </div>
+  );
 }
