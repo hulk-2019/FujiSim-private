@@ -98,6 +98,16 @@ const en = {
       custom: "Custom",
     },
   },
+  histogram: {
+    shadowClip: "Shadow Clip {{percent}}%",
+    highlightClip: "Highlight Clip {{percent}}%",
+    channels: {
+      r: "R",
+      g: "G",
+      b: "B",
+      luma: "Luma",
+    },
+  },
   assetGrid: {
     loading: "Loading...",
     empty: 'Library is empty. Click "Import folder" on the left to get started.',

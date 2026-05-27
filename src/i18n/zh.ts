@@ -98,6 +98,16 @@ const zh = {
       custom: "自定义",
     },
   },
+  histogram: {
+    shadowClip: "阴影裁剪 {{percent}}%",
+    highlightClip: "高光裁剪 {{percent}}%",
+    channels: {
+      r: "R",
+      g: "G",
+      b: "B",
+      luma: "亮度",
+    },
+  },
   assetGrid: {
     loading: "加载中...",
     empty: "资产库还是空的，点左侧「导入目录」开始吧。",
