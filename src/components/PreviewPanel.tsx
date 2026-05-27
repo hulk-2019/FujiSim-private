@@ -36,6 +36,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const filter = useStore((s) => s.filter);
   const watermark = useStore((s) => s.watermark);
   const setPreviewSize = useStore((s) => s.setPreviewSize);
+  const eyedropperMode = useStore((s) => s.eyedropperMode);
+  const setEyedropperMode = useStore((s) => s.setEyedropperMode);
+  const setFilter = useStore((s) => s.setFilter);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
 
   const [preview, setPreview] = useState<{
@@ -373,6 +376,63 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     },
   );
 
+  const handleEyedropperClick = useCallback(
+    async (e: React.MouseEvent<HTMLDivElement>) => {
+      if (eyedropperMode === 'none' || !focusedId) return;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      const displayWidth = rect.width;
+      const displayHeight = rect.height;
+
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Get image natural dimensions from the img element
+      const img = imgRef.current;
+      if (!img) return;
+
+      const imgWidth = img.naturalWidth;
+      const imgHeight = img.naturalHeight;
+      if (!imgWidth || !imgHeight) return;
+
+      // Calculate the actual rendered image dimensions (object-fit: contain)
+      const imgAspect = imgWidth / imgHeight;
+      const containerAspect = displayWidth / displayHeight;
+
+      let renderedWidth: number, renderedHeight: number, offsetX: number, offsetY: number;
+
+      if (imgAspect > containerAspect) {
+        renderedWidth = displayWidth;
+        renderedHeight = displayWidth / imgAspect;
+        offsetX = 0;
+        offsetY = (displayHeight - renderedHeight) / 2;
+      } else {
+        renderedHeight = displayHeight;
+        renderedWidth = displayHeight * imgAspect;
+        offsetX = (displayWidth - renderedWidth) / 2;
+        offsetY = 0;
+      }
+
+      const imgX = Math.round(((clickX - offsetX) / renderedWidth) * imgWidth);
+      const imgY = Math.round(((clickY - offsetY) / renderedHeight) * imgHeight);
+
+      if (imgX < 0 || imgX >= imgWidth || imgY < 0 || imgY >= imgHeight) return;
+
+      try {
+        const { r, g, b } = await api.eyedropColor(focusedId, imgX, imgY);
+        const avg = (r + g + b) / 3;
+        const wbShiftR = Math.round(Math.max(-100, Math.min(100, ((avg - r) / avg) * 100)));
+        const wbShiftB = Math.round(Math.max(-100, Math.min(100, ((avg - b) / avg) * 100)));
+        setFilter({ wb_shift_r: wbShiftR, wb_shift_b: wbShiftB });
+      } catch (err) {
+        console.error('Eyedropper failed:', err);
+      } finally {
+        setEyedropperMode('none');
+      }
+    },
+    [eyedropperMode, focusedId, setFilter, setEyedropperMode],
+  );
+
   if (!focused) {
     return (
       <main className="w-full h-full flex items-center justify-center text-zinc-600 bg-transparent">
@@ -416,7 +476,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     <main className="w-full h-full flex flex-col bg-transparent min-w-0">
       <div
         ref={viewportRef}
-        className="flex-1 relative overflow-hidden bg-zinc-950/20 cursor-grab active:cursor-grabbing"
+        className={`flex-1 relative overflow-hidden bg-zinc-950/20 ${eyedropperMode !== 'none' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+        onClick={handleEyedropperClick}
         {...bind()}
         style={{ touchAction: "none" }}
       >
