@@ -65,6 +65,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const currentTokenRef = useRef(0);
   const previewRef = useRef<AssetPreviewImage | null>(null);
   const baselinePreviewsRef = useRef<Record<number, PreviewImage>>({});
+  const resolvedPreviewBasesRef = useRef<Set<number>>(new Set());
 
   const [scale, setScale] = useState<number>(1);
   const [tx, setTx] = useState(0);
@@ -176,9 +177,28 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     }
     setError(null);
     const hasCurrentDisplay = focused.is_raw
-      ? (previewRef.current?.assetId === focused.id || !!baselinePreviewsRef.current[focused.id])
+      ? (
+        previewRef.current?.assetId === focused.id ||
+        !!baselinePreviewsRef.current[focused.id] ||
+        resolvedPreviewBasesRef.current.has(focused.id)
+      )
       : true;
-    setLoading(!hasCurrentDisplay);
+    setLoading(false);
+
+    if (focused.is_raw && !hasCurrentDisplay) {
+      api.hasPreviewBase(focused.id)
+        .then((hasBase) => {
+          if (currentTokenRef.current !== token) return;
+          if (hasBase) {
+            resolvedPreviewBasesRef.current.add(focused.id);
+          } else {
+            setLoading(true);
+          }
+        })
+        .catch(() => {
+          if (currentTokenRef.current === token) setLoading(true);
+        });
+    }
 
     const handle = setTimeout(async () => {
       const isIdentity = isIdentityFilter(filter);
@@ -196,6 +216,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
             baselinePreviewsRef.current = next;
             return next;
           });
+          resolvedPreviewBasesRef.current.add(focused.id);
           previewRef.current = null;
           setPreview(null);
         } else {
@@ -465,7 +486,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                   />
                 )}
               </div>
-            ) : (
+            ) : loading ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center justify-center gap-3 text-zinc-500">
                   <div className="relative w-10 h-10">
@@ -474,20 +495,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
           </>
         )}
         {loading && displaySrc && (
           <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
             {t("previewPanel.rendering")}
-          </div>
-        )}
-        {!!focused.is_raw && !displaySrc && !error && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="relative w-10 h-10">
-              <div className="absolute inset-0 rounded-full border-2 border-zinc-300 animate-ping opacity-70" />
-              <div className="absolute inset-1.5 rounded-full bg-zinc-300 animate-pulse" />
-            </div>
           </div>
         )}
         {!!focused.width && !!focused.height && displaySrc && (

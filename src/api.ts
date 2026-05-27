@@ -131,6 +131,10 @@ export const api = {
   getPreview: (assetId: number, settings: FilterSettings | null, maxEdge?: number, token?: number) =>
     invoke<PreviewResult>("get_preview", { assetId, settings, maxEdge, token: token ?? 0 }),
 
+  /** 判断 RAW 预览基线 TIFF 是否已经解析完成。 */
+  hasPreviewBase: (assetId: number) =>
+    invoke<boolean>("has_preview_base", { assetId }),
+
   /** 独立直方图计算（512px 工作图、独立 token）。与 getPreview 平行调用 */
   computeHistogram: (assetId: number, settings: FilterSettings | null, token: number) =>
     invoke<HistogramData>("compute_histogram", {

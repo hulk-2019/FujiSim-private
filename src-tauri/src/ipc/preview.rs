@@ -23,6 +23,14 @@ pub struct ThumbnailDonePayload {
     pub asset_id: i64,
 }
 
+/// 快速判断 RAW 的预览基线是否已经解析完成。
+///
+/// 只检查 `{asset_id}_baseline.tif` 是否存在，不做解码；用于前端决定是否需要展示首次解析 loading。
+#[tauri::command]
+pub async fn has_preview_base(state: State<'_, SharedState>, asset_id: i64) -> Result<bool> {
+    Ok(processing::raw::preview_base_path(&state.raw_original_dir, asset_id).exists())
+}
+
 /// 实时渲染单张照片的预览图。每次调用都重新解码 + 下采样 + 色彩流水线，
 /// 结果写入系统临时目录下的文件，返回路径供前端 convertFileSrc 加载。
 /// token 用于取消：前端每次切换文件时递增 token，后端在解码完成后检查，
