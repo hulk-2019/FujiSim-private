@@ -8,6 +8,8 @@ import { useStore } from "@/store";
 import { formatBytes } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { renderWatermarkLayer } from "@/lib/watermarkCanvas";
+import { isIdentityFilter } from "@/lib/filterIdentity";
+import { useHistogramSync } from "@/hooks/useHistogramSync";
 
 let previewTokenCounter = 0;
 
@@ -42,8 +44,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const eyedropperMode = useStore((s) => s.eyedropperMode);
   const setEyedropperMode = useStore((s) => s.setEyedropperMode);
   const setFilter = useStore((s) => s.setFilter);
-  const setHistogram = useStore((s) => s.setHistogram);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
+
+  useHistogramSync(focusedId, filter);
 
   const [preview, setPreview] = useState<{
     blobUrl: string;
@@ -147,7 +150,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   useEffect(() => {
     if (!focused) {
       setPreview(null);
-      setHistogram(null);
       setLoading(false);
       return;
     }
@@ -158,55 +160,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     // When resetting to identity, clear the preview immediately so the canvas
     // shows the original instead of the old effect.
     // For normal adjustments, keep the old preview visible until new one arrives.
-    const isIdentity =
-      (filter.base_simulation === "Pass-Through" || !filter.base_simulation) &&
-      !filter.lut_file_path &&
-      filter.exposure === 0 &&
-      filter.contrast === 0 &&
-      filter.brightness === 0 &&
-      filter.highlight_tone === 0 &&
-      filter.shadow_tone === 0 &&
-      filter.white === 0 &&
-      filter.black === 0 &&
-      filter.dehaze === 0 &&
-      filter.vibrance === 0 &&
-      filter.color_saturation === 0 &&
-      filter.clarity === 0 &&
-      filter.sharpness === 0 &&
-      filter.wb_shift_r === 0 &&
-      filter.wb_shift_g === 0 &&
-      filter.wb_shift_b === 0 &&
-      filter.grain_amount === 0 &&
-      filter.hsl_red_hue === 0 &&
-      filter.hsl_red_sat === 0 &&
-      filter.hsl_red_lum === 0 &&
-      filter.hsl_orange_hue === 0 &&
-      filter.hsl_orange_sat === 0 &&
-      filter.hsl_orange_lum === 0 &&
-      filter.hsl_yellow_hue === 0 &&
-      filter.hsl_yellow_sat === 0 &&
-      filter.hsl_yellow_lum === 0 &&
-      filter.hsl_green_hue === 0 &&
-      filter.hsl_green_sat === 0 &&
-      filter.hsl_green_lum === 0 &&
-      filter.hsl_aqua_hue === 0 &&
-      filter.hsl_aqua_sat === 0 &&
-      filter.hsl_aqua_lum === 0 &&
-      filter.hsl_blue_hue === 0 &&
-      filter.hsl_blue_sat === 0 &&
-      filter.hsl_blue_lum === 0 &&
-      filter.hsl_purple_hue === 0 &&
-      filter.hsl_purple_sat === 0 &&
-      filter.hsl_purple_lum === 0 &&
-      filter.hsl_magenta_hue === 0 &&
-      filter.hsl_magenta_sat === 0 &&
-      filter.hsl_magenta_lum === 0 &&
-      (!filter.tone_curve || (
-        filter.tone_curve.rgb.length === 0 &&
-        filter.tone_curve.r.length === 0 &&
-        filter.tone_curve.g.length === 0 &&
-        filter.tone_curve.b.length === 0
-      ));
+    const isIdentity = isIdentityFilter(filter);
 
     if (isIdentity) {
       setPreview(null);
@@ -215,54 +169,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     setLoading(true);
 
     const handle = setTimeout(async () => {
-      const isIdentity =
-        (filter.base_simulation === "Pass-Through" || !filter.base_simulation) &&
-        !filter.lut_file_path &&
-        filter.exposure === 0 &&
-        filter.contrast === 0 &&
-        filter.brightness === 0 &&
-        filter.highlight_tone === 0 &&
-        filter.shadow_tone === 0 &&
-        filter.white === 0 &&
-        filter.black === 0 &&
-        filter.dehaze === 0 &&
-        filter.vibrance === 0 &&
-        filter.color_saturation === 0 &&
-        filter.clarity === 0 &&
-        filter.sharpness === 0 &&
-        filter.wb_shift_r === 0 &&
-        filter.wb_shift_b === 0 &&
-        filter.grain_amount === 0 &&
-        filter.hsl_red_hue === 0 &&
-        filter.hsl_red_sat === 0 &&
-        filter.hsl_red_lum === 0 &&
-        filter.hsl_orange_hue === 0 &&
-        filter.hsl_orange_sat === 0 &&
-        filter.hsl_orange_lum === 0 &&
-        filter.hsl_yellow_hue === 0 &&
-        filter.hsl_yellow_sat === 0 &&
-        filter.hsl_yellow_lum === 0 &&
-        filter.hsl_green_hue === 0 &&
-        filter.hsl_green_sat === 0 &&
-        filter.hsl_green_lum === 0 &&
-        filter.hsl_aqua_hue === 0 &&
-        filter.hsl_aqua_sat === 0 &&
-        filter.hsl_aqua_lum === 0 &&
-        filter.hsl_blue_hue === 0 &&
-        filter.hsl_blue_sat === 0 &&
-        filter.hsl_blue_lum === 0 &&
-        filter.hsl_purple_hue === 0 &&
-        filter.hsl_purple_sat === 0 &&
-        filter.hsl_purple_lum === 0 &&
-        filter.hsl_magenta_hue === 0 &&
-        filter.hsl_magenta_sat === 0 &&
-        filter.hsl_magenta_lum === 0 &&
-        (!filter.tone_curve || (
-          filter.tone_curve.rgb.length === 0 &&
-          filter.tone_curve.r.length === 0 &&
-          filter.tone_curve.g.length === 0 &&
-          filter.tone_curve.b.length === 0
-        ));
+      const isIdentity = isIdentityFilter(filter);
 
       if (currentTokenRef.current !== token) return;
 
@@ -277,7 +184,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         const src = convertFileSrc(r.path);
         setPreview({ blobUrl: src, width: r.width, height: r.height });
         setPreviewSize({ width: r.width, height: r.height }, focused.id);
-        setHistogram(r.histogram);
         setLoading(false);
       };
 
