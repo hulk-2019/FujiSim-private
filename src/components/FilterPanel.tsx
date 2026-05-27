@@ -144,7 +144,7 @@ export function FilterPanel() {
 
         <TabsContent
           value="adjust"
-          className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+          className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col select-none"
         >
           <ScrollArea className="flex-1">
             <div className="px-0 py-0 space-y-2">
@@ -427,7 +427,7 @@ export function FilterPanel() {
 
         <TabsContent
           value="watermark"
-          className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col"
+          className="flex-1 min-w-0 overflow-hidden mt-0 data-[state=active]:flex data-[state=active]:flex-col select-none"
         >
           <WatermarkTab />
         </TabsContent>
