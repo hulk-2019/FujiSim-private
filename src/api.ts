@@ -131,10 +131,6 @@ export const api = {
   getPreview: (assetId: number, settings: FilterSettings | null, maxEdge?: number, token?: number) =>
     invoke<PreviewResult>("get_preview", { assetId, settings, maxEdge, token: token ?? 0 }),
 
-  /** 懒加载 RAW 嵌入原图，优先从数据库缓存读取，返回磁盘绝对路径，用 convertFileSrc(path) 加载。 */
-  getRawOriginal: (assetId: number, token?: number) =>
-    invoke<string>("get_raw_original", { assetId, token: token ?? 0 }),
-
   /** 独立直方图计算（512px 工作图、独立 token）。与 getPreview 平行调用 */
   computeHistogram: (assetId: number, settings: FilterSettings | null, token: number) =>
     invoke<HistogramData>("compute_histogram", {

@@ -60,6 +60,9 @@ pub async fn compute_histogram(
             }
 
             let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
+            if histogram_token.load(Ordering::SeqCst) != token {
+                return Err(AppError::other("preview_cancelled"));
+            }
             Ok(histogram::compute(&processed))
         })
     })

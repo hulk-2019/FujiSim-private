@@ -3,7 +3,6 @@
 use crate::asset::{fileops, scanner};
 use crate::db::{albums, assets};
 use crate::error::{AppError, Result};
-use crate::processing;
 use crate::state::SharedState;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -248,75 +247,6 @@ pub async fn move_assets(
         out.push(assets::get(&state.pool, id).await?);
     }
     Ok(out)
-}
-
-/// 懒加载 RAW 嵌入原图：优先查数据库 preview_path，命中且文件存在时直接返回。
-/// 未命中时提取嵌入 JPEG（含 orientation 校正）写盘，更新 preview_path，返回路径。
-/// token 与 get_preview 共享，用于快速切换时提前取消。
-#[tauri::command]
-pub async fn get_raw_original(
-    state: State<'_, SharedState>,
-    asset_id: i64,
-    token: u64,
-) -> Result<String> {
-    use std::sync::atomic::Ordering;
-    state.preview_token.store(token, Ordering::SeqCst);
-
-    let asset = assets::get(&state.pool, asset_id).await?;
-
-    // 数据库缓存命中：路径存在且文件在磁盘上
-    if let Some(ref p) = asset.preview_path {
-        if std::path::Path::new(p).exists() {
-            return Ok(p.clone());
-        }
-    }
-
-    let mtime = std::path::Path::new(&asset.file_path)
-        .metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let cache_path = state
-        .raw_original_dir
-        .join(format!("{asset_id}_{mtime}.jpg"));
-
-    // 磁盘缓存命中（数据库未记录但文件已存在）
-    if cache_path.exists() {
-        let path_str = cache_path.to_string_lossy().to_string();
-        let pool = state.pool.clone();
-        let path_for_db = path_str.clone();
-        tokio::spawn(async move {
-            let _ = assets::update_preview_path(&pool, asset_id, &path_for_db).await;
-        });
-        return Ok(path_str);
-    }
-
-    let file_path = std::path::PathBuf::from(&asset.file_path);
-    let sem = state.io_sem.clone();
-    let pool = state.pool.clone();
-    let preview_token = state.preview_token.clone();
-    let rt = tokio::runtime::Handle::current();
-    tokio::task::spawn_blocking(move || {
-        let _permit = rt.block_on(sem.acquire_owned()).ok();
-        // 等到拿到 permit 后检查 token，可能已有更新的请求
-        if preview_token.load(Ordering::SeqCst) != token {
-            return Err(AppError::other("preview_cancelled"));
-        }
-        let bytes = processing::raw::extract_raw_thumbnail(&file_path)?;
-        std::fs::write(&cache_path, &bytes)
-            .map_err(|e| AppError::other(format!("raw_original write: {e}")))?;
-        let path_str = cache_path.to_string_lossy().to_string();
-        let path_for_db = path_str.clone();
-        let rt2 = tokio::runtime::Handle::current();
-        rt2.spawn(async move {
-            let _ = assets::update_preview_path(&pool, asset_id, &path_for_db).await;
-        });
-        Ok(path_str)
-    })
-    .await
-    .map_err(|e| AppError::other(e.to_string()))?
 }
 
 /// 后台 EXIF 提取 worker：循环取出 exif_extracted=0 的资产，

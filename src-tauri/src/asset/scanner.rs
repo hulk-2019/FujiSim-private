@@ -38,18 +38,12 @@ pub fn scan_dir(root: &Path) -> Result<ScanResult> {
         let file_type = format::ext_upper(path);
         let metadata = entry.metadata().ok();
         let file_size = metadata.as_ref().map(|m| m.len() as i64);
-        let file_mtime = metadata
-            .as_ref()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64);
 
         items.push(NewAsset {
             file_path: path.to_string_lossy().to_string(),
             file_name,
             file_type,
             file_size,
-            file_mtime,
             date_taken: None,
             camera_make: None,
             camera_model: None,
@@ -87,18 +81,12 @@ pub fn scan_files(paths: &[std::path::PathBuf]) -> Result<ScanResult> {
         let file_type = format::ext_upper(path);
         let metadata = path.metadata().ok();
         let file_size = metadata.as_ref().map(|m| m.len() as i64);
-        let file_mtime = metadata
-            .as_ref()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64);
 
         items.push(NewAsset {
             file_path: path.to_string_lossy().to_string(),
             file_name,
             file_type,
             file_size,
-            file_mtime,
             date_taken: None,
             camera_make: None,
             camera_model: None,
@@ -352,7 +340,6 @@ fn build_asset(
     file_name: String,
     file_type: Option<String>,
     file_size: Option<i64>,
-    file_mtime: Option<i64>,
     exif: ExifData,
     width: Option<i64>,
     height: Option<i64>,
@@ -363,7 +350,6 @@ fn build_asset(
         file_name,
         file_type,
         file_size,
-        file_mtime,
         date_taken: exif.date_taken,
         camera_make: exif.camera_make,
         camera_model: exif.camera_model,

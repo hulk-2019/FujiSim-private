@@ -31,7 +31,7 @@ pub struct AppState {
     /// 先 CAS 扣减预算再开始处理，完成后归还，防止多张大图同时处理导致 OOM。
     pub export_memory_budget: Arc<AtomicU64>,
     /// 当前预览请求的 token（单调递增）。
-    /// 每次 get_preview / get_raw_original 调用时前端传入最新 token，
+    /// 每次 get_preview 调用时前端传入最新 token，
     /// 后端在 CPU 密集节点检查是否仍是最新值，不是则提前返回 preview_cancelled。
     pub preview_token: Arc<AtomicU64>,
     /// 限制 get_preview 同时只跑 1 个解码任务。
@@ -57,6 +57,7 @@ impl AppState {
         std::fs::create_dir_all(&data_dir)?;
         let raw_original_dir = data_dir.join("raw_originals");
         std::fs::create_dir_all(&raw_original_dir)?;
+        cleanup_legacy_raw_cache(&raw_original_dir);
         let lut_dir = data_dir.join("luts");
         std::fs::create_dir_all(&lut_dir)?;
         let watermark_dir = data_dir.join("watermarks");
@@ -113,6 +114,26 @@ impl AppState {
 
         seed_builtin_presets(&state.pool).await?;
         Ok(state)
+    }
+}
+
+fn cleanup_legacy_raw_cache(dir: &PathBuf) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let is_legacy_raw_cache =
+            name.ends_with(".jpg") || (name.ends_with(".tif") && !name.ends_with("_baseline.tif"));
+        if is_legacy_raw_cache {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 

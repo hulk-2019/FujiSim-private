@@ -18,6 +18,7 @@ export function useHistogramSync(
   filter: FilterSettings,
 ): void {
   const setHistogram = useStore((s) => s.setHistogram);
+  const isAdjustingFilter = useStore((s) => s.isAdjustingFilter);
   const currentTokenRef = useRef(0);
   const pendingHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -29,6 +30,10 @@ export function useHistogramSync(
 
     if (pendingHandle.current) {
       clearTimeout(pendingHandle.current);
+    }
+
+    if (isAdjustingFilter) {
+      return;
     }
 
     pendingHandle.current = setTimeout(async () => {
@@ -44,7 +49,7 @@ export function useHistogramSync(
         if (msg.includes("preview_cancelled") || msg.includes("preview_busy")) return;
         console.warn("[useHistogramSync] failed:", msg);
       }
-    }, 80);
+    }, 350);
 
     return () => {
       if (pendingHandle.current) {
@@ -52,5 +57,5 @@ export function useHistogramSync(
         pendingHandle.current = null;
       }
     };
-  }, [focusedId, filter, setHistogram]);
+  }, [focusedId, filter, isAdjustingFilter, setHistogram]);
 }

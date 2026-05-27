@@ -1,4 +1,5 @@
 import { Slider } from "@/components/ui/slider";
+import { useStore } from "@/store";
 
 export function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -30,6 +31,8 @@ export function SliderRow({
   /** CSS gradient for the slider track background */
   trackGradient?: string;
 }) {
+  const setIsAdjustingFilter = useStore((s) => s.setIsAdjustingFilter);
+
   return (
     <div className="w-full">
       <div className="flex justify-between items-baseline mb-2">
@@ -48,6 +51,11 @@ export function SliderRow({
           max={max}
           step={step}
           onValueChange={([v]) => onChange(v)}
+          onPointerDown={() => setIsAdjustingFilter(true)}
+          onPointerUp={() => setIsAdjustingFilter(false)}
+          onPointerCancel={() => setIsAdjustingFilter(false)}
+          onKeyDown={() => setIsAdjustingFilter(true)}
+          onKeyUp={() => setIsAdjustingFilter(false)}
           onThumbDoubleClick={() => onChange(resetValue)}
           className={trackGradient ? "[&>span:first-child]:bg-transparent [&>span:first-child>span]:bg-transparent" : undefined}
         />

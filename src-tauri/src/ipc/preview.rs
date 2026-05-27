@@ -95,10 +95,17 @@ pub async fn get_preview(
 
             let (rw, rh) = resized.dimensions();
             let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
+            if preview_token.load(Ordering::SeqCst) != token {
+                return Err(AppError::other("preview_cancelled"));
+            }
             let jpeg =
                 crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, 88)?;
+            if preview_token.load(Ordering::SeqCst) != token {
+                return Err(AppError::other("preview_cancelled"));
+            }
+            let variant = if settings.is_identity() { "base" } else { "edit" };
             let out_path =
-                std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}.jpg"));
+                std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
             std::fs::write(&out_path, &jpeg)
                 .map_err(|e| AppError::other(format!("preview write: {e}")))?;
             Ok(PreviewResult {

@@ -30,8 +30,6 @@ export type Asset = {
   height?: number | null;
   /** SQLite 用 0/1 表示布尔 */
   is_raw: number;
-  file_mtime: number | null;
-  preview_path: string | null;
   cover_path: string | null;
   created_at: string;
 };

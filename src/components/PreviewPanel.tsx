@@ -13,6 +13,16 @@ import { useHistogramSync } from "@/hooks/useHistogramSync";
 
 let previewTokenCounter = 0;
 
+type PreviewImage = {
+  blobUrl: string;
+  width: number;
+  height: number;
+};
+
+type AssetPreviewImage = PreviewImage & {
+  assetId: number;
+};
+
 const MIN_SCALE = 0.05;        // 绝对最小缩放比例 5%
 const MAX_SCALE_FACTOR = 10;   // 相对 fit scale 的最大倍率
 const MAX_SCALE_ABSOLUTE = 4;  // 绝对最大缩放（400%），保证小图也能放到 4x
@@ -48,15 +58,13 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 
   useHistogramSync(focusedId, filter);
 
-  const [preview, setPreview] = useState<{
-    blobUrl: string;
-    width: number;
-    height: number;
-  } | null>(null);
+  const [preview, setPreview] = useState<AssetPreviewImage | null>(null);
+  const [baselinePreviews, setBaselinePreviews] = useState<Record<number, PreviewImage>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rawOriginalSrc, setRawOriginalSrc] = useState<string | null>(null);
   const currentTokenRef = useRef(0);
+  const previewRef = useRef<AssetPreviewImage | null>(null);
+  const baselinePreviewsRef = useRef<Record<number, PreviewImage>>({});
 
   const [scale, setScale] = useState<number>(1);
   const [tx, setTx] = useState(0);
@@ -163,26 +171,38 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     const isIdentity = isIdentityFilter(filter);
 
     if (isIdentity) {
+      previewRef.current = null;
       setPreview(null);
     }
     setError(null);
-    setLoading(true);
+    const hasCurrentDisplay = focused.is_raw
+      ? (previewRef.current?.assetId === focused.id || !!baselinePreviewsRef.current[focused.id])
+      : true;
+    setLoading(!hasCurrentDisplay);
 
     const handle = setTimeout(async () => {
       const isIdentity = isIdentityFilter(filter);
 
       if (currentTokenRef.current !== token) return;
 
-      if (isIdentity && focused.is_raw) {
-        setLoading(false);
-        return;
-      }
-
       const doPreview = async () => {
         const r = await api.getPreview(focused.id, filter, 1920, token);
         if (currentTokenRef.current !== token) return;
         const src = convertFileSrc(r.path);
-        setPreview({ blobUrl: src, width: r.width, height: r.height });
+        if (isIdentity && focused.is_raw) {
+          const nextBaseline = { blobUrl: src, width: r.width, height: r.height };
+          setBaselinePreviews((prev) => {
+            const next = { ...prev, [focused.id]: nextBaseline };
+            baselinePreviewsRef.current = next;
+            return next;
+          });
+          previewRef.current = null;
+          setPreview(null);
+        } else {
+          const nextPreview = { assetId: focused.id, blobUrl: src, width: r.width, height: r.height };
+          previewRef.current = nextPreview;
+          setPreview(nextPreview);
+        }
         setPreviewSize({ width: r.width, height: r.height }, focused.id);
         setLoading(false);
       };
@@ -215,44 +235,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 
   // Clear preview when switching to a different photo, so old effect doesn't persist.
   useEffect(() => {
+    previewRef.current = null;
     setPreview(null);
-    setRawOriginalSrc(null);
   }, [focused?.id]);
-
-  // 切换素材时拉取 RAW 嵌入原图。声明顺序故意放在 getPreview effect 之后，
-  // 这样 currentTokenRef 已是最新 token，避免与 getPreview 在 backend 端的
-  // preview_token 上互相覆盖。失败时尝试用最新 token 再请求一次。
-  useEffect(() => {
-    if (!focused?.is_raw) {
-      setRawOriginalSrc(null);
-      return;
-    }
-    // 切到新 RAW 时先清空旧 URL，否则 loading 占位条件 (!rawOriginalSrc) 一直为 false，
-    // 用户会在加载新图期间看到旧图，loading 动画也不会显示。
-    setRawOriginalSrc(null);
-    let cancelled = false;
-    const tryFetch = async (token: number, attempt: number) => {
-      try {
-        const path = await api.getRawOriginal(focused.id, token);
-        if (cancelled) return;
-        setRawOriginalSrc(convertFileSrc(path));
-      } catch (e) {
-        if (cancelled) return;
-        const msg = String(e);
-        if (msg.includes("preview_cancelled") && attempt < 1) {
-          await new Promise((r) => setTimeout(r, 300));
-          if (cancelled) return;
-          tryFetch(currentTokenRef.current, attempt + 1);
-          return;
-        }
-        if (!msg.includes("preview_cancelled")) {
-          setError(msg);
-        }
-      }
-    };
-    tryFetch(currentTokenRef.current, 0);
-    return () => { cancelled = true; };
-  }, [focused?.id, focused?.is_raw]);
 
   const bind = useGesture(
     {
@@ -359,28 +344,28 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     );
   }
 
-  const previewSrc = preview?.blobUrl ?? null;
-  const originalSrc = focused.is_raw ? rawOriginalSrc : convertFileSrc(focused.file_path);
+  const currentPreview = preview?.assetId === focused.id ? preview : null;
+  const currentBaselinePreview = baselinePreviews[focused.id] ?? null;
+  const previewSrc = currentPreview?.blobUrl ?? null;
+  const baselineSrc = currentBaselinePreview?.blobUrl ?? null;
+  const originalSrc = focused.is_raw ? baselineSrc : convertFileSrc(focused.file_path);
+  const showingOriginal = showOriginal && !!originalSrc;
 
   const placeholderSrc: string | null = (() => {
-    if (rawOriginalSrc) return rawOriginalSrc;
     if (focused.is_raw) {
-      if (focused.preview_path) {
-        try { return convertFileSrc(focused.preview_path); } catch { /* ignore */ }
-      }
-      if (focused.cover_path) {
-        try { return convertFileSrc(focused.cover_path); } catch { /* ignore */ }
-      }
       return null;
     }
     try { return convertFileSrc(focused.file_path); } catch { return null; }
   })();
 
-  const displaySrc = previewSrc ?? placeholderSrc;
+  const displaySrc = previewSrc ?? baselineSrc ?? placeholderSrc;
 
   const wmDims: { width: number; height: number } | null = (() => {
     if (focused.width && focused.height) return { width: focused.width, height: focused.height };
-    if (preview?.width && preview?.height) return { width: preview.width, height: preview.height };
+    if (currentPreview?.width && currentPreview?.height) return { width: currentPreview.width, height: currentPreview.height };
+    if (currentBaselinePreview?.width && currentBaselinePreview?.height) {
+      return { width: currentBaselinePreview.width, height: currentBaselinePreview.height };
+    }
     const nw = imgRef.current?.naturalWidth;
     const nh = imgRef.current?.naturalHeight;
     if (nw && nh) return { width: nw, height: nh };
@@ -430,7 +415,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                       display: "block",
                       width: "100%",
                       height: "100%",
-                      opacity: imgVisible && !showOriginal ? 1 : 0,
+                      opacity: imgVisible && !showingOriginal ? 1 : 0,
                       WebkitUserSelect: "none",
                       WebkitTouchCallout: "none",
                     }}
@@ -438,7 +423,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                     onLoad={(e) => {
                       const el = e.currentTarget as HTMLImageElement;
                       console.log("[PreviewPanel] onLoad", el.src, el.naturalWidth, "x", el.naturalHeight);
-                      if (previewSrc || rawOriginalSrc) {
+                      if (previewSrc || baselineSrc) {
                         if (!hasFitRef.current) {
                           hasFitRef.current = true;
                           resetToFit();
@@ -459,7 +444,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                     }}
                   />
                 )}
-                {originalSrc && showOriginal && (
+                {showingOriginal && (
                   <img
                     src={originalSrc}
                     alt="original"
@@ -497,7 +482,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
             {t("previewPanel.rendering")}
           </div>
         )}
-        {!!focused.is_raw && !rawOriginalSrc && !error && (
+        {!!focused.is_raw && !displaySrc && !error && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="relative w-10 h-10">
               <div className="absolute inset-0 rounded-full border-2 border-zinc-300 animate-ping opacity-70" />

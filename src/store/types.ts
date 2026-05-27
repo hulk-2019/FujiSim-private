@@ -57,11 +57,13 @@ export interface FilterSlice {
   filter: FilterSettings;
   histogram: HistogramData | null;
   eyedropperMode: EyedropperMode;
+  isAdjustingFilter: boolean;
   setFilter: (patch: Partial<FilterSettings>) => void;
   resetFilter: () => void;
   applyPreset: (preset: FilterPreset) => void;
   setEyedropperMode: (mode: EyedropperMode) => void;
   setHistogram: (data: HistogramData | null) => void;
+  setIsAdjustingFilter: (isAdjusting: boolean) => void;
 }
 
 /**

@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 /// Returns the path to the disk-cached preview base TIFF for a given asset_id.
 pub fn preview_base_path(raw_original_dir: &Path, asset_id: i64) -> PathBuf {
-    raw_original_dir.join(format!("{}.tif", asset_id))
+    // Lightroom-like app baseline develop. Embedded JPEGs are
+    // placeholders only and are not used to tone-match the editing base.
+    raw_original_dir.join(format!("{}_baseline.tif", asset_id))
 }
 
 /// 提取 RAW/DNG 文件中嵌入的最大 JPEG 预览，返回原始 JPEG 字节。
@@ -246,6 +248,11 @@ fn decode_with_libraw(
     // 使用相机白平衡和色彩矩阵，保留原始色彩意图
     raw.set_use_camera_wb(true);
     raw.set_use_camera_matrix(true);
+    // LibRaw enables dcraw-style auto brightness by default. That makes the
+    // generated TIFF preview base much brighter than the camera embedded JPEG
+    // shown while RAW is first loading, so keep the decode at a fixed baseline.
+    raw.as_mut().params.no_auto_bright = 1;
+    raw.as_mut().params.bright = 1.0;
     // 预览模式：原始长边 / 2 仍大于目标时启用 half_size，约快 4x；否则全分辨率避免降质
     if let Some(target) = max_edge {
         let native_max = raw.width().max(raw.height());
@@ -274,8 +281,39 @@ fn decode_with_libraw(
     // ProcessedImage<BIT_DEPTH_16> derefs to [u16] directly
     let pixels: Vec<u16> = processed.to_vec();
 
-    ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(width, height, pixels)
-        .ok_or_else(|| AppError::other("LibRaw: pixel buffer size mismatch"))
+    let mut img = ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(width, height, pixels)
+        .ok_or_else(|| AppError::other("LibRaw: pixel buffer size mismatch"))?;
+
+    apply_app_baseline_tone(&mut img);
+    Ok(img)
+}
+
+fn apply_app_baseline_tone(img: &mut ImageBuffer<Rgb<u16>, Vec<u16>>) {
+    for px in img.pixels_mut() {
+        let r = px.0[0] as f32 / 65535.0;
+        let g = px.0[1] as f32 / 65535.0;
+        let b = px.0[2] as f32 / 65535.0;
+        let l = color::luminance(r, g, b);
+        if l <= 1e-5 {
+            continue;
+        }
+        let target = baseline_tone_curve(l);
+        let scale = (target / l).clamp(0.25, 4.0);
+        px.0[0] = ((r * scale).clamp(0.0, 1.0) * 65535.0).round() as u16;
+        px.0[1] = ((g * scale).clamp(0.0, 1.0) * 65535.0).round() as u16;
+        px.0[2] = ((b * scale).clamp(0.0, 1.0) * 65535.0).round() as u16;
+    }
+}
+
+fn baseline_tone_curve(x: f32) -> f32 {
+    let x = (x * 1.18).clamp(0.0, 1.0);
+    let toe = if x < 0.08 {
+        x * 0.82 + (x / 0.08).powf(1.6) * 0.014
+    } else {
+        x
+    };
+    let shoulder = 1.0 - (1.0 - toe).powf(1.18);
+    shoulder.clamp(0.0, 1.0)
 }
 
 // ── DNG Lossy JPEG 降级路径 ───────────────────────────────────────────────────
