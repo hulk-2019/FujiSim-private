@@ -193,7 +193,6 @@ export type PreviewResult = {
   path: string;
   width: number;
   height: number;
-  histogram: HistogramData;
 };
 
 /** 批量导出进度事件，由后端通过 `export:progress` Tauri Event 推送 */
