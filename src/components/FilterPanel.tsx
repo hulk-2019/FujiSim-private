@@ -20,7 +20,8 @@ import {
   RotateCcw,
   Sun,
   Droplets,
-  Wrench,
+  Thermometer,
+  Sparkles,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
@@ -149,7 +150,7 @@ export function FilterPanel() {
             <div className="px-0 py-0 space-y-2">
               <Section
                 title={t("editor.sections.whiteBalance")}
-                icon={<Palette size={12} />}
+                icon={<Thermometer size={12} />}
               >
                 <div className="flex items-center gap-1.5">
                   <Select
@@ -338,7 +339,7 @@ export function FilterPanel() {
               </Section>
               <Section
                 title={t("editor.sections.detail")}
-                icon={<Wrench size={12} />}
+                icon={<Sparkles size={12} />}
               >
                 <SliderRow
                   label={t("filterPanel.clarity")}
