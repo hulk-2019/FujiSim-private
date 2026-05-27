@@ -72,6 +72,10 @@ const zh = {
     sharpness: "锐度",
     wbShiftR: "白平衡偏移 R",
     wbShiftB: "白平衡偏移 B",
+    wbReset: "还原设置",
+    wbAuto: "自动",
+    temperature: "色温",
+    tint: "色调",
     saveAsPreset: "存为预设",
     noPresets: "暂无。可在「调整」面板里「存为预设」，或导入 .cube LUT。",
     metaCamera: "相机",
@@ -389,6 +393,7 @@ const zh = {
       curves: "曲线",
       watermark: "水印",
       info: "信息",
+      whiteBalance: "白平衡",
     },
   },
   hsl: {

@@ -72,6 +72,10 @@ const en = {
     sharpness: "Sharpness",
     wbShiftR: "WB shift R",
     wbShiftB: "WB shift B",
+    wbReset: "Reset",
+    wbAuto: "Auto",
+    temperature: "Temperature",
+    tint: "Tint",
     saveAsPreset: "Save as preset",
     noPresets: "No presets yet. Save one in the Adjust panel, or import a .cube LUT.",
     metaCamera: "Camera",
@@ -389,6 +393,7 @@ const en = {
       curves: "Curves",
       watermark: "Watermark",
       info: "Info",
+      whiteBalance: "White Balance",
     },
   },
   hsl: {
