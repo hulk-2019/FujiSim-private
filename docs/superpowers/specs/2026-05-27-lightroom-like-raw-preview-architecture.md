@@ -140,11 +140,15 @@ This does not cancel GPU kernels mid-dispatch, but it avoids stale JPEG encoding
 - Pause histogram while sliders are being dragged.
 - Add additional token checks.
 
+Status: implemented.
+
 ### Phase 2
 
 - Add in-memory LRU cache for preview bases.
 - Share cache between preview and histogram.
 - Avoid decoding TIFF from disk on every parameter change.
+
+Status: implemented with a bounded in-process base cache keyed by asset and max edge.
 
 ### Phase 3
 
@@ -152,10 +156,14 @@ This does not cancel GPU kernels mid-dispatch, but it avoids stale JPEG encoding
 - During slider drag, render at 1280 long edge.
 - After release, render final 1920 long edge preview and histogram.
 
+Status: implemented for preview; histogram remains paused during drag and recalculates after settle.
+
 ### Phase 4
 
 - Revisit full-resolution export to ensure it uses the same baseline develop strategy.
 - Add optional camera-like profile mode only if product needs it, separate from the default Lightroom-like baseline.
+
+Status: export already uses the shared RAW decode path; DNG fallback decode now also applies the app baseline tone curve.
 
 ## Acceptance Criteria
 

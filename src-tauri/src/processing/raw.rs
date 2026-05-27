@@ -205,7 +205,9 @@ fn decode_raw_rgb16_from_bytes(
         decode_linear_dng(data)?
     };
 
-    Ok(apply_orientation_rgb16(img, orientation))
+    let mut img = apply_orientation_rgb16(img, orientation);
+    apply_app_baseline_tone(&mut img);
+    Ok(img)
 }
 
 fn apply_orientation_rgb16(
