@@ -40,7 +40,7 @@ export const createFilterSlice: StateCreator<AppState, [], [], FilterSlice> = (s
   isAdjustingFilter: false,
 
   setFilter: (patch) => set({ filter: { ...get().filter, ...patch } }),
-  resetFilter: () => set({ filter: { ...DEFAULT_FILTER } }),
+  resetFilter: () => set({ filter: { ...DEFAULT_FILTER }, isAdjustingFilter: false }),
   applyPreset: (preset) => set({ filter: presetToFilter(preset) }),
   setEyedropperMode: (mode: EyedropperMode) => set({ eyedropperMode: mode }),
   setHistogram: (data: HistogramData | null) => set({ histogram: data }),

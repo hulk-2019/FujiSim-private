@@ -53,6 +53,7 @@ pub fn decode_to_rgb16(path: &Path) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
         .ok_or_else(|| AppError::Vips("non-UTF8 path".into()))?;
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("decode {path_str}: {e}")))?;
+    let vimg = ops::autorot(&vimg).map_err(|e| AppError::Vips(format!("autorot: {e}")))?;
     let vimg = ops::cast_with_opts(&vimg, BandFormat::Ushort, &CastOptions { shift: true })
         .map_err(|e| AppError::Vips(format!("cast ushort: {e}")))?;
     // strip alpha if present (RGBA → RGB)

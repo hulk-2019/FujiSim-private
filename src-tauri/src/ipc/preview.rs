@@ -20,11 +20,16 @@ pub enum PreviewMode {
     Full,
 }
 
-/// 预览结果。前端用 convertFileSrc(path) 加载本地文件，零 IPC 传输开销。
+/// 预览结果。
+///
+/// `interactive` / `settled` 返回后端权威 JPEG bytes，前端创建 Blob URL，避免临时文件写盘
+/// 和 WebView 再读盘；`full` 仍返回 path，避免超大 IPC payload。
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewResult {
-    pub path: String,
+    pub path: Option<String>,
+    pub data: Option<Vec<u8>>,
+    pub mime_type: Option<String>,
     pub width: u32,
     pub height: u32,
 }
@@ -132,13 +137,19 @@ pub async fn get_preview(
             if preview_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
             }
-            let variant = if settings.is_identity() { "base" } else { "edit" };
-            let out_path =
-                std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
-            let write_start = Instant::now();
-            std::fs::write(&out_path, &jpeg)
-                .map_err(|e| AppError::other(format!("preview write: {e}")))?;
-            let write_ms = write_start.elapsed().as_millis();
+            let transport_start = Instant::now();
+            let (path, data) = if matches!(mode, PreviewMode::Full) {
+                let variant = if settings.is_identity() { "base" } else { "edit" };
+                let out_path =
+                    std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
+                std::fs::write(&out_path, &jpeg)
+                    .map_err(|e| AppError::other(format!("preview write: {e}")))?;
+                (Some(out_path.to_string_lossy().to_string()), None)
+            } else {
+                (None, Some(jpeg))
+            };
+            let transport_ms = transport_start.elapsed().as_millis();
+            let bytes = data.as_ref().map(|d| d.len()).unwrap_or(0);
             tracing::debug!(
                 asset_id,
                 token,
@@ -149,12 +160,15 @@ pub async fn get_preview(
                 base_ms,
                 process_ms,
                 encode_ms,
-                write_ms,
+                transport_ms,
+                bytes,
                 total_ms = total_start.elapsed().as_millis(),
                 "preview render finished"
             );
             Ok(PreviewResult {
-                path: out_path.to_string_lossy().to_string(),
+                path,
+                data,
+                mime_type: Some("image/jpeg".to_string()),
                 width: rw,
                 height: rh,
             })
@@ -182,8 +196,12 @@ pub(crate) fn load_preview_base(
     }
 
     let cache_path = processing::raw::preview_base_path(&state.raw_original_dir, asset_id);
+    let use_disk_base = matches!(
+        crate::asset::format::classify(path),
+        crate::asset::format::FileKind::Raw
+    );
     let mut should_write_disk = false;
-    let img = if cache_path.exists() {
+    let img = if use_disk_base && cache_path.exists() {
         match crate::vips_io::decode_to_rgb16(&cache_path) {
             Ok(img) if disk_base_satisfies_request(&img, max_edge, native_max_edge) => {
                 tracing::debug!(asset_id, ?max_edge, "preview base disk cache hit");
@@ -197,11 +215,11 @@ pub(crate) fn load_preview_base(
         }
     } else {
         tracing::debug!(asset_id, ?max_edge, "preview base cache miss");
-        should_write_disk = persist_to_disk;
+        should_write_disk = use_disk_base && persist_to_disk;
         decode_and_resize(path, max_edge)?
     };
 
-    if should_write_disk {
+    if use_disk_base && should_write_disk {
         if let Err(e) = crate::vips_io::encode_rgb16_to_file(
             &img,
             &cache_path,

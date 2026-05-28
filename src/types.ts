@@ -194,9 +194,11 @@ export type HistogramData = {
 
 export type PreviewMode = "interactive" | "settled" | "full";
 
-/** 预览渲染结果。`path` 是本地文件路径，前端用 convertFileSrc(path) 加载 */
+/** 预览渲染结果。常规预览返回 `data`，full 预览可能返回本地 `path`。 */
 export type PreviewResult = {
-  path: string;
+  path?: string | null;
+  data?: number[] | null;
+  mimeType?: string | null;
   width: number;
   height: number;
 };
