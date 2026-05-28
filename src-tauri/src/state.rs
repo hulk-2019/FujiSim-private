@@ -62,6 +62,11 @@ impl PreviewBaseCache {
         self.map.clear();
     }
 
+    pub fn remove_asset(&mut self, asset_id: i64) {
+        self.order.retain(|k| k.asset_id != asset_id);
+        self.map.retain(|k, _| k.asset_id != asset_id);
+    }
+
     fn touch(&mut self, key: PreviewBaseCacheKey) {
         self.order.retain(|k| *k != key);
         self.order.push_back(key);

@@ -274,6 +274,39 @@ pub async fn get(pool: &SqlitePool, id: i64) -> Result<Asset> {
         .ok_or_else(|| AppError::NotFound(format!("asset {id}")))
 }
 
+pub async fn get_many(pool: &SqlitePool, ids: &[i64]) -> Result<Vec<Asset>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(500) {
+        let placeholders = std::iter::repeat("?")
+            .take(chunk.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!("SELECT * FROM assets WHERE id IN ({placeholders})");
+        let mut q = sqlx::query_as::<_, Asset>(&sql);
+        for id in chunk {
+            q = q.bind(id);
+        }
+        out.extend(q.fetch_all(pool).await?);
+    }
+    Ok(out)
+}
+
+pub async fn list_for_project(pool: &SqlitePool, project_id: i64) -> Result<Vec<Asset>> {
+    sqlx::query_as::<_, Asset>(
+        "SELECT a.* FROM assets a \
+         INNER JOIN project_assets aa ON aa.asset_id = a.id \
+         WHERE aa.project_id = ?",
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
 pub async fn update_rating(pool: &SqlitePool, id: i64, rating: i64) -> Result<()> {
     sqlx::query("UPDATE assets SET star_rating = ? WHERE id = ?")
         .bind(rating)

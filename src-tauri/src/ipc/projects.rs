@@ -1,6 +1,6 @@
 //! 相册 CRUD、汇总信息和回收站。
 
-use crate::db::projects;
+use crate::db::{assets, projects};
 use crate::error::Result;
 use crate::state::SharedState;
 use tauri::State;
@@ -29,6 +29,7 @@ pub async fn create_project(state: State<'_, SharedState>, name: String) -> Resu
 #[tauri::command]
 pub async fn delete_project(state: State<'_, SharedState>, id: i64) -> Result<()> {
     projects::delete(&state.pool, id).await
+        .map(|_| crate::cache_cleanup::delete_project_cache_dirs(&state, id))
 }
 
 #[tauri::command]
@@ -57,6 +58,7 @@ pub async fn get_folder_asset_count(state: State<'_, SharedState>, id: i64) -> R
 #[tauri::command]
 pub async fn delete_folder(state: State<'_, SharedState>, id: i64) -> Result<()> {
     projects::delete_with_assets(&state.pool, id).await?;
+    crate::cache_cleanup::delete_project_cache_dirs(&state, id);
     Ok(())
 }
 
@@ -75,7 +77,11 @@ pub async fn project_remove(
     project_id: i64,
     asset_ids: Vec<i64>,
 ) -> Result<()> {
-    projects::remove_assets(&state.pool, project_id, &asset_ids).await
+    projects::remove_assets(&state.pool, project_id, &asset_ids).await?;
+    for asset_id in asset_ids {
+        crate::cache_cleanup::delete_project_asset_cache_files(&state, project_id, asset_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -151,10 +157,27 @@ pub async fn restore_project(state: State<'_, SharedState>, id: i64) -> Result<(
 
 #[tauri::command]
 pub async fn purge_project(state: State<'_, SharedState>, id: i64) -> Result<()> {
+    let assets_to_purge = assets::orphaned_for_trashed_project(&state.pool, id).await?;
     projects::purge(&state.pool, id).await
+        .map(|_| {
+            for asset in &assets_to_purge {
+                crate::cache_cleanup::delete_asset_cache_files(&state, asset);
+            }
+            crate::cache_cleanup::delete_project_cache_dirs(&state, id);
+        })
 }
 
 #[tauri::command]
 pub async fn purge_all_trash(state: State<'_, SharedState>) -> Result<()> {
+    let assets_to_purge = assets::orphaned_for_all_trashed_projects(&state.pool).await?;
+    let trashed_projects = projects::list_trash(&state.pool).await?;
     projects::purge_all(&state.pool).await
+        .map(|_| {
+            for asset in &assets_to_purge {
+                crate::cache_cleanup::delete_asset_cache_files(&state, asset);
+            }
+            for project in &trashed_projects {
+                crate::cache_cleanup::delete_project_cache_dirs(&state, project.id);
+            }
+        })
 }

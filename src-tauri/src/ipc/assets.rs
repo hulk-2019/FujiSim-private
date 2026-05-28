@@ -1,7 +1,7 @@
 //! 资产导入、查询和文件操作。
 
 use crate::asset::{fileops, scanner};
-use crate::db::{projects, assets};
+use crate::db::{assets, projects};
 use crate::error::{AppError, Result};
 use crate::state::SharedState;
 use serde::Serialize;
@@ -162,15 +162,17 @@ pub async fn delete_assets(
     ids: Vec<i64>,
     move_to_trash: bool,
 ) -> Result<()> {
-    for id in &ids {
+    let assets_to_delete = assets::get_many(&state.pool, &ids).await?;
+    for asset in &assets_to_delete {
+        crate::cache_cleanup::delete_asset_cache_files(&state, asset);
         if move_to_trash {
-            let asset = assets::get(&state.pool, *id).await?;
             let path = PathBuf::from(&asset.file_path);
             if path.exists() {
                 fileops::move_to_trash(&path)?;
             }
         }
-        assets::delete(&state.pool, *id).await?;
+        assets::delete(&state.pool, asset.id).await?;
+        crate::cache_cleanup::delete_asset_cache_files(&state, asset);
     }
     Ok(())
 }

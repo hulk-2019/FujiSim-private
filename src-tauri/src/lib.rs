@@ -17,6 +17,7 @@
 //! - [`state`]：应用全局共享状态（连接池、数据目录等）
 
 pub mod asset;
+pub mod cache_cleanup;
 pub mod cover_queue;
 pub mod db;
 pub mod error;
