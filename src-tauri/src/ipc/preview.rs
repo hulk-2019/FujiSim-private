@@ -408,14 +408,16 @@ pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> R
 pub async fn auto_white_balance(
     state: State<'_, SharedState>,
     asset_id: i64,
+    project_id: Option<i64>,
 ) -> Result<(i32, i32, i32)> {
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
+    let raw_original_dir = state.raw_original_dir.clone();
     let export_pool = state.export_pool.clone();
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let img = processing::load_image_rgb16(&path)?;
+            let img = load_white_balance_image(&raw_original_dir, project_id, asset_id, asset.is_raw != 0, &path)?;
             Ok(processing::white_balance::auto_white_balance(&img))
         })
     })
@@ -432,23 +434,55 @@ pub async fn eyedrop_color(
     asset_id: i64,
     x: u32,
     y: u32,
+    project_id: Option<i64>,
 ) -> Result<(f32, f32, f32)> {
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
+    let raw_original_dir = state.raw_original_dir.clone();
     let export_pool = state.export_pool.clone();
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let img = processing::load_image_rgb16(&path)?;
+            let img = load_white_balance_image(&raw_original_dir, project_id, asset_id, asset.is_raw != 0, &path)?;
             let (w, h) = img.dimensions();
-            if x >= w || y >= h {
+            let sample_x = asset
+                .width
+                .filter(|native_w| *native_w > 0 && *native_w as u32 != w)
+                .map(|native_w| ((x as f64 / native_w as f64) * w as f64).round() as u32)
+                .unwrap_or(x)
+                .min(w.saturating_sub(1));
+            let sample_y = asset
+                .height
+                .filter(|native_h| *native_h > 0 && *native_h as u32 != h)
+                .map(|native_h| ((y as f64 / native_h as f64) * h as f64).round() as u32)
+                .unwrap_or(y)
+                .min(h.saturating_sub(1));
+            if sample_x >= w || sample_y >= h {
                 return Err(AppError::other(format!(
                     "eyedrop out of bounds: ({x}, {y}) exceeds ({w}, {h})"
                 )));
             }
-            Ok(processing::white_balance::eyedrop_color(&img, x, y))
+            Ok(processing::white_balance::eyedrop_color(&img, sample_x, sample_y))
         })
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
+}
+
+fn load_white_balance_image(
+    raw_original_dir: &std::path::Path,
+    project_id: Option<i64>,
+    asset_id: i64,
+    is_raw: bool,
+    source_path: &std::path::Path,
+) -> Result<Rgb16Image> {
+    if is_raw {
+        let baseline_path = processing::raw::preview_base_path(raw_original_dir, project_id, asset_id);
+        if baseline_path.exists() {
+            if let Ok(img) = crate::vips_io::decode_to_rgb16(&baseline_path) {
+                return Ok(img);
+            }
+        }
+    }
+    processing::load_image_rgb16(source_path)
 }

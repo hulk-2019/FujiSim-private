@@ -100,12 +100,13 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     });
     const useTileDetailPreview = useFullResolutionPreview && !showOriginal;
 
-    const { preview, baselinePreviews, loading, loadingRef, initializingBase, error } =
+    const { preview, baselinePreviews, loading, loadingMode, loadingRef, initializingBase, error } =
       usePreviewLoader({
         focused,
         filter,
         isIdentity: currentFilterIsIdentity,
         isAdjustingFilter,
+        filterInteraction,
         showOriginal,
         canUseGpuInteractivePreview:
           !!focused &&
@@ -212,15 +213,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
         return;
       }
 
-      if (
-        wasAdjustingFilterRef.current &&
-        !isAdjustingFilter &&
-        gpuInteractiveReady
-      ) {
+      if ((wasAdjustingFilterRef.current && !isAdjustingFilter && gpuInteractiveReady) || (filterInteraction === "settling" && gpuInteractiveReady)) {
         setGpuHandoffActive(true);
       }
       wasAdjustingFilterRef.current = isAdjustingFilter;
-    }, [canUseGpuInteractivePreview, currentFilterIsIdentity, gpuInteractiveReady, isAdjustingFilter]);
+    }, [canUseGpuInteractivePreview, currentFilterIsIdentity, filterInteraction, gpuInteractiveReady, isAdjustingFilter]);
 
     useEffect(() => {
       setGpuHandoffActive(false);
@@ -278,8 +275,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     const handleEyedropperClick = useEyedropper({
       focusedId,
+      projectId,
       eyedropperMode,
-      imgRef,
+      viewportRef,
+      imageTransform: { scale, tx, ty, width: containerW, height: containerH },
       setFilter,
       setEyedropperMode,
     });
@@ -479,7 +478,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
               ) : null}
             </>
           )}
-          {loading && displaySrc && (
+          {loading && loadingMode !== "interactive" && displaySrc && !showGpuInteractiveLayer && !isAdjustingFilter && (
             <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
               {t("previewPanel.rendering")}
             </div>

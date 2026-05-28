@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/api";
 import type { Asset, FilterSettings, PreviewMode } from "@/types";
+import type { FilterSlice } from "@/store/types";
 import { previewResultToImage, revokePreviewImage, type AssetPreviewImage, type PreviewImage } from "./previewImages";
 import {
   INTERACTIVE_PREVIEW_DELAY_MS,
@@ -26,6 +27,7 @@ export function usePreviewLoader({
   filter,
   isIdentity,
   isAdjustingFilter,
+  filterInteraction,
   showOriginal,
   canUseGpuInteractivePreview,
   useFullResolutionPreview,
@@ -36,6 +38,7 @@ export function usePreviewLoader({
   filter: FilterSettings;
   isIdentity: boolean;
   isAdjustingFilter: boolean;
+  filterInteraction: FilterSlice["filterInteraction"];
   showOriginal: boolean;
   canUseGpuInteractivePreview: boolean;
   useFullResolutionPreview: boolean;
@@ -45,6 +48,7 @@ export function usePreviewLoader({
   const [preview, setPreview] = useState<AssetPreviewImage | null>(null);
   const [baselinePreviews, setBaselinePreviews] = useState<Record<number, PreviewImage>>({});
   const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<PreviewMode | null>(null);
   const [initializingBase, setInitializingBase] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestTick, setRequestTick] = useState(0);
@@ -57,13 +61,15 @@ export function usePreviewLoader({
   const resolvedBaseRef = useRef<Set<number>>(new Set());
   const missingBaseRef = useRef<Set<number>>(new Set());
 
-  const setPreviewLoading = useCallback((next: boolean) => {
+  const setPreviewLoading = useCallback((next: boolean, nextMode: PreviewMode | null = null) => {
     loadingRef.current = next;
     setLoading(next);
+    setLoadingMode(next ? nextMode : null);
   }, []);
 
   const { mode, maxEdge } = previewRequestSpec(isAdjustingFilter, useFullResolutionPreview);
   const requestKey = `${mode}:${maxEdge ?? "native"}`;
+  const renderPhase = filterInteraction === "preset_applied" ? "gpu_only" : "render";
 
   useEffect(() => {
     if (!focused) {
@@ -132,7 +138,12 @@ export function usePreviewLoader({
       return;
     }
 
-    if (canUseGpuInteractivePreview && isAdjustingFilter && !!baselineRef.current[focused.id]) {
+    const shouldUseGpuOnly =
+      canUseGpuInteractivePreview &&
+      (isAdjustingFilter || renderPhase === "gpu_only") &&
+      !!baselineRef.current[focused.id];
+
+    if (shouldUseGpuOnly) {
       pendingTokenRef.current = null;
       return;
     }
@@ -147,7 +158,7 @@ export function usePreviewLoader({
     const handle = setTimeout(async () => {
       if (currentTokenRef.current !== token) return;
       inFlightRef.current = true;
-      setPreviewLoading(true);
+      setPreviewLoading(true, mode);
       try {
         const result = await api.getPreview(focused.id, filter, mode, maxEdge, token, null, projectId);
         if (currentTokenRef.current !== token) return;
@@ -198,7 +209,7 @@ export function usePreviewLoader({
     }, delay);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, filter, isIdentity, isAdjustingFilter, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, projectId, requestKey, requestTick, setPreviewLoading, setPreviewSize]);
+  }, [focused?.id, filter, isIdentity, isAdjustingFilter, renderPhase, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, projectId, requestKey, requestTick, setPreviewLoading, setPreviewSize]);
 
   useEffect(() => {
     revokePreviewImage(previewRef.current);
@@ -214,5 +225,5 @@ export function usePreviewLoader({
     };
   }, []);
 
-  return { preview, baselinePreviews, loading, loadingRef, initializingBase, error };
+  return { preview, baselinePreviews, loading, loadingMode, loadingRef, initializingBase, error };
 }

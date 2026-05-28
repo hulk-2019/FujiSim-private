@@ -18,7 +18,9 @@ export function WhiteBalanceSection() {
   const { t } = useTranslation();
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
+  const setFilterInteraction = useStore((s) => s.setFilterInteraction);
   const focusedId = useStore((s) => s.focusedId);
+  const projectId = useStore((s) => s.currentFolderId);
   const eyedropperMode = useStore((s) => s.eyedropperMode);
   const setEyedropperMode = useStore((s) => s.setEyedropperMode);
   const [wbMode, setWbMode] = useState<"reset" | "auto">("reset");
@@ -29,14 +31,21 @@ export function WhiteBalanceSection() {
         <Select
           value={wbMode}
           onValueChange={(v) => {
+            if (v === "reset") {
+              setFilter({ wb_shift_r: 0, wb_shift_g: 0, wb_shift_b: 0 });
+              setFilterInteraction("preset_applied");
+              setWbMode("reset");
+              return;
+            }
             if (v === "auto") {
               if (!focusedId) return;
-              api.autoWhiteBalance(focusedId).then((result) => {
+              api.autoWhiteBalance(focusedId, projectId).then((result) => {
                 setFilter({
                   wb_shift_r: result.wbShiftR,
                   wb_shift_g: result.wbShiftG,
                   wb_shift_b: result.wbShiftB,
                 });
+                setFilterInteraction("preset_applied");
                 setWbMode("auto");
               });
             }
@@ -67,6 +76,7 @@ export function WhiteBalanceSection() {
           className="h-6 w-6 p-0 border-zinc-700 hover:bg-zinc-800"
           onClick={() => {
             setFilter({ wb_shift_r: 0, wb_shift_g: 0, wb_shift_b: 0 });
+            setFilterInteraction("preset_applied");
             setWbMode("reset");
           }}
           title={t("filterPanel.wbReset")}

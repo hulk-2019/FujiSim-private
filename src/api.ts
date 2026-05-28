@@ -197,15 +197,15 @@ export const api = {
 
   // ===== 白平衡 =====
   /** Auto white balance using Gray World algorithm. Returns wb_shift_r, wb_shift_g, wb_shift_b values. */
-  autoWhiteBalance: (assetId: number) =>
-    invoke<[number, number, number]>('auto_white_balance', { assetId }).then(([wbShiftR, wbShiftG, wbShiftB]) => ({
+  autoWhiteBalance: (assetId: number, projectId?: number | null) =>
+    invoke<[number, number, number]>('auto_white_balance', { assetId, projectId: projectId ?? null }).then(([wbShiftR, wbShiftG, wbShiftB]) => ({
       wbShiftR,
       wbShiftG,
       wbShiftB,
     })),
   /** Sample a pixel's RGB color at coordinates (x, y) on the preview image. */
-  eyedropColor: (assetId: number, x: number, y: number) =>
-    invoke<[number, number, number]>('eyedrop_color', { assetId, x, y }).then(([r, g, b]) => ({
+  eyedropColor: (assetId: number, x: number, y: number, projectId?: number | null) =>
+    invoke<[number, number, number]>('eyedrop_color', { assetId, x, y, projectId: projectId ?? null }).then(([r, g, b]) => ({
       r,
       g,
       b,
