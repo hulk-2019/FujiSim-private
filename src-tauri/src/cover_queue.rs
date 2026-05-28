@@ -59,6 +59,9 @@ impl CoverQueue {
             let mut set = tokio::task::JoinSet::new();
 
             for asset_id in new_ids {
+                while state.preview_is_active() {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
                 // 从全局 sem 获取 permit，跨所有 enqueue 批次共享并发上限
                 let permit = queue.sem.clone().acquire_owned().await;
                 let Ok(permit) = permit else { break };

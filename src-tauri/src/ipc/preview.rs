@@ -18,6 +18,18 @@ pub enum PreviewMode {
     Interactive,
     Settled,
     Full,
+    Tile,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewTileRequest {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub output_width: u32,
+    pub output_height: u32,
 }
 
 /// 预览结果。
@@ -79,10 +91,12 @@ pub async fn get_preview(
     mode: PreviewMode,
     max_edge: Option<u32>,
     token: u64,
+    tile: Option<PreviewTileRequest>,
 ) -> Result<PreviewResult> {
     use std::sync::atomic::Ordering;
     // 注册为当前最新 token，同时让旧的请求在检查时发现自己已过期
     state.preview_token.store(token, Ordering::SeqCst);
+    state.mark_preview_active_for(1500);
 
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
@@ -119,10 +133,15 @@ pub async fn get_preview(
                 &state_for_render,
                 asset_id,
                 &path,
-                max_edge,
+                if matches!(mode, PreviewMode::Tile) { None } else { max_edge },
                 native_max_edge,
                 persist_to_disk,
             )?;
+            let resized = if matches!(mode, PreviewMode::Tile) {
+                Arc::new(crop_tile(&resized, tile.ok_or_else(|| AppError::other("preview_tile_required"))?)?)
+            } else {
+                resized
+            };
             let base_ms = base_start.elapsed().as_millis();
 
             // Check token after decode (decode is the most expensive part)
@@ -130,7 +149,7 @@ pub async fn get_preview(
                 return Err(AppError::other("preview_cancelled"));
             }
 
-            let interactive_preview = matches!(mode, PreviewMode::Interactive);
+            let interactive_preview = matches!(mode, PreviewMode::Interactive | PreviewMode::Tile);
             let render_settings = if interactive_preview {
                 settings.interactive_preview()
             } else {
@@ -295,6 +314,27 @@ fn resize_to_max_edge(src: Rgb16Image, max_edge: Option<u32>) -> Result<Rgb16Ima
         crate::vips_io::resize_rgb16(&src, nw, nh)
     } else {
         Ok(src)
+    }
+}
+
+fn crop_tile(src: &Rgb16Image, tile: PreviewTileRequest) -> Result<Rgb16Image> {
+    let (src_w, src_h) = src.dimensions();
+    if src_w == 0 || src_h == 0 {
+        return Err(AppError::other("empty preview base"));
+    }
+
+    let x = tile.x.min(src_w.saturating_sub(1));
+    let y = tile.y.min(src_h.saturating_sub(1));
+    let width = tile.width.max(1).min(src_w - x);
+    let height = tile.height.max(1).min(src_h - y);
+    let output_width = tile.output_width.max(1).min(4096);
+    let output_height = tile.output_height.max(1).min(4096);
+    let cropped = image::imageops::crop_imm(src, x, y, width, height).to_image();
+
+    if cropped.width() == output_width && cropped.height() == output_height {
+        Ok(cropped)
+    } else {
+        crate::vips_io::resize_rgb16(&cropped, output_width, output_height)
     }
 }
 

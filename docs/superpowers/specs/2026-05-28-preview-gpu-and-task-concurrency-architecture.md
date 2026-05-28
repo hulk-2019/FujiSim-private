@@ -159,13 +159,14 @@ Recommended priority from highest to lowest:
 
 - Export should not run with high parallelism while the editor is actively interacting.
 - Export concurrency should default to 1 for interactive desktop editing.
-- Long-term: export dispatcher should pause starting new tasks while preview/interaction is active.
+- Export dispatcher pauses starting new tasks while preview/interaction is active.
 
 ### Cover Queue
 
 - Cover generation should not consume multiple blocking workers during active editing.
 - Default cover concurrency should be conservative.
-- Long-term: cover queue should have visible-item priority and pause lower-priority jobs.
+- Cover queue pauses starting new jobs while preview/interaction is active.
+- Long-term: cover queue should have visible-item priority.
 
 ## Rendering Evolution
 
@@ -225,6 +226,12 @@ Step 2:
 - Return RGBA/tile buffers for interactive or tile preview.
 - Avoid JPEG encode/decode for small/tile previews.
 
+Status: settled and interactive previews already avoid temporary files. Tile
+mode currently uses the same encoded Blob image transport so it can plug into
+the existing display path. Raw RGBA tile transport should be added together
+with a canvas/WebGPU tile compositor; otherwise it creates an unused second
+frontend rendering path.
+
 ### Phase 5: Tile/Region Preview
 
 Needed for:
@@ -240,6 +247,14 @@ Recommended tile design:
 - tile size: 512 or 1024
 - overlap: 16-32 px
 - cache key: asset id, filter hash, zoom level, tile x/y, pipeline version
+
+Implemented foundation:
+
+- Backend IPC supports `tile` preview mode.
+- Tile requests specify source `x/y/width/height` and output `outputWidth/outputHeight`.
+- Tile mode uses the same authoritative backend WGPU pipeline as settled preview.
+- Tile mode reads native base input rather than rendering a whole-image `full` preview first.
+- Frontend API/types can request tiles; viewport orchestration and tile cache are separate UI-layer work.
 
 ### Phase 6: GPU Histogram
 
@@ -289,14 +304,14 @@ Settled:
 4. Add preview mode enum to backend IPC. Done.
 5. Add preview timing instrumentation. Done.
 6. Replace temp-file preview path with Blob bytes for `interactive` and `settled` modes, while keeping backend WGPU authoritative. Done.
-7. Add tile preview foundation.
-8. Add backend WGPU implementations for future Lightroom-like features.
+7. Add tile preview foundation. Done.
+8. Add backend WGPU implementations for future Lightroom-like features. Tracked as separate feature work.
 
 ## Current Implementation Status
 
 Implemented:
 
-- `get_preview` uses explicit `interactive`, `settled`, and `full` modes.
+- `get_preview` uses explicit `interactive`, `settled`, `full`, and `tile` modes.
 - Backend preview uses a non-queueing shared permit; busy requests return immediately.
 - Frontend coalesces preview requests with tokens and keeps only latest pending state.
 - Drag-time slider changes use frontend WebGL approximation when a baseline source exists.
@@ -304,18 +319,19 @@ Implemented:
 - WebGL remains an approximation layer; backend WGPU output replaces it after settling.
 - `interactive` and `settled` previews return encoded bytes over IPC and use Blob URLs.
 - `full` preview remains path-based to avoid very large IPC payloads.
+- `tile` preview mode returns encoded bytes for native-resolution visible-region refinement.
 - Preview timing instrumentation records base decode, processing, encode, transport, and total time.
 - Histogram does not run while sliders are actively dragging.
 - Histogram uses try-acquire behavior and returns `preview_busy` instead of queueing behind preview.
 - Histogram self-cancels if a newer preview request arrives while it is running.
 - Export task concurrency and cover generation defaults are conservative.
+- Export and cover queues pause starting lower-priority work while preview is active.
 
 Remaining:
 
-- Add tile/region preview mode and cache.
-- Add RGBA/tile transport to avoid JPEG encode/decode for tile preview.
-- Add GPU/preview-aware pausing for lower-priority cover and export starts.
-- Add backend WGPU implementations for future Lightroom-like features.
+- Add frontend tile viewport orchestration and cache.
+- Add RGBA tile compositor if/when tile display moves from `<img>` overlays to canvas/WebGPU.
+- Implement future Lightroom-like tools as separate backend WGPU feature projects.
 
 ## Acceptance Criteria
 

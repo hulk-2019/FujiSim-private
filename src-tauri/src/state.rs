@@ -95,6 +95,10 @@ pub struct AppState {
     /// 每次 get_preview 调用时前端传入最新 token，
     /// 后端在 CPU 密集节点检查是否仍是最新值，不是则提前返回 preview_cancelled。
     pub preview_token: Arc<AtomicU64>,
+    /// Millisecond epoch until which interactive preview work should be treated as active.
+    /// Lower-priority queues use this to avoid starting new CPU/IO-heavy jobs while the
+    /// editor is rendering the focused image.
+    pub preview_active_until_ms: Arc<AtomicU64>,
     /// 限制 get_preview 同时只跑 1 个解码任务。
     /// 快速切换时旧请求拿到 permit 后发现 token 过期立即退出，新请求才真正解码，
     /// 避免多个 RAW 解码同时占满 CPU。
@@ -177,6 +181,7 @@ impl AppState {
             io_sem: Arc::new(Semaphore::new(4)),
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
             preview_token: Arc::new(AtomicU64::new(0)),
+            preview_active_until_ms: Arc::new(AtomicU64::new(0)),
             preview_sem: Arc::new(Semaphore::new(1)),
             histogram_token: Arc::new(AtomicU64::new(0)),
         });
@@ -187,6 +192,25 @@ impl AppState {
         seed_builtin_presets(&state.pool).await?;
         Ok(state)
     }
+
+    pub fn mark_preview_active_for(&self, duration_ms: u64) {
+        let until = now_ms().saturating_add(duration_ms);
+        self.preview_active_until_ms
+            .fetch_max(until, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn preview_is_active(&self) -> bool {
+        self.preview_active_until_ms
+            .load(std::sync::atomic::Ordering::SeqCst)
+            > now_ms()
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn cleanup_legacy_raw_cache(dir: &PathBuf) {

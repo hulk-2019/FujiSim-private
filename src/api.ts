@@ -15,6 +15,7 @@ import type {
   NewFilterPreset,
   PresetCategory,
   PreviewMode,
+  PreviewTileRequest,
   PreviewResult,
   UserLut,
   UserFont,
@@ -135,8 +136,16 @@ export const api = {
     mode: PreviewMode,
     maxEdge?: number,
     token?: number,
+    tile?: PreviewTileRequest | null,
   ) =>
-    invoke<PreviewResult>("get_preview", { assetId, settings, mode, maxEdge, token: token ?? 0 }),
+    invoke<PreviewResult>("get_preview", {
+      assetId,
+      settings,
+      mode,
+      maxEdge,
+      token: token ?? 0,
+      tile: tile ?? null,
+    }),
 
   /** 判断 RAW 预览基线 TIFF 是否已经解析完成。 */
   hasPreviewBase: (assetId: number) =>

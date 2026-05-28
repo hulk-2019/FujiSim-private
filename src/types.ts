@@ -192,7 +192,16 @@ export type HistogramData = {
   totalPixels: number;
 };
 
-export type PreviewMode = "interactive" | "settled" | "full";
+export type PreviewMode = "interactive" | "settled" | "full" | "tile";
+
+export type PreviewTileRequest = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  outputWidth: number;
+  outputHeight: number;
+};
 
 /** 预览渲染结果。常规预览返回 `data`，full 预览可能返回本地 `path`。 */
 export type PreviewResult = {
