@@ -149,6 +149,8 @@ Recommended priority from highest to lowest:
 - Do not run during slider drag.
 - Use try-acquire behavior.
 - If preview is busy, histogram should skip and retry on next settled state.
+- If a preview request arrives while histogram is running, histogram should
+  self-cancel at the next checkpoint and release the shared preview permit.
 
 ### Export
 
@@ -278,14 +280,38 @@ Settled:
 
 ## Implementation Order
 
-1. Document and enforce conservative task concurrency defaults.
-2. Keep frontend WebGL approximation warm and bounded.
-3. Extend WebGL approximation for tone segments and HSL.
-4. Add preview mode enum to backend IPC.
-5. Add preview timing instrumentation.
-6. Replace temp-file preview path with Blob bytes for `interactive` and `settled` modes, while keeping backend WGPU authoritative.
+1. Document and enforce conservative task concurrency defaults. Done.
+2. Keep frontend WebGL approximation warm and bounded. Done.
+3. Extend WebGL approximation for tone segments and HSL. Done for current bounded approximation scope.
+4. Add preview mode enum to backend IPC. Done.
+5. Add preview timing instrumentation. Done.
+6. Replace temp-file preview path with Blob bytes for `interactive` and `settled` modes, while keeping backend WGPU authoritative. Done.
 7. Add tile preview foundation.
 8. Add backend WGPU implementations for future Lightroom-like features.
+
+## Current Implementation Status
+
+Implemented:
+
+- `get_preview` uses explicit `interactive`, `settled`, and `full` modes.
+- Backend preview uses a non-queueing shared permit; busy requests return immediately.
+- Frontend coalesces preview requests with tokens and keeps only latest pending state.
+- Drag-time slider changes use frontend WebGL approximation when a baseline source exists.
+- WebGL remains an approximation layer; backend WGPU output replaces it after settling.
+- `interactive` and `settled` previews return encoded bytes over IPC and use Blob URLs.
+- `full` preview remains path-based to avoid very large IPC payloads.
+- Preview timing instrumentation records base decode, processing, encode, transport, and total time.
+- Histogram does not run while sliders are actively dragging.
+- Histogram uses try-acquire behavior and returns `preview_busy` instead of queueing behind preview.
+- Histogram self-cancels if a newer preview request arrives while it is running.
+- Export task concurrency and cover generation defaults are conservative.
+
+Remaining:
+
+- Add tile/region preview mode and cache.
+- Add RGBA/tile transport to avoid JPEG encode/decode for tile preview.
+- Add GPU/preview-aware pausing for lower-priority cover and export starts.
+- Add backend WGPU implementations for future Lightroom-like features.
 
 ## Acceptance Criteria
 

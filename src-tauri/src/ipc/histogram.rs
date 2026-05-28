@@ -1,7 +1,7 @@
 //! 独立直方图计算命令。与 get_preview 解耦：
 //! - 工作尺寸 512px（256-bin 直方图视觉无差，CPU 砍 14×）
 //! - 独立 histogram_token 取消，不与预览互相误杀
-//! - 共享 preview_sem 信号量，避免抢 CPU
+//! - 共享 preview_sem 信号量，避免抢 CPU；若有新预览请求到达则主动让路
 //! - 不写盘、不编 JPEG，纯计算后立即返回
 
 use crate::db::assets;
@@ -34,6 +34,8 @@ pub async fn compute_histogram(
     let preview_pool = state.preview_pool.clone();
     let sem = state.preview_sem.clone();
     let histogram_token = state.histogram_token.clone();
+    let preview_token = state.preview_token.clone();
+    let preview_generation = preview_token.load(Ordering::SeqCst);
     let state_for_render = state.inner().clone();
 
     let permit = sem
@@ -56,12 +58,16 @@ pub async fn compute_histogram(
                 false,
             )?;
 
-            if histogram_token.load(Ordering::SeqCst) != token {
+            if histogram_token.load(Ordering::SeqCst) != token
+                || preview_token.load(Ordering::SeqCst) != preview_generation
+            {
                 return Err(AppError::other("preview_cancelled"));
             }
 
             let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
-            if histogram_token.load(Ordering::SeqCst) != token {
+            if histogram_token.load(Ordering::SeqCst) != token
+                || preview_token.load(Ordering::SeqCst) != preview_generation
+            {
                 return Err(AppError::other("preview_cancelled"));
             }
             Ok(histogram::compute(&processed))

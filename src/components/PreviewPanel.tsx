@@ -23,12 +23,7 @@ import {
   useZoomToLevel,
 } from "@/components/preview/usePreviewGestures";
 import { usePreviewLoader } from "@/components/preview/usePreviewLoader";
-import {
-  FULL_RESOLUTION_PREVIEW_OVERSAMPLE,
-  SETTLED_PREVIEW_MAX_EDGE,
-} from "@/components/preview/previewRequest";
-
-const ZOOM_IDLE_DELAY_MS = 180;
+import { useFullResolutionPreviewTrigger } from "@/components/preview/useFullResolutionPreviewTrigger";
 
 const FIT_FILL = 0.8;
 
@@ -68,7 +63,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const [containerH, setContainerH] = useState(0);
     // 隐藏图片直到 fit 计算完成，避免切换时闪烁到左上角
     const [imgVisible, setImgVisible] = useState(false);
-    const [isZooming, setIsZooming] = useState(false);
     const [gpuInteractiveReady, setGpuInteractiveReady] = useState(false);
     const [gpuHandoffActive, setGpuHandoffActive] = useState(false);
 
@@ -77,18 +71,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     // 防止全分辨率预览替换缩略图时重复 fit
     const hasFitRef = useRef(false);
     const fitScaleRef = useRef(1);
-    const zoomIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const wasAdjustingFilterRef = useRef(false);
     const currentFilterIsIdentity = isIdentityFilter(filter);
     const canApproximateCurrentFilter = canApproximateWithGpu(filter);
-    const nativeMaxEdge = Math.max(focused?.width ?? 0, focused?.height ?? 0);
-    const fullResolutionScaleThreshold =
-      nativeMaxEdge > SETTLED_PREVIEW_MAX_EDGE
-        ? (SETTLED_PREVIEW_MAX_EDGE * FULL_RESOLUTION_PREVIEW_OVERSAMPLE) /
-          (nativeMaxEdge * Math.max(window.devicePixelRatio || 1, 1))
-        : Number.POSITIVE_INFINITY;
-    const useFullResolutionPreview =
-      !isAdjustingFilter && !isZooming && scale >= fullResolutionScaleThreshold;
+    const { useFullResolutionPreview } = useFullResolutionPreviewTrigger({
+      nativeWidth: focused?.width,
+      nativeHeight: focused?.height,
+      scale,
+      isAdjustingFilter,
+    });
 
     const { preview, baselinePreviews, loading, loadingRef, error } =
       usePreviewLoader({
@@ -110,7 +101,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       ? (baselinePreviews[focused.id] ?? null)
       : null;
     const focusedPreviewImage =
-      focused && preview?.assetId === focused.id && !currentFilterIsIdentity
+      focused &&
+      preview?.assetId === focused.id &&
+      (!currentFilterIsIdentity || useFullResolutionPreview)
         ? preview
         : null;
     const gpuInteractiveSrc: string | null = (() => {
@@ -123,16 +116,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       canApproximateCurrentFilter &&
       !showOriginal &&
       !!gpuInteractiveSrc;
-    const markZooming = useCallback(() => {
-      setIsZooming(true);
-      if (zoomIdleTimerRef.current) {
-        clearTimeout(zoomIdleTimerRef.current);
-      }
-      zoomIdleTimerRef.current = setTimeout(() => {
-        zoomIdleTimerRef.current = null;
-        setIsZooming(false);
-      }, ZOOM_IDLE_DELAY_MS);
-    }, []);
+    const markZooming = useCallback(() => {}, []);
 
     // 重置到 fit 状态：容器为图片原始尺寸，scale 缩放到占 viewport 80% 并居中
     // 优先用 store 里的 focused 尺寸（DB EXIF），缺失时回退到已加载 img 的 naturalWidth/Height，
@@ -185,14 +169,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
         setGpuInteractiveReady(false);
       }
     }, [gpuInteractiveSrc]);
-
-    useEffect(() => {
-      return () => {
-        if (zoomIdleTimerRef.current) {
-          clearTimeout(zoomIdleTimerRef.current);
-        }
-      };
-    }, []);
 
     useLayoutEffect(() => {
       if (!canUseGpuInteractivePreview || currentFilterIsIdentity) {

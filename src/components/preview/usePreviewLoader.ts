@@ -10,6 +10,17 @@ import {
   nextPreviewToken,
 } from "./previewRequest";
 
+function previewRequestSpec(
+  isAdjustingFilter: boolean,
+  useFullResolutionPreview: boolean,
+): { mode: PreviewMode; maxEdge?: number } {
+  if (useFullResolutionPreview) return { mode: "full" };
+  if (isAdjustingFilter) {
+    return { mode: "interactive", maxEdge: INTERACTIVE_PREVIEW_MAX_EDGE };
+  }
+  return { mode: "settled", maxEdge: SETTLED_PREVIEW_MAX_EDGE };
+}
+
 export function usePreviewLoader({
   focused,
   filter,
@@ -47,6 +58,9 @@ export function usePreviewLoader({
     setLoading(next);
   }, []);
 
+  const { mode, maxEdge } = previewRequestSpec(isAdjustingFilter, useFullResolutionPreview);
+  const requestKey = `${mode}:${maxEdge ?? "native"}`;
+
   useEffect(() => {
     if (!focused) {
       pendingTokenRef.current = null;
@@ -60,7 +74,7 @@ export function usePreviewLoader({
     const token = nextPreviewToken();
     currentTokenRef.current = token;
 
-    if (isIdentity) {
+    if (isIdentity && !useFullResolutionPreview) {
       pendingTokenRef.current = null;
       revokePreviewImage(previewRef.current);
       previewRef.current = null;
@@ -97,16 +111,6 @@ export function usePreviewLoader({
       return;
     }
 
-    const maxEdge = useFullResolutionPreview
-      ? undefined
-      : isAdjustingFilter
-        ? INTERACTIVE_PREVIEW_MAX_EDGE
-        : SETTLED_PREVIEW_MAX_EDGE;
-    const mode: PreviewMode = useFullResolutionPreview
-      ? "full"
-      : isAdjustingFilter
-        ? "interactive"
-        : "settled";
     const delay = !hasDisplay ? 0 : isAdjustingFilter ? INTERACTIVE_PREVIEW_DELAY_MS : SETTLED_PREVIEW_DELAY_MS;
 
     const handle = setTimeout(async () => {
@@ -116,7 +120,7 @@ export function usePreviewLoader({
         const result = await api.getPreview(focused.id, filter, mode, maxEdge, token);
         if (currentTokenRef.current !== token) return;
         const nextImage = previewResultToImage(result);
-        if (isIdentity) {
+        if (isIdentity && !useFullResolutionPreview) {
           setBaselinePreviews((prev) => {
             revokePreviewImage(prev[focused.id]);
             const next = { ...prev, [focused.id]: nextImage };
@@ -155,7 +159,7 @@ export function usePreviewLoader({
     }, delay);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, filter, isIdentity, isAdjustingFilter, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, requestTick, setPreviewLoading, setPreviewSize]);
+  }, [focused?.id, filter, isIdentity, isAdjustingFilter, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, requestKey, requestTick, setPreviewLoading, setPreviewSize]);
 
   useEffect(() => {
     revokePreviewImage(previewRef.current);
