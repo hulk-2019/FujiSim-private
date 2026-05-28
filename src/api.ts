@@ -14,6 +14,7 @@ import type {
   LibraryStats,
   NewFilterPreset,
   PresetCategory,
+  PreviewMode,
   PreviewResult,
   UserLut,
   UserFont,
@@ -128,8 +129,14 @@ export const api = {
    * 后端会先把原图下采样到 `maxEdge`（默认 1280px）再走色彩流水线，
    * 这样滑块拖动时延迟可以控制在 80~150ms。
    */
-  getPreview: (assetId: number, settings: FilterSettings | null, maxEdge?: number, token?: number) =>
-    invoke<PreviewResult>("get_preview", { assetId, settings, maxEdge, token: token ?? 0 }),
+  getPreview: (
+    assetId: number,
+    settings: FilterSettings | null,
+    mode: PreviewMode,
+    maxEdge?: number,
+    token?: number,
+  ) =>
+    invoke<PreviewResult>("get_preview", { assetId, settings, mode, maxEdge, token: token ?? 0 }),
 
   /** 判断 RAW 预览基线 TIFF 是否已经解析完成。 */
   hasPreviewBase: (assetId: number) =>

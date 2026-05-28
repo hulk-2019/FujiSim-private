@@ -21,6 +21,17 @@ export function useHistogramSync(
   const isAdjustingFilter = useStore((s) => s.isAdjustingFilter);
   const currentTokenRef = useRef(0);
   const pendingHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusedIdRef = useRef<number | null>(focusedId);
+
+  useEffect(() => {
+    focusedIdRef.current = focusedId;
+    currentTokenRef.current = ++histogramTokenCounter;
+    if (pendingHandle.current) {
+      clearTimeout(pendingHandle.current);
+      pendingHandle.current = null;
+    }
+    setHistogram(null);
+  }, [focusedId, setHistogram]);
 
   useEffect(() => {
     if (!focusedId) {
@@ -30,26 +41,39 @@ export function useHistogramSync(
 
     if (pendingHandle.current) {
       clearTimeout(pendingHandle.current);
+      pendingHandle.current = null;
     }
+    currentTokenRef.current = ++histogramTokenCounter;
 
     if (isAdjustingFilter) {
       return;
     }
 
-    pendingHandle.current = setTimeout(async () => {
-      const token = ++histogramTokenCounter;
-      currentTokenRef.current = token;
+    const schedule = (delay: number, retryCount = 0) => {
+      pendingHandle.current = setTimeout(async () => {
+        if (focusedIdRef.current !== focusedId) return;
+        const token = ++histogramTokenCounter;
+        currentTokenRef.current = token;
 
-      try {
-        const data = await api.computeHistogram(focusedId, filter, token);
-        if (currentTokenRef.current !== token) return;
-        setHistogram(data);
-      } catch (e) {
-        const msg = String(e);
-        if (msg.includes("preview_cancelled") || msg.includes("preview_busy")) return;
-        console.warn("[useHistogramSync] failed:", msg);
-      }
-    }, 350);
+        try {
+          const data = await api.computeHistogram(focusedId, filter, token);
+          if (currentTokenRef.current !== token || focusedIdRef.current !== focusedId) return;
+          setHistogram(data);
+        } catch (e) {
+          const msg = String(e);
+          if (msg.includes("preview_cancelled")) return;
+          if (msg.includes("preview_busy")) {
+            if (focusedIdRef.current === focusedId && retryCount < 4) {
+              schedule(220, retryCount + 1);
+            }
+            return;
+          }
+          console.warn("[useHistogramSync] failed:", msg);
+        }
+      }, delay);
+    };
+
+    schedule(350);
 
     return () => {
       if (pendingHandle.current) {

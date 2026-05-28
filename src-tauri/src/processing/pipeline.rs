@@ -202,6 +202,20 @@ impl FilterSettings {
                 tc.rgb.is_empty() && tc.r.is_empty() && tc.g.is_empty() && tc.b.is_empty()
             })
     }
+
+    /// Lightweight settings for high-frequency slider interaction.
+    ///
+    /// Keep global color/tone operations so the preview remains directionally
+    /// accurate, but skip spatial/detail passes that dominate render cost and
+    /// are hard to judge while values are changing continuously.
+    pub fn interactive_preview(&self) -> Self {
+        let mut s = self.clone();
+        s.dehaze = 0;
+        s.clarity = 0;
+        s.sharpness = 0;
+        s.grain_amount = 0.0;
+        s
+    }
 }
 
 impl Default for FilterSettings {

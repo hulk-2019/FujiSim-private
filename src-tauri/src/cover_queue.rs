@@ -17,7 +17,7 @@ pub struct CoverQueue {
 
 impl CoverQueue {
     pub fn new(concurrency: usize) -> Self {
-        let n = concurrency.clamp(2, 4);
+        let n = concurrency.clamp(1, 4);
         Self {
             inflight: Mutex::new(HashSet::new()),
             concurrency: AtomicUsize::new(n),
@@ -26,7 +26,7 @@ impl CoverQueue {
     }
 
     pub fn set_concurrency(&self, n: usize) {
-        self.concurrency.store(n.clamp(2, 4), Ordering::Relaxed);
+        self.concurrency.store(n.clamp(1, 4), Ordering::Relaxed);
         // 注意：Semaphore 容量不可动态调整，set_concurrency 仅更新 AtomicUsize 供参考，
         // 实际并发上限由初始化时的 sem 容量决定。
     }

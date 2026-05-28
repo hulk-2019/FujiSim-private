@@ -79,6 +79,7 @@ pub struct AppState {
     pub font_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
     pub preview_base_cache: Mutex<PreviewBaseCache>,
+    pub preview_pool: Arc<rayon::ThreadPool>,
     pub export_pool: Arc<rayon::ThreadPool>,
     /// 全局 GPU 上下文。Tauri setup 阶段一次性初始化，进程生命周期内长存。
     pub gpu: Arc<GpuContext>,
@@ -133,11 +134,22 @@ impl AppState {
             .map(|n| n.get())
             .unwrap_or(4);
 
-        // 导出并发：逻辑核心数的一半（最少 2），给系统和预览留出余量
-        let export_threads = (logical_cpus / 2).max(2);
+        // 预览线程池和导出线程池分离，避免批量导出占满 rayon worker 后阻塞交互预览。
+        let preview_threads = 2.min(logical_cpus.max(1));
+        let preview_pool = Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(preview_threads)
+                .thread_name(|i| format!("preview-{i}"))
+                .build()
+                .map_err(|e| crate::error::AppError::other(e.to_string()))?,
+        );
+
+        // 导出默认串行执行。导出是后台吞吐任务，不能默认和交互预览抢 CPU/GPU/IO。
+        let export_threads = (logical_cpus / 2).max(1);
         let export_pool = Arc::new(
             rayon::ThreadPoolBuilder::new()
                 .num_threads(export_threads)
+                .thread_name(|i| format!("export-{i}"))
                 .build()
                 .map_err(|e| crate::error::AppError::other(e.to_string()))?,
         );
@@ -156,12 +168,11 @@ impl AppState {
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),
             preview_base_cache: Mutex::new(PreviewBaseCache::new(8)),
+            preview_pool,
             export_pool,
             gpu,
-            task_queue: TaskQueue::new(2),
-            cover_queue: Arc::new(crate::cover_queue::CoverQueue::new(
-                (logical_cpus / 2).max(2),
-            )),
+            task_queue: TaskQueue::new(1),
+            cover_queue: Arc::new(crate::cover_queue::CoverQueue::new(1)),
             // 缩略图生成和 EXIF 提取共享信号量，总并发固定 4
             io_sem: Arc::new(Semaphore::new(4)),
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),

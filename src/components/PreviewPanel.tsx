@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { ImageIcon } from "lucide-react";
 import { useGesture } from "@use-gesture/react";
 import { api } from "@/api";
-import type { WatermarkSettings } from "@/types";
+import type { FilterSettings, WatermarkSettings } from "@/types";
 import { useStore } from "@/store";
 import { formatBytes } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -13,10 +13,14 @@ import { useHistogramSync } from "@/hooks/useHistogramSync";
 
 let previewTokenCounter = 0;
 
-const INTERACTIVE_PREVIEW_MAX_EDGE = 1280;
+const INTERACTIVE_PREVIEW_MAX_EDGE = 960;
+const GPU_INTERACTIVE_CANVAS_MAX_EDGE = 1280;
 const SETTLED_PREVIEW_MAX_EDGE = 1920;
-const INTERACTIVE_PREVIEW_DELAY_MS = 80;
+const INTERACTIVE_PREVIEW_DELAY_MS = 160;
 const SETTLED_PREVIEW_DELAY_MS = 250;
+const FULL_RESOLUTION_PREVIEW_OVERSAMPLE = 1.15;
+const ZOOM_IDLE_DELAY_MS = 180;
+const FILTER_SETTLE_DELAY_MS = 350;
 
 type PreviewImage = {
   blobUrl: string;
@@ -68,7 +72,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const [baselinePreviews, setBaselinePreviews] = useState<Record<number, PreviewImage>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewRequestTick, setPreviewRequestTick] = useState(0);
+  const loadingRef = useRef(false);
   const currentTokenRef = useRef(0);
+  const previewRequestInFlightRef = useRef(false);
+  const pendingPreviewRequestRef = useRef(false);
   const previewRef = useRef<AssetPreviewImage | null>(null);
   const baselinePreviewsRef = useRef<Record<number, PreviewImage>>({});
   const resolvedPreviewBasesRef = useRef<Set<number>>(new Set());
@@ -80,12 +88,62 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const [containerH, setContainerH] = useState(0);
   // 隐藏图片直到 fit 计算完成，避免切换时闪烁到左上角
   const [imgVisible, setImgVisible] = useState(false);
+  const [isZooming, setIsZooming] = useState(false);
+  const [isFilterSettling, setIsFilterSettling] = useState(false);
+  const [gpuInteractiveReady, setGpuInteractiveReady] = useState(false);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // 防止全分辨率预览替换缩略图时重复 fit
   const hasFitRef = useRef(false);
   const fitScaleRef = useRef(1);
+  const zoomIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filterSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filterSettlingRef = useRef(false);
+  const focusedBaselinePreview = focused ? baselinePreviews[focused.id] ?? null : null;
+  const gpuInteractiveSrc: string | null = (() => {
+    if (!focused) return null;
+    if (focused.is_raw) return focusedBaselinePreview?.blobUrl ?? null;
+    try { return convertFileSrc(focused.file_path); } catch { return null; }
+  })();
+  const canUseGpuInteractivePreview =
+    !!focused && (isAdjustingFilter || isFilterSettling) && !showOriginal && !!gpuInteractiveSrc;
+  const nativeMaxEdge = Math.max(focused?.width ?? 0, focused?.height ?? 0);
+  const fullResolutionScaleThreshold = nativeMaxEdge > SETTLED_PREVIEW_MAX_EDGE
+    ? (SETTLED_PREVIEW_MAX_EDGE * FULL_RESOLUTION_PREVIEW_OVERSAMPLE)
+      / (nativeMaxEdge * Math.max(window.devicePixelRatio || 1, 1))
+    : Number.POSITIVE_INFINITY;
+  const useFullResolutionPreview =
+    !isAdjustingFilter && !isFilterSettling && !isZooming && scale >= fullResolutionScaleThreshold;
+
+  const setPreviewLoading = useCallback((next: boolean) => {
+    loadingRef.current = next;
+    setLoading(next);
+  }, []);
+
+  const markZooming = useCallback(() => {
+    setIsZooming(true);
+    if (zoomIdleTimerRef.current) {
+      clearTimeout(zoomIdleTimerRef.current);
+    }
+    zoomIdleTimerRef.current = setTimeout(() => {
+      zoomIdleTimerRef.current = null;
+      setIsZooming(false);
+    }, ZOOM_IDLE_DELAY_MS);
+  }, []);
+
+  const startFilterSettling = useCallback(() => {
+    filterSettlingRef.current = true;
+    setIsFilterSettling(true);
+    if (filterSettleTimerRef.current) {
+      clearTimeout(filterSettleTimerRef.current);
+    }
+    filterSettleTimerRef.current = setTimeout(() => {
+      filterSettleTimerRef.current = null;
+      filterSettlingRef.current = false;
+      setIsFilterSettling(false);
+    }, FILTER_SETTLE_DELAY_MS);
+  }, []);
 
   // 重置到 fit 状态：容器为图片原始尺寸，scale 缩放到占 viewport 80% 并居中
   // 优先用 store 里的 focused 尺寸（DB EXIF），缺失时回退到已加载 img 的 naturalWidth/Height，
@@ -110,8 +168,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 
   // 以视口中心为锚切换到指定 scale
   const setZoomLevel = useCallback((next: number) => {
+    if (loadingRef.current) return;
     const vp = viewportRef.current;
     if (!vp) return;
+    markZooming();
     const vpW = vp.clientWidth;
     const vpH = vp.clientHeight;
     setScale((prev) => {
@@ -121,10 +181,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       setTy((prevTy) => vpH / 2 - ratio * (vpH / 2 - prevTy));
       return next;
     });
-  }, []);
+  }, [markZooming]);
 
   useImperativeHandle(ref, () => ({
-    fitToView: resetToFit,
+    fitToView: () => {
+      if (!loadingRef.current) resetToFit();
+    },
     setZoomLevel,
   }), [resetToFit, setZoomLevel]);
 
@@ -132,6 +194,27 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   useEffect(() => {
     onScaleChange?.(scale, fitScaleRef.current);
   }, [scale, onScaleChange]);
+
+  useEffect(() => {
+    if (!gpuInteractiveSrc) {
+      setGpuInteractiveReady(false);
+    }
+  }, [gpuInteractiveSrc]);
+
+  useLayoutEffect(() => {
+    startFilterSettling();
+  }, [filter]);
+
+  useEffect(() => {
+    return () => {
+      if (zoomIdleTimerRef.current) {
+        clearTimeout(zoomIdleTimerRef.current);
+      }
+      if (filterSettleTimerRef.current) {
+        clearTimeout(filterSettleTimerRef.current);
+      }
+    };
+  }, []);
 
   // 切换素材时重置 fit。用 useLayoutEffect 保证在浏览器 paint 之前同步完成布局，
   // 否则会先以「旧 scale + 新图」画一帧，视觉上像放大然后缩小。
@@ -165,7 +248,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   useEffect(() => {
     if (!focused) {
       setPreview(null);
-      setLoading(false);
+      setPreviewLoading(false);
       return;
     }
 
@@ -189,7 +272,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         resolvedPreviewBasesRef.current.has(focused.id)
       )
       : true;
-    setLoading(false);
+    setPreviewLoading(false);
 
     if (focused.is_raw && !hasCurrentDisplay) {
       api.hasPreviewBase(focused.id)
@@ -198,24 +281,60 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
           if (hasBase) {
             resolvedPreviewBasesRef.current.add(focused.id);
           } else {
-            setLoading(true);
+            setPreviewLoading(true);
           }
         })
         .catch(() => {
-          if (currentTokenRef.current === token) setLoading(true);
+          if (currentTokenRef.current === token) setPreviewLoading(true);
         });
     }
 
-    const previewMaxEdge = isAdjustingFilter ? INTERACTIVE_PREVIEW_MAX_EDGE : SETTLED_PREVIEW_MAX_EDGE;
-    const previewDelay = isAdjustingFilter ? INTERACTIVE_PREVIEW_DELAY_MS : SETTLED_PREVIEW_DELAY_MS;
+    const filterSettlingNow = isFilterSettling || filterSettlingRef.current;
+    const canUseGpuNow =
+      !!focused && (isAdjustingFilter || filterSettlingNow) && !showOriginal && !!gpuInteractiveSrc;
+
+    if (canUseGpuNow) {
+      pendingPreviewRequestRef.current = false;
+      return;
+    }
+
+    const previewMaxEdge = useFullResolutionPreview
+      ? undefined
+      : isAdjustingFilter
+        ? INTERACTIVE_PREVIEW_MAX_EDGE
+        : SETTLED_PREVIEW_MAX_EDGE;
+    const previewMode = useFullResolutionPreview
+      ? "full"
+      : isAdjustingFilter
+        ? "interactive"
+        : "settled";
+    const previewDelay = !hasCurrentDisplay
+      ? 0
+      : isAdjustingFilter || filterSettlingNow
+        ? INTERACTIVE_PREVIEW_DELAY_MS
+        : SETTLED_PREVIEW_DELAY_MS;
+
+    if (previewRequestInFlightRef.current) {
+      pendingPreviewRequestRef.current = true;
+      return;
+    }
 
     const handle = setTimeout(async () => {
       const isIdentity = isIdentityFilter(filter);
 
       if (currentTokenRef.current !== token) return;
+      previewRequestInFlightRef.current = true;
+
+      const schedulePendingPreview = () => {
+        previewRequestInFlightRef.current = false;
+        if (pendingPreviewRequestRef.current) {
+          pendingPreviewRequestRef.current = false;
+          setPreviewRequestTick((v) => v + 1);
+        }
+      };
 
       const doPreview = async () => {
-        const r = await api.getPreview(focused.id, filter, previewMaxEdge, token);
+        const r = await api.getPreview(focused.id, filter, previewMode, previewMaxEdge, token);
         if (currentTokenRef.current !== token) return;
         const src = convertFileSrc(r.path);
         if (isIdentity && focused.is_raw) {
@@ -234,34 +353,31 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
           setPreview(nextPreview);
         }
         setPreviewSize({ width: r.width, height: r.height }, focused.id);
-        setLoading(false);
+        setPreviewLoading(false);
       };
 
       try {
         await doPreview();
       } catch (e) {
-        if (currentTokenRef.current !== token) return;
-        if (String(e).includes("preview_cancelled")) return;
+        if (currentTokenRef.current !== token) {
+          return;
+        }
+        if (String(e).includes("preview_cancelled")) {
+          return;
+        }
         if (String(e).includes("preview_busy")) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          if (currentTokenRef.current !== token) return;
-          try {
-            await doPreview();
-          } catch (e2) {
-            if (currentTokenRef.current === token && !String(e2).includes("preview_cancelled")) {
-              setError(String(e2));
-              setLoading(false);
-            }
-          }
+          pendingPreviewRequestRef.current = true;
         } else {
           setError(String(e));
-          setLoading(false);
+          setPreviewLoading(false);
         }
+      } finally {
+        schedulePendingPreview();
       }
     }, previewDelay);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, filter, isAdjustingFilter]);
+  }, [focused?.id, filter, isAdjustingFilter, isFilterSettling, useFullResolutionPreview, canUseGpuInteractivePreview, previewRequestTick]);
 
   // Clear preview when switching to a different photo, so old effect doesn't persist.
   useEffect(() => {
@@ -273,8 +389,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     {
       onWheel: ({ delta: [, dy], event }) => {
         event.preventDefault();
+        if (loadingRef.current) return;
         const vp = viewportRef.current;
         if (!vp) return;
+        markZooming();
         const rect = vp.getBoundingClientRect();
         const mouseX = (event as WheelEvent).clientX - rect.left;
         const mouseY = (event as WheelEvent).clientY - rect.top;
@@ -296,7 +414,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         setTx((prev) => prev + dx);
         setTy((prev) => prev + dy);
       },
-      onDoubleClick: () => resetToFit(),
+      onDoubleClick: () => {
+        if (loadingRef.current) return;
+        markZooming();
+        resetToFit();
+      },
     },
     {
       wheel: { eventOptions: { passive: false } },
@@ -375,7 +497,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   }
 
   const currentPreview = preview?.assetId === focused.id ? preview : null;
-  const currentBaselinePreview = baselinePreviews[focused.id] ?? null;
+  const currentBaselinePreview = focusedBaselinePreview;
   const previewSrc = currentPreview?.blobUrl ?? null;
   const baselineSrc = currentBaselinePreview?.blobUrl ?? null;
   const originalSrc = focused.is_raw ? baselineSrc : convertFileSrc(focused.file_path);
@@ -389,6 +511,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   })();
 
   const displaySrc = previewSrc ?? baselineSrc ?? placeholderSrc;
+  const hasImageSource = !!displaySrc || !!originalSrc;
+  const canShowSkeleton = !!focused.width && !!focused.height && !!containerW && !!containerH;
+  const showSkeleton = canShowSkeleton && loading && !hasImageSource;
 
   const wmDims: { width: number; height: number } | null = (() => {
     if (focused.width && focused.height) return { width: focused.width, height: focused.height };
@@ -422,7 +547,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                   {error}
                 </div>
               </div>
-            ) : displaySrc || originalSrc ? (
+            ) : displaySrc || originalSrc || showSkeleton ? (
               <div
                 style={{
                   transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
@@ -433,9 +558,21 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                   width: containerW || undefined,
                   height: containerH || undefined,
                   lineHeight: 0,
-                  visibility: imgVisible ? "visible" : "hidden",
                 }}
               >
+                {showSkeleton && (
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      overflow: "hidden",
+                      background: "rgba(24, 24, 27, 0.7)",
+                    }}
+                  >
+                    <div className="h-full w-full animate-pulse bg-gradient-to-br from-zinc-800 via-zinc-700/70 to-zinc-900" />
+                  </div>
+                )}
                 {displaySrc && (
                   <img
                     ref={imgRef}
@@ -445,7 +582,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                       display: "block",
                       width: "100%",
                       height: "100%",
-                      opacity: imgVisible && !showingOriginal ? 1 : 0,
+                      opacity: imgVisible && !showingOriginal && !(canUseGpuInteractivePreview && gpuInteractiveReady) ? 1 : 0,
                       WebkitUserSelect: "none",
                       WebkitTouchCallout: "none",
                     }}
@@ -485,6 +622,14 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                       height: "100%",
                     }}
                     draggable={false}
+                  />
+                )}
+                {gpuInteractiveSrc && (
+                  <GpuInteractivePreviewCanvas
+                    src={gpuInteractiveSrc}
+                    filter={filter}
+                    visible={imgVisible && canUseGpuInteractivePreview && gpuInteractiveReady}
+                    onReadyChange={setGpuInteractiveReady}
                   />
                 )}
                 {!showOriginal && watermark.enabled && wmDims && (
@@ -561,4 +706,272 @@ function WatermarkOverlay({
       }}
     />
   );
+}
+
+function GpuInteractivePreviewCanvas({
+  src,
+  filter,
+  visible,
+  onReadyChange,
+}: {
+  src: string;
+  filter: FilterSettings;
+  visible: boolean;
+  onReadyChange: (ready: boolean) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const glStateRef = useRef<{
+    gl: WebGLRenderingContext;
+    program: WebGLProgram;
+    texture: WebGLTexture;
+    buffer: WebGLBuffer;
+    vertexShader: WebGLShader;
+    fragmentShader: WebGLShader;
+    uniforms: {
+      exposure: WebGLUniformLocation | null;
+      brightness: WebGLUniformLocation | null;
+      contrast: WebGLUniformLocation | null;
+      saturation: WebGLUniformLocation | null;
+      wb: WebGLUniformLocation | null;
+    };
+  } | null>(null);
+  const latestFilterRef = useRef(filter);
+  const drawRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    latestFilterRef.current = filter;
+  }, [filter]);
+
+  const draw = useCallback((settings: FilterSettings) => {
+    const state = glStateRef.current;
+    const canvas = canvasRef.current;
+    if (!state || !canvas) return false;
+
+    const { gl, program } = state;
+    const cssW = Math.max(1, canvas.clientWidth);
+    const cssH = Math.max(1, canvas.clientHeight);
+    const dpr = Math.max(window.devicePixelRatio || 1, 1);
+    const scale = Math.min(1, GPU_INTERACTIVE_CANVAS_MAX_EDGE / Math.max(cssW, cssH));
+    const width = Math.max(1, Math.round(cssW * dpr * scale));
+    const height = Math.max(1, Math.round(cssH * dpr * scale));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(program);
+    gl.uniform1f(state.uniforms.exposure, settings.exposure);
+    gl.uniform1f(state.uniforms.brightness, settings.brightness * 0.005);
+    gl.uniform1f(state.uniforms.contrast, 1 + settings.contrast * 0.01);
+    gl.uniform1f(
+      state.uniforms.saturation,
+      Math.max(0, 1 + (settings.color_saturation + settings.vibrance * 0.5) * 0.01),
+    );
+    gl.uniform3f(
+      state.uniforms.wb,
+      1 + settings.wb_shift_r * 0.005,
+      1 + settings.wb_shift_g * 0.005,
+      1 + settings.wb_shift_b * 0.005,
+    );
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    return true;
+  }, []);
+
+  const scheduleDraw = useCallback((settings: FilterSettings) => {
+    latestFilterRef.current = settings;
+    if (drawRafRef.current != null) return;
+    drawRafRef.current = requestAnimationFrame(() => {
+      drawRafRef.current = null;
+      if (draw(latestFilterRef.current)) {
+        onReadyChange(true);
+      }
+    });
+  }, [draw, onReadyChange]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let cancelled = false;
+    onReadyChange(false);
+
+    const cleanup = () => {
+      if (drawRafRef.current != null) {
+        cancelAnimationFrame(drawRafRef.current);
+        drawRafRef.current = null;
+      }
+      const state = glStateRef.current;
+      if (!state) return;
+      state.gl.deleteTexture(state.texture);
+      state.gl.deleteBuffer(state.buffer);
+      state.gl.deleteShader(state.vertexShader);
+      state.gl.deleteShader(state.fragmentShader);
+      state.gl.deleteProgram(state.program);
+      glStateRef.current = null;
+    };
+    cleanup();
+
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (cancelled) return;
+
+      const gl = canvas.getContext("webgl", {
+        alpha: false,
+        antialias: false,
+        depth: false,
+        stencil: false,
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: false,
+      });
+      if (!gl) return;
+
+      const vertexShader = compileShader(gl, gl.VERTEX_SHADER, `
+        attribute vec2 a_position;
+        attribute vec2 a_texCoord;
+        varying vec2 v_texCoord;
+        void main() {
+          gl_Position = vec4(a_position, 0.0, 1.0);
+          v_texCoord = a_texCoord;
+        }
+      `);
+      const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+        precision mediump float;
+        uniform sampler2D u_image;
+        uniform float u_exposure;
+        uniform float u_brightness;
+        uniform float u_contrast;
+        uniform float u_saturation;
+        uniform vec3 u_wb;
+        varying vec2 v_texCoord;
+
+        vec3 applySaturation(vec3 c, float sat) {
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          return mix(vec3(l), c, sat);
+        }
+
+        void main() {
+          vec3 c = texture2D(u_image, v_texCoord).rgb;
+          float l0 = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.00001);
+          c *= u_wb;
+          float l1 = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.00001);
+          c *= l0 / l1;
+          c *= pow(2.0, u_exposure);
+          c += vec3(u_brightness);
+          c = (c - vec3(0.5)) * u_contrast + vec3(0.5);
+          c = applySaturation(c, u_saturation);
+          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+        }
+      `);
+      const program = linkProgram(gl, vertexShader, fragmentShader);
+      gl.useProgram(program);
+
+      const buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([
+          -1, -1, 0, 1,
+           1, -1, 1, 1,
+          -1,  1, 0, 0,
+          -1,  1, 0, 0,
+           1, -1, 1, 1,
+           1,  1, 1, 0,
+        ]),
+        gl.STATIC_DRAW,
+      );
+
+      const stride = 4 * 4;
+      const posLoc = gl.getAttribLocation(program, "a_position");
+      gl.enableVertexAttribArray(posLoc);
+      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, stride, 0);
+      const texLoc = gl.getAttribLocation(program, "a_texCoord");
+      gl.enableVertexAttribArray(texLoc);
+      gl.vertexAttribPointer(texLoc, 2, gl.FLOAT, false, stride, 2 * 4);
+
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+      glStateRef.current = {
+        gl,
+        program,
+        texture,
+        buffer,
+        vertexShader,
+        fragmentShader,
+        uniforms: {
+          exposure: gl.getUniformLocation(program, "u_exposure"),
+          brightness: gl.getUniformLocation(program, "u_brightness"),
+          contrast: gl.getUniformLocation(program, "u_contrast"),
+          saturation: gl.getUniformLocation(program, "u_saturation"),
+          wb: gl.getUniformLocation(program, "u_wb"),
+        },
+      };
+      if (draw(latestFilterRef.current)) {
+        onReadyChange(true);
+      }
+    };
+    image.src = src;
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [src, draw, onReadyChange]);
+
+  useEffect(() => {
+    scheduleDraw(filter);
+  }, [filter, scheduleDraw]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        opacity: visible ? 1 : 0,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
+function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("createShader failed");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader) || "shader compile failed";
+    gl.deleteShader(shader);
+    throw new Error(log);
+  }
+  return shader;
+}
+
+function linkProgram(
+  gl: WebGLRenderingContext,
+  vertexShader: WebGLShader,
+  fragmentShader: WebGLShader,
+): WebGLProgram {
+  const program = gl.createProgram();
+  if (!program) throw new Error("createProgram failed");
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(program) || "program link failed";
+    gl.deleteProgram(program);
+    throw new Error(log);
+  }
+  return program;
 }

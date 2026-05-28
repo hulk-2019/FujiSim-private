@@ -192,6 +192,8 @@ export type HistogramData = {
   totalPixels: number;
 };
 
+export type PreviewMode = "interactive" | "settled" | "full";
+
 /** 预览渲染结果。`path` 是本地文件路径，前端用 convertFileSrc(path) 加载 */
 export type PreviewResult = {
   path: string;

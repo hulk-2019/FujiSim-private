@@ -4,12 +4,21 @@ use crate::db::assets;
 use crate::error::{AppError, Result};
 use crate::processing::{self, FilterSettings};
 use crate::state::{PreviewBaseCacheKey, Rgb16Image, SharedState};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::State;
 
 const DISK_PREVIEW_BASE_MAX_EDGE: u32 = 1920;
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewMode {
+    Interactive,
+    Settled,
+    Full,
+}
 
 /// 预览结果。前端用 convertFileSrc(path) 加载本地文件，零 IPC 传输开销。
 #[derive(Debug, Serialize, Clone)]
@@ -43,6 +52,7 @@ pub async fn get_preview(
     state: State<'_, SharedState>,
     asset_id: i64,
     settings: Option<FilterSettings>,
+    mode: PreviewMode,
     max_edge: Option<u32>,
     token: u64,
 ) -> Result<PreviewResult> {
@@ -58,14 +68,13 @@ pub async fn get_preview(
         .map(|(w, h)| w.max(h).max(1) as u32);
     let settings = settings.unwrap_or_default();
     let lut = super::cached_lut(&state, settings.lut_file_path.as_deref())?;
-    let export_pool = state.export_pool.clone();
+    let preview_pool = state.preview_pool.clone();
     let sem = state.preview_sem.clone();
     let preview_token = state.preview_token.clone();
     let state_for_render = state.inner().clone();
 
     let permit = sem
-        .acquire_owned()
-        .await
+        .try_acquire_owned()
         .map_err(|_| AppError::other("preview_busy"))?;
 
     // 等到拿到 permit 后再检查一次，可能已经有更新的请求进来了
@@ -75,10 +84,13 @@ pub async fn get_preview(
 
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        export_pool.install(|| {
-            let persist_to_disk = max_edge
-                .map(|edge| edge >= DISK_PREVIEW_BASE_MAX_EDGE)
-                .unwrap_or(true);
+        preview_pool.install(|| {
+            let total_start = Instant::now();
+            tracing::debug!(asset_id, token, ?mode, ?max_edge, "preview render start");
+
+            let persist_to_disk = matches!(mode, PreviewMode::Settled)
+                && max_edge.is_some_and(|edge| edge >= DISK_PREVIEW_BASE_MAX_EDGE);
+            let base_start = Instant::now();
             let resized = load_preview_base(
                 &state_for_render,
                 asset_id,
@@ -87,27 +99,60 @@ pub async fn get_preview(
                 native_max_edge,
                 persist_to_disk,
             )?;
+            let base_ms = base_start.elapsed().as_millis();
 
             // Check token after decode (decode is the most expensive part)
             if preview_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
             }
 
+            let interactive_preview = matches!(mode, PreviewMode::Interactive);
+            let render_settings = if interactive_preview {
+                settings.interactive_preview()
+            } else {
+                settings.clone()
+            };
             let (rw, rh) = resized.dimensions();
-            let processed = crate::processing::process_image(&resized, &settings, lut.as_deref())?;
+            let process_start = Instant::now();
+            let processed =
+                crate::processing::process_image(&resized, &render_settings, lut.as_deref())?;
+            let process_ms = process_start.elapsed().as_millis();
             if preview_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
             }
+            let jpeg_quality = if interactive_preview {
+                78
+            } else {
+                88
+            };
+            let encode_start = Instant::now();
             let jpeg =
-                crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, 88)?;
+                crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, jpeg_quality)?;
+            let encode_ms = encode_start.elapsed().as_millis();
             if preview_token.load(Ordering::SeqCst) != token {
                 return Err(AppError::other("preview_cancelled"));
             }
             let variant = if settings.is_identity() { "base" } else { "edit" };
             let out_path =
                 std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
+            let write_start = Instant::now();
             std::fs::write(&out_path, &jpeg)
                 .map_err(|e| AppError::other(format!("preview write: {e}")))?;
+            let write_ms = write_start.elapsed().as_millis();
+            tracing::debug!(
+                asset_id,
+                token,
+                ?mode,
+                ?max_edge,
+                width = rw,
+                height = rh,
+                base_ms,
+                process_ms,
+                encode_ms,
+                write_ms,
+                total_ms = total_start.elapsed().as_millis(),
+                "preview render finished"
+            );
             Ok(PreviewResult {
                 path: out_path.to_string_lossy().to_string(),
                 width: rw,
@@ -131,27 +176,32 @@ pub(crate) fn load_preview_base(
 
     if let Ok(mut cache) = state.preview_base_cache.lock() {
         if let Some(img) = cache.get(key) {
+            tracing::debug!(asset_id, ?max_edge, "preview base memory cache hit");
             return Ok(img);
         }
     }
 
     let cache_path = processing::raw::preview_base_path(&state.raw_original_dir, asset_id);
+    let mut should_write_disk = false;
     let img = if cache_path.exists() {
-        match crate::vips_io::decode_to_rgb16(&cache_path).and_then(|img| {
-            if disk_base_satisfies_request(&img, max_edge, native_max_edge) {
-                resize_to_max_edge(img, max_edge)
-            } else {
-                Err(AppError::other("cached preview base is smaller than requested"))
+        match crate::vips_io::decode_to_rgb16(&cache_path) {
+            Ok(img) if disk_base_satisfies_request(&img, max_edge, native_max_edge) => {
+                tracing::debug!(asset_id, ?max_edge, "preview base disk cache hit");
+                resize_to_max_edge(img, max_edge)?
             }
-        }) {
-            Ok(img) => img,
-            Err(_) => decode_and_resize(path, max_edge)?,
+            _ => {
+                tracing::debug!(asset_id, ?max_edge, "preview base disk cache stale");
+                should_write_disk = persist_to_disk;
+                decode_and_resize(path, max_edge)?
+            }
         }
     } else {
+        tracing::debug!(asset_id, ?max_edge, "preview base cache miss");
+        should_write_disk = persist_to_disk;
         decode_and_resize(path, max_edge)?
     };
 
-    if persist_to_disk && !cache_path.exists() {
+    if should_write_disk {
         if let Err(e) = crate::vips_io::encode_rgb16_to_file(
             &img,
             &cache_path,
@@ -174,12 +224,12 @@ fn disk_base_satisfies_request(
     max_edge: Option<u32>,
     native_max_edge: Option<u32>,
 ) -> bool {
-    let Some(requested_max_edge) = max_edge else {
-        return true;
+    let requested_output_edge = match (max_edge, native_max_edge) {
+        (Some(requested), Some(native)) => native.min(requested),
+        (Some(requested), None) => requested,
+        (None, Some(native)) => native,
+        (None, None) => return false,
     };
-    let requested_output_edge = native_max_edge
-        .map(|native| native.min(requested_max_edge))
-        .unwrap_or(requested_max_edge);
     img.width().max(img.height()) >= requested_output_edge
 }
 

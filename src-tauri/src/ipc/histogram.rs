@@ -31,14 +31,13 @@ pub async fn compute_histogram(
         .map(|(w, h)| w.max(h).max(1) as u32);
     let settings = settings.unwrap_or_default();
     let lut = super::cached_lut(&state, settings.lut_file_path.as_deref())?;
-    let export_pool = state.export_pool.clone();
+    let preview_pool = state.preview_pool.clone();
     let sem = state.preview_sem.clone();
     let histogram_token = state.histogram_token.clone();
     let state_for_render = state.inner().clone();
 
     let permit = sem
-        .acquire_owned()
-        .await
+        .try_acquire_owned()
         .map_err(|_| AppError::other("preview_busy"))?;
 
     if histogram_token.load(Ordering::SeqCst) != token {
@@ -47,7 +46,7 @@ pub async fn compute_histogram(
 
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        export_pool.install(|| {
+        preview_pool.install(|| {
             let resized = super::preview::load_preview_base(
                 &state_for_render,
                 asset_id,
