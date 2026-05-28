@@ -143,12 +143,33 @@ export function AssetStrip() {
     }
     return set;
   }, [virtualItems, assets]);
+  const visibleRawMissingCoverIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const v of virtualItems) {
+      const asset = assets[v.index];
+      if (asset?.is_raw && !asset.cover_path) {
+        ids.add(asset.id);
+      }
+    }
+    return Array.from(ids);
+  }, [virtualItems, assets]);
+  const visibleRawMissingCoverKey = visibleRawMissingCoverIds.join(",");
 
   useEffect(() => {
     pendingPages.forEach((offset) => {
       loadPage(offset);
     });
   }, [pendingPages, loadPage]);
+
+  useEffect(() => {
+    if (visibleRawMissingCoverIds.length === 0) return;
+    const handle = window.setTimeout(() => {
+      api
+        .requestCovers(visibleRawMissingCoverIds, query.project_id ?? null, 100)
+        .catch((e) => console.error("[AssetStrip] request covers failed:", e));
+    }, 120);
+    return () => window.clearTimeout(handle);
+  }, [visibleRawMissingCoverKey, query.project_id]);
 
   function handleClick(asset: Asset, e: React.MouseEvent) {
     if (e.shiftKey) selectRange(asset.id);

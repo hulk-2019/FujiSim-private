@@ -108,6 +108,7 @@ pub fn run() {
             ipc::get_preview_base,
             ipc::get_cover_dir,
             ipc::set_cover_concurrency,
+            ipc::request_covers,
             ipc::auto_white_balance,
             ipc::eyedrop_color,
             ipc::compute_histogram,

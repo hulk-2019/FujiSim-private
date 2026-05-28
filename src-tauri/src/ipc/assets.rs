@@ -123,6 +123,27 @@ pub async fn list_assets(
 }
 
 #[tauri::command]
+pub async fn request_covers(
+    state: State<'_, SharedState>,
+    app: tauri::AppHandle,
+    asset_ids: Vec<i64>,
+    project_id: Option<i64>,
+    priority: Option<i64>,
+) -> Result<()> {
+    if asset_ids.is_empty() {
+        return Ok(());
+    }
+    state.cover_queue.enqueue_with_priority(
+        asset_ids,
+        project_id,
+        priority.unwrap_or(100).clamp(0, 100),
+        state.inner().clone(),
+        app,
+    );
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_asset(state: State<'_, SharedState>, id: i64) -> Result<assets::Asset> {
     assets::get(&state.pool, id).await
 }
@@ -252,8 +273,7 @@ pub async fn move_assets(
 }
 
 /// 后台 EXIF 提取 worker：循环取出 exif_extracted=0 的资产，
-/// 通过 io_sem（共享，permits=4）串行控制并发，每次 acquire 后 await 完成再继续，
-/// 保证同时运行的 blocking 线程数不超过 4。
+/// 通过 BackgroundResourceLimiter 申请 IO 令牌，避免和 cover/预热等后台任务叠满。
 fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
     tokio::task::spawn(async move {
         loop {
@@ -266,11 +286,10 @@ fn start_exif_worker(state: SharedState, app: tauri::AppHandle) {
             }
 
             for asset in batch {
-                let permit = state.io_sem.clone().acquire_owned().await;
-                let Ok(permit) = permit else { break };
+                let permit = state.background_limiter.acquire_exif().await;
+                let Some(permit) = permit else { break };
                 let pool = state.pool.clone();
                 let app2 = app.clone();
-                // await 每个任务完成后再 acquire 下一个 permit，真正串行限流
                 let _ = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
                     let path = std::path::Path::new(&asset.file_path);

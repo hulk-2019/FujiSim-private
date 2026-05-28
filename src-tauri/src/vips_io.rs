@@ -3,7 +3,7 @@ use crate::export::ExportFormat;
 use image::{ImageBuffer, Rgb, RgbaImage};
 use libvips::ops::{
     Angle, BandFormat, CastOptions, Direction, JpegsaveBufferOptions, Kernel, PngsaveBufferOptions,
-    ResizeOptions, WebpsaveBufferOptions,
+    ResizeOptions, Size, ThumbnailBufferOptions, WebpsaveBufferOptions,
 };
 use libvips::{ops, VipsApp, VipsImage};
 use once_cell::sync::Lazy;
@@ -111,6 +111,35 @@ pub fn image_dimensions(path: &Path) -> Result<(u32, u32)> {
     let vimg = VipsImage::new_from_file(path_str)
         .map_err(|e| AppError::Vips(format!("dimensions {path_str}: {e}")))?;
     Ok((vimg.get_width() as u32, vimg.get_height() as u32))
+}
+
+pub fn jpeg_thumbnail_buffer(data: &[u8], max_edge: u32, quality: u8) -> Result<Vec<u8>> {
+    ensure_init();
+    let max_edge = max_edge.max(1) as i32;
+    let vimg = ops::thumbnail_buffer_with_opts(
+        data,
+        max_edge,
+        &ThumbnailBufferOptions {
+            height: max_edge,
+            size: Size::Down,
+            // RAW 外层 IFD 可能才有 orientation。这里不让 libvips 自动旋转，
+            // 统一在 raw.rs 中对最终小 JPEG 做一次方向校正。
+            no_rotate: true,
+            ..ThumbnailBufferOptions::default()
+        },
+    )
+    .map_err(|e| AppError::Vips(format!("thumbnail buffer: {e}")))?;
+    let vimg8 = ops::cast_with_opts(&vimg, BandFormat::Uchar, &CastOptions { shift: true })
+        .map_err(|e| AppError::Vips(format!("thumbnail cast uchar: {e}")))?;
+    ops::jpegsave_buffer_with_opts(
+        &vimg8,
+        &JpegsaveBufferOptions {
+            q: quality as i32,
+            optimize_coding: true,
+            ..JpegsaveBufferOptions::default()
+        },
+    )
+    .map_err(|e| AppError::Vips(format!("thumbnail jpeg save: {e}")))
 }
 
 // ── encode ────────────────────────────────────────────────────────────────────

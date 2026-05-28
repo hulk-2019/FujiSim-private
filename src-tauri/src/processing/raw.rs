@@ -475,10 +475,10 @@ impl<'a> Tiff<'a> {
     }
 }
 
-/// 从 RAW 文件提取嵌入 JPEG，缩放到 200px 长边后返回 JPEG 字节。
+/// 从 RAW 文件提取嵌入 JPEG，缩放到封面长边后返回 JPEG 字节。
 ///
 /// 用于导入时快速生成封面图，不做 LibRaw 全解码。
-/// 包含 orientation 校正（200px 小图旋转成本可忽略）。
+/// 包含 orientation 校正（小图旋转成本可忽略）。
 pub fn extract_cover_fast(path: &Path) -> Result<Vec<u8>> {
     let data = std::fs::read(path)?;
 
@@ -492,12 +492,27 @@ pub fn extract_cover_fast(path: &Path) -> Result<Vec<u8>> {
         .or_else(|| read_tiff_file_orientation(&data))
         .unwrap_or(1);
 
-    let src = crate::vips_io::decode_bytes_to_rgb16(&jpeg)
+    const MAX_EDGE: u32 = 128;
+    let cover = match crate::vips_io::jpeg_thumbnail_buffer(&jpeg, MAX_EDGE, 85) {
+        Ok(cover) => cover,
+        Err(e) => {
+            tracing::warn!(
+                path = %path.display(),
+                error = %e,
+                "cover fast thumbnail failed, falling back to image decode"
+            );
+            resize_embedded_jpeg_cover(&jpeg, MAX_EDGE, 85)?
+        }
+    };
+    apply_jpeg_orientation(cover, orientation)
+}
+
+fn resize_embedded_jpeg_cover(jpeg: &[u8], max_edge: u32, quality: u8) -> Result<Vec<u8>> {
+    let src = crate::vips_io::decode_bytes_to_rgb16(jpeg)
         .map_err(|e| AppError::other(format!("cover decode: {e}")))?;
     let (w, h) = src.dimensions();
-    const MAX_EDGE: u32 = 200;
-    let resized = if w.max(h) > MAX_EDGE {
-        let scale = MAX_EDGE as f32 / w.max(h) as f32;
+    let resized = if w.max(h) > max_edge {
+        let scale = max_edge as f32 / w.max(h) as f32;
         let nw = ((w as f32 * scale).round() as u32).max(1);
         let nh = ((h as f32 * scale).round() as u32).max(1);
         crate::vips_io::resize_rgb16(&src, nw, nh)
@@ -505,8 +520,7 @@ pub fn extract_cover_fast(path: &Path) -> Result<Vec<u8>> {
     } else {
         src
     };
-    let resized = apply_orientation_rgb16(resized, orientation);
-    crate::vips_io::encode_rgb16(&resized, crate::export::ExportFormat::Jpeg, 85)
+    crate::vips_io::encode_rgb16(&resized, crate::export::ExportFormat::Jpeg, quality)
         .map_err(|e| AppError::other(format!("cover encode: {e}")))
 }
 

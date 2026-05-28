@@ -173,6 +173,12 @@ export const api = {
 
   setCoverConcurrency: (n: number) =>
     invoke<void>("set_cover_concurrency", { n }),
+  requestCovers: (assetIds: number[], projectId?: number | null, priority?: number) =>
+    invoke<void>("request_covers", {
+      assetIds,
+      projectId: projectId ?? null,
+      priority: priority ?? null,
+    }),
 
   /**
    * 启动批量导出。返回新建的 task_id；

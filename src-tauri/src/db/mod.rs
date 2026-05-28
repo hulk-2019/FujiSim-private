@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 pub mod projects;
 pub mod app_settings;
+pub mod asset_derivatives;
 pub mod asset_render_cache;
 pub mod assets;
 pub mod preset_categories;
@@ -62,6 +63,8 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE watermark_presets ADD COLUMN deleted_at TEXT",
         "ALTER TABLE assets ADD COLUMN exif_extracted INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE assets ADD COLUMN cover_path TEXT",
+        "ALTER TABLE asset_derivatives ADD COLUMN locked_by TEXT",
+        "ALTER TABLE asset_derivatives ADD COLUMN locked_at INTEGER",
         "ALTER TABLE projects ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE projects ADD COLUMN deleted_at TEXT",
         "ALTER TABLE filter_presets ADD COLUMN category_id INTEGER",
@@ -187,6 +190,9 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    crate::db::asset_derivatives::reset_running_cover_jobs(pool).await?;
+    crate::db::asset_derivatives::reset_recoverable_cover_jobs(pool).await?;
+
     Ok(())
 }
 
@@ -223,6 +229,28 @@ CREATE TABLE IF NOT EXISTS assets (
 CREATE INDEX IF NOT EXISTS idx_assets_date ON assets(date_taken);
 CREATE INDEX IF NOT EXISTS idx_assets_camera ON assets(camera_model);
 CREATE INDEX IF NOT EXISTS idx_assets_rating ON assets(star_rating);
+
+-- 资产衍生物任务/产物表：cover、preview_base、tile 等后台生成状态统一落这里
+CREATE TABLE IF NOT EXISTS asset_derivatives (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL DEFAULT 0, -- 0 表示不属于具体项目
+    kind TEXT NOT NULL,                    -- cover / preview_base / tile
+    status TEXT NOT NULL,                  -- queued / running / done / failed
+    path TEXT,
+    priority INTEGER NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    locked_by TEXT,
+    locked_at INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(asset_id, project_id, kind),
+    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_asset_derivatives_status_priority
+    ON asset_derivatives(status, priority, created_at);
 
 -- 项目：纯逻辑分组，不影响物理文件
 CREATE TABLE IF NOT EXISTS projects (

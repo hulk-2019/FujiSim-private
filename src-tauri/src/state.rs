@@ -8,9 +8,53 @@ use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 pub type Rgb16Image = ImageBuffer<Rgb<u16>, Vec<u16>>;
+
+pub struct BackgroundResourceLimiter {
+    cpu: Arc<Semaphore>,
+    io: Arc<Semaphore>,
+    raw_decode: Arc<Semaphore>,
+}
+
+pub struct BackgroundPermit {
+    _permits: Vec<OwnedSemaphorePermit>,
+}
+
+impl BackgroundResourceLimiter {
+    pub fn new(logical_cpus: usize) -> Self {
+        let cpu_permits = (logical_cpus / 4).clamp(1, 2);
+        Self {
+            cpu: Arc::new(Semaphore::new(cpu_permits)),
+            io: Arc::new(Semaphore::new(2)),
+            raw_decode: Arc::new(Semaphore::new(1)),
+        }
+    }
+
+    /// 封面 fast path 只提取 RAW 内嵌 JPEG 并缩小，不占用重 RAW 解码令牌。
+    pub async fn acquire_cover_fast(&self) -> Option<BackgroundPermit> {
+        let cpu = self.cpu.clone().acquire_owned().await.ok()?;
+        let io = self.io.clone().acquire_owned().await.ok()?;
+        Some(BackgroundPermit {
+            _permits: vec![cpu, io],
+        })
+    }
+
+    /// 真正需要 LibRaw 全解码/半尺寸解码的后台任务走这个预算。
+    pub async fn acquire_raw_decode(&self) -> Option<BackgroundPermit> {
+        let raw = self.raw_decode.clone().acquire_owned().await.ok()?;
+        let cpu = self.cpu.clone().acquire_owned().await.ok()?;
+        Some(BackgroundPermit {
+            _permits: vec![raw, cpu],
+        })
+    }
+
+    pub async fn acquire_exif(&self) -> Option<BackgroundPermit> {
+        let io = self.io.clone().acquire_owned().await.ok()?;
+        Some(BackgroundPermit { _permits: vec![io] })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PreviewBaseCacheKey {
@@ -85,9 +129,9 @@ pub struct AppState {
     pub gpu: Arc<GpuContext>,
     pub task_queue: TaskQueue,
     pub cover_queue: Arc<crate::cover_queue::CoverQueue>,
-    /// 统一限制缩略图生成和 EXIF 提取的总并发数（固定 4），
-    /// 两个 worker 共享同一个信号量，无论同时跑都不超过 4 个 blocking 线程。
-    pub io_sem: Arc<Semaphore>,
+    /// 后台低优先级资源预算。cover/EXIF/未来 preview-base 预热都从这里拿令牌，
+    /// 避免多个后台入口各自限流但总 CPU/IO 仍然叠满。
+    pub background_limiter: Arc<BackgroundResourceLimiter>,
     /// 导出内存预算（MB）：每个导出任务按 file_size×7 估算内存占用，
     /// 先 CAS 扣减预算再开始处理，完成后归还，防止多张大图同时处理导致 OOM。
     pub export_memory_budget: Arc<AtomicU64>,
@@ -186,8 +230,7 @@ impl AppState {
             gpu,
             task_queue: TaskQueue::new(1),
             cover_queue: Arc::new(crate::cover_queue::CoverQueue::new(1)),
-            // 缩略图生成和 EXIF 提取共享信号量，总并发固定 4
-            io_sem: Arc::new(Semaphore::new(4)),
+            background_limiter: Arc::new(BackgroundResourceLimiter::new(logical_cpus)),
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
             preview_token: Arc::new(AtomicU64::new(0)),
             tile_token: Arc::new(AtomicU64::new(0)),
