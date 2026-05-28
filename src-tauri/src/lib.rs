@@ -104,6 +104,7 @@ pub fn run() {
             // ===== 预览 / 批量导出 / 任务历史 =====
             ipc::get_preview,
             ipc::has_preview_base,
+            ipc::get_preview_base,
             ipc::get_cover_dir,
             ipc::set_cover_concurrency,
             ipc::auto_white_balance,

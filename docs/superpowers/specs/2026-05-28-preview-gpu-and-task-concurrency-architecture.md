@@ -143,6 +143,9 @@ Recommended priority from highest to lowest:
 - At most one backend preview should run.
 - If busy, return immediately and let frontend keep only the latest pending state.
 - Drag-time preview should prefer frontend WebGL and avoid backend work when a base texture exists.
+- Full-resolution preview is a low-priority detail refinement. It must wait for
+  both zoom idle and filter idle, so presets and slider releases do not
+  immediately trigger native-resolution rendering.
 
 ### Histogram
 
@@ -297,6 +300,7 @@ Implemented:
 - Backend preview uses a non-queueing shared permit; busy requests return immediately.
 - Frontend coalesces preview requests with tokens and keeps only latest pending state.
 - Drag-time slider changes use frontend WebGL approximation when a baseline source exists.
+- Full-resolution preview is delayed until zoom and filter changes are idle.
 - WebGL remains an approximation layer; backend WGPU output replaces it after settling.
 - `interactive` and `settled` previews return encoded bytes over IPC and use Blob URLs.
 - `full` preview remains path-based to avoid very large IPC payloads.

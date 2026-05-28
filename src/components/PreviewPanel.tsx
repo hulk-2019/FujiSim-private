@@ -78,10 +78,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       nativeWidth: focused?.width,
       nativeHeight: focused?.height,
       scale,
+      filter,
       isAdjustingFilter,
     });
 
-    const { preview, baselinePreviews, loading, loadingRef, error } =
+    const { preview, baselinePreviews, loading, loadingRef, initializingBase, error } =
       usePreviewLoader({
         focused,
         filter,
@@ -282,7 +283,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const hasImageSource = !!displaySrc || !!originalSrc;
     const canShowSkeleton =
       !!focused.width && !!focused.height && !!containerW && !!containerH;
-    const showSkeleton = canShowSkeleton && loading && !hasImageSource;
+    const showSkeleton = canShowSkeleton && initializingBase && !hasImageSource;
     const showGpuInteractiveLayer =
       imgVisible &&
       !showOriginal &&
@@ -441,15 +442,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       imgH={wmDims.height}
                     />
                   )}
-                </div>
-              ) : loading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex flex-col items-center justify-center gap-3 text-zinc-500">
-                    <div className="relative w-10 h-10">
-                      <div className="absolute inset-0 rounded-full border-2 border-zinc-600 animate-ping opacity-60" />
-                      <div className="absolute inset-1.5 rounded-full bg-zinc-600 animate-pulse" />
-                    </div>
-                  </div>
                 </div>
               ) : null}
             </>

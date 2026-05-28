@@ -142,6 +142,10 @@ export const api = {
   hasPreviewBase: (assetId: number) =>
     invoke<boolean>("has_preview_base", { assetId }),
 
+  /** 返回已解析 RAW 预览基线 TIFF 的路径和尺寸。 */
+  getPreviewBase: (assetId: number) =>
+    invoke<PreviewResult | null>("get_preview_base", { assetId }),
+
   /** 独立直方图计算（512px 工作图、独立 token）。与 getPreview 平行调用 */
   computeHistogram: (assetId: number, settings: FilterSettings | null, token: number) =>
     invoke<HistogramData>("compute_histogram", {

@@ -48,6 +48,25 @@ pub async fn has_preview_base(state: State<'_, SharedState>, asset_id: i64) -> R
     Ok(processing::raw::preview_base_path(&state.raw_original_dir, asset_id).exists())
 }
 
+/// 返回已解析 RAW baseline TIFF 的路径和尺寸。
+///
+/// 用于切回已经完成首次解析的 RAW 时直接显示 baseline，避免先进入骨架屏。
+#[tauri::command]
+pub async fn get_preview_base(state: State<'_, SharedState>, asset_id: i64) -> Result<Option<PreviewResult>> {
+    let path = processing::raw::preview_base_path(&state.raw_original_dir, asset_id);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let (width, height) = crate::vips_io::image_dimensions(&path)?;
+    Ok(Some(PreviewResult {
+        path: Some(path.to_string_lossy().to_string()),
+        data: None,
+        mime_type: Some("image/tiff".to_string()),
+        width,
+        height,
+    }))
+}
+
 /// 实时渲染单张照片的预览图。每次调用都重新解码 + 下采样 + 色彩流水线，
 /// 结果写入系统临时目录下的文件，返回路径供前端 convertFileSrc 加载。
 /// token 用于取消：前端每次切换文件时递增 token，后端在解码完成后检查，
