@@ -55,7 +55,9 @@ export function usePreviewLoader({
   const loadingRef = useRef(false);
   const currentTokenRef = useRef(0);
   const inFlightRef = useRef(false);
-  const pendingTokenRef = useRef<number | null>(null);
+  const inFlightRequestRef = useRef<string | null>(null);
+  const pendingRequestRef = useRef<string | null>(null);
+  const completedRequestRef = useRef<string | null>(null);
   const previewRef = useRef<AssetPreviewImage | null>(null);
   const baselineRef = useRef<Record<number, PreviewImage>>({});
   const resolvedBaseRef = useRef<Set<number>>(new Set());
@@ -70,10 +72,23 @@ export function usePreviewLoader({
   const { mode, maxEdge } = previewRequestSpec(isAdjustingFilter, useFullResolutionPreview);
   const requestKey = `${mode}:${maxEdge ?? "native"}`;
   const renderPhase = filterInteraction === "preset_applied" ? "gpu_only" : "render";
+  const requestSignature = focused
+    ? JSON.stringify({
+        assetId: focused.id,
+        filter,
+        isIdentity,
+        maxEdge: maxEdge ?? null,
+        mode,
+        projectId: projectId ?? null,
+        useFullResolutionPreview,
+      })
+    : "";
 
   useEffect(() => {
     if (!focused) {
-      pendingTokenRef.current = null;
+      pendingRequestRef.current = null;
+      inFlightRequestRef.current = null;
+      completedRequestRef.current = null;
       revokePreviewImage(previewRef.current);
       previewRef.current = null;
       setPreview(null);
@@ -82,11 +97,8 @@ export function usePreviewLoader({
       return;
     }
 
-    const token = nextPreviewToken();
-    currentTokenRef.current = token;
-
     if (isIdentity && !useFullResolutionPreview) {
-      pendingTokenRef.current = null;
+      pendingRequestRef.current = null;
       revokePreviewImage(previewRef.current);
       previewRef.current = null;
       setPreview(null);
@@ -100,9 +112,11 @@ export function usePreviewLoader({
       ? !!previewRef.current || !!baselineRef.current[focused.id] || resolvedBaseRef.current.has(focused.id)
       : true;
     const shouldProbeDiskBase = focused.is_raw && !hasDisplay && !missingBaseRef.current.has(focused.id);
-    setPreviewLoading(false);
 
     if (shouldProbeDiskBase) {
+      const token = nextPreviewToken();
+      currentTokenRef.current = token;
+      setPreviewLoading(false);
       api.getPreviewBase(focused.id, projectId)
         .then((base) => {
           if (currentTokenRef.current !== token) return;
@@ -144,20 +158,32 @@ export function usePreviewLoader({
       !!baselineRef.current[focused.id];
 
     if (shouldUseGpuOnly) {
-      pendingTokenRef.current = null;
+      pendingRequestRef.current = null;
+      setPreviewLoading(false);
+      return;
+    }
+
+    if (completedRequestRef.current === requestSignature) {
+      setPreviewLoading(false);
       return;
     }
 
     if (inFlightRef.current) {
-      pendingTokenRef.current = token;
+      if (inFlightRequestRef.current === requestSignature) return;
+      pendingRequestRef.current = requestSignature;
+      currentTokenRef.current = nextPreviewToken();
       return;
     }
 
     const delay = !hasDisplay ? 0 : isAdjustingFilter ? INTERACTIVE_PREVIEW_DELAY_MS : SETTLED_PREVIEW_DELAY_MS;
+    const token = nextPreviewToken();
+    currentTokenRef.current = token;
+    setPreviewLoading(false);
 
     const handle = setTimeout(async () => {
       if (currentTokenRef.current !== token) return;
       inFlightRef.current = true;
+      inFlightRequestRef.current = requestSignature;
       setPreviewLoading(true, mode);
       try {
         const result = await api.getPreview(focused.id, filter, mode, maxEdge, token, null, projectId);
@@ -182,6 +208,7 @@ export function usePreviewLoader({
           setPreview(nextPreview);
         }
         setPreviewSize({ width: result.width, height: result.height }, focused.id);
+        completedRequestRef.current = requestSignature;
         setPreviewLoading(false);
       } catch (e) {
         const message = String(e);
@@ -190,7 +217,7 @@ export function usePreviewLoader({
           return;
         }
         if (message.includes("preview_busy")) {
-          pendingTokenRef.current = token;
+          pendingRequestRef.current = requestSignature;
           setPreviewLoading(false);
         } else {
           setError(message);
@@ -198,20 +225,21 @@ export function usePreviewLoader({
         }
       } finally {
         inFlightRef.current = false;
-        if (
-          pendingTokenRef.current !== null &&
-          pendingTokenRef.current === currentTokenRef.current
-        ) {
-          pendingTokenRef.current = null;
+        inFlightRequestRef.current = null;
+        if (pendingRequestRef.current !== null) {
+          pendingRequestRef.current = null;
           setRequestTick((v) => v + 1);
         }
       }
     }, delay);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, filter, isIdentity, isAdjustingFilter, renderPhase, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, projectId, requestKey, requestTick, setPreviewLoading, setPreviewSize]);
+  }, [focused?.id, filter, isIdentity, isAdjustingFilter, renderPhase, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, projectId, requestKey, requestSignature, requestTick, setPreviewLoading, setPreviewSize]);
 
   useEffect(() => {
+    pendingRequestRef.current = null;
+    inFlightRequestRef.current = null;
+    completedRequestRef.current = null;
     revokePreviewImage(previewRef.current);
     previewRef.current = null;
     setPreview(null);
