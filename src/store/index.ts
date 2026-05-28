@@ -5,7 +5,7 @@ import { createFilterSlice } from "./slices/filter";
 import { createPresetSlice } from "./slices/presets";
 import { createUserLutSlice } from "./slices/userLuts";
 import { createCategorySlice } from "./slices/categories";
-import { createAlbumSlice } from "./slices/albums";
+import { createProjectSlice } from "./slices/projects";
 import { createExportSlice } from "./slices/exports";
 import { createWatermarkSlice } from "./slices/watermark";
 import { createFontSlice } from "./slices/fonts";
@@ -32,7 +32,7 @@ export const useStore = create<AppState>((...a) => ({
   ...createPresetSlice(...a),
   ...createUserLutSlice(...a),
   ...createCategorySlice(...a),
-  ...createAlbumSlice(...a),
+  ...createProjectSlice(...a),
   ...createExportSlice(...a),
   ...createWatermarkSlice(...a),
   ...createFontSlice(...a),

@@ -35,7 +35,7 @@ export type Asset = {
 };
 
 /** 虚拟相册 */
-export type Album = {
+export type Project = {
   id: number;
   name: string;
   created_at: string;
@@ -44,7 +44,7 @@ export type Album = {
 };
 
 /** 相册摘要（含封面路径和资产数量） */
-export type AlbumSummary = {
+export type ProjectSummary = {
   id: number;
   name: string;
   created_at: string;
@@ -163,7 +163,7 @@ export type AssetQuery = {
   color_label?: string | null;
   min_iso?: number | null;
   max_iso?: number | null;
-  album_id?: number | null;
+  project_id?: number | null;
   search?: string | null;
   sort_by?: "date_taken" | "file_name" | "camera_model" | "lens_model" | "iso" | "star_rating" | "created_at";
   sort_dir?: "asc" | "desc";

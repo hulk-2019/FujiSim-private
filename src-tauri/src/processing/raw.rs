@@ -4,11 +4,18 @@ use image::{ImageBuffer, Rgb};
 use rsraw::BIT_DEPTH_16;
 use std::path::{Path, PathBuf};
 
+pub fn cache_scope_dir(base_dir: &Path, project_id: Option<i64>) -> PathBuf {
+    match project_id {
+        Some(id) if id > 0 => base_dir.join(format!("project_{id}")),
+        _ => base_dir.to_path_buf(),
+    }
+}
+
 /// Returns the path to the disk-cached preview base TIFF for a given asset_id.
-pub fn preview_base_path(raw_original_dir: &Path, asset_id: i64) -> PathBuf {
+pub fn preview_base_path(raw_original_dir: &Path, project_id: Option<i64>, asset_id: i64) -> PathBuf {
     // Lightroom-like app baseline develop. Embedded JPEGs are
     // placeholders only and are not used to tone-match the editing base.
-    raw_original_dir.join(format!("{}_baseline.tif", asset_id))
+    cache_scope_dir(raw_original_dir, project_id).join(format!("{asset_id}_baseline.tif"))
 }
 
 /// 提取 RAW/DNG 文件中嵌入的最大 JPEG 预览，返回原始 JPEG 字节。

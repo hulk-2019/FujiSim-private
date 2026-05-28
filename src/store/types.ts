@@ -1,8 +1,8 @@
 export type EyedropperMode = 'none' | 'white-balance';
 
 import type {
-  Album,
-  AlbumSummary,
+  Project,
+  ProjectSummary,
   Asset,
   AssetQuery,
   BatchProgress,
@@ -104,16 +104,16 @@ export interface CategorySlice {
 /**
  * 相册（含汇总与回收站）。
  */
-export interface AlbumSlice {
-  albums: Album[];
-  albumSummaries: AlbumSummary[];
-  trashedAlbums: AlbumSummary[];
-  refreshAlbums: () => Promise<void>;
-  refreshAlbumSummaries: () => Promise<void>;
+export interface ProjectSlice {
+  projects: Project[];
+  projectSummaries: ProjectSummary[];
+  trashedProjects: ProjectSummary[];
+  refreshProjects: () => Promise<void>;
+  refreshProjectSummaries: () => Promise<void>;
   refreshTrash: () => Promise<void>;
-  restoreAlbum: (id: number) => Promise<void>;
-  purgeAlbum: (id: number) => Promise<void>;
-  purgeAllTrash: () => Promise<void>;
+  restoreProject: (id: number) => Promise<void>;
+  purgeProject: (id: number) => Promise<void>;
+  purgeAllTrashProjects: () => Promise<void>;
 }
 
 /**
@@ -207,7 +207,7 @@ export type AppState =
   & PresetSlice
   & UserLutSlice
   & CategorySlice
-  & AlbumSlice
+  & ProjectSlice
   & ExportSlice
   & WatermarkSlice
   & FontSlice

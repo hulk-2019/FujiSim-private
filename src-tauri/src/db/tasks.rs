@@ -206,8 +206,8 @@ pub async fn clear_all(pool: &SqlitePool) -> Result<()> {
     for table in &[
         "asset_generations",
         "batch_tasks",
-        "album_assets",
-        "albums",
+        "project_assets",
+        "projects",
         "user_luts",
         "watermark_presets",
         "assets",

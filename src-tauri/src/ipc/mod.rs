@@ -17,7 +17,7 @@ use crate::state::SharedState;
 use std::path::Path;
 use std::sync::Arc;
 
-pub mod albums;
+pub mod projects;
 pub mod app;
 pub mod assets;
 pub mod export;
@@ -29,7 +29,7 @@ pub mod preview;
 pub mod settings;
 pub mod watermark;
 
-pub use albums::*;
+pub use projects::*;
 pub use app::*;
 pub use assets::*;
 pub use export::*;

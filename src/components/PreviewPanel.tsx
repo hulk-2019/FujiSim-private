@@ -49,6 +49,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const { t } = useTranslation();
     const focusedId = useStore((s) => s.focusedId);
     const assets = useStore((s) => s.assets);
+    const projectId = useStore((s) => s.currentFolderId);
     const filter = useStore((s) => s.filter);
     const watermark = useStore((s) => s.watermark);
     const setPreviewSize = useStore((s) => s.setPreviewSize);
@@ -113,6 +114,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
           approximateFilterWithGpu &&
           !showOriginal,
         useFullResolutionPreview: useFullResolutionPreview && !useTileDetailPreview,
+        projectId,
         setPreviewSize,
       });
     const focusedBaselinePreview = focused
@@ -146,6 +148,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       viewportHeight: viewportSize.height,
       imageWidth: focused?.width ?? containerW,
       imageHeight: focused?.height ?? containerH,
+      projectId,
     });
 
     // 重置到 fit 状态：容器为图片原始尺寸，scale 缩放到占 viewport 80% 并居中

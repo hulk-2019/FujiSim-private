@@ -11,7 +11,7 @@ export function EditorPage() {
   const { folderId } = useParams<{ folderId: string }>();
   const enterFolder = useStore((s) => s.enterFolder);
   const exitFolder = useStore((s) => s.exitFolder);
-  const albums = useStore((s) => s.albums);
+  const projects = useStore((s) => s.projects);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showPresetList, setShowPresetList] = useState(true);
   const [scale, setScale] = useState(1);
@@ -21,8 +21,8 @@ export function EditorPage() {
   useEffect(() => {
     if (!folderId) return;
     const id = Number(folderId);
-    const album = albums.find((a) => a.id === id);
-    const name = album?.name ?? String(id);
+    const project = projects.find((a) => a.id === id);
+    const name = project?.name ?? String(id);
     enterFolder(id, name);
     return () => {
       exitFolder();

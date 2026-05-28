@@ -69,6 +69,7 @@ export function useTilePreview({
   viewportHeight,
   imageWidth,
   imageHeight,
+  projectId,
 }: {
   focused: Asset | null;
   filter: FilterSettings;
@@ -80,6 +81,7 @@ export function useTilePreview({
   viewportHeight: number;
   imageWidth: number;
   imageHeight: number;
+  projectId?: number | null;
 }) {
   const [previews, setPreviews] = useState<TilePreview[]>([]);
   const activeRunRef = useRef(0);
@@ -192,7 +194,7 @@ export function useTilePreview({
 
         const token = nextPreviewToken();
         try {
-          const result = await api.getPreview(focused.id, filter, "tile", undefined, token, item.tile);
+          const result = await api.getPreview(focused.id, filter, "tile", undefined, token, item.tile, projectId);
           if (controller.signal.aborted || activeRunRef.current !== runId) return;
           const next = {
             assetId: focused.id,
@@ -223,7 +225,7 @@ export function useTilePreview({
       controller.abort();
       clearTimeout(handle);
     };
-  }, [enabled, filter, focused, request]);
+  }, [enabled, filter, focused, projectId, request]);
 
   return previews;
 }

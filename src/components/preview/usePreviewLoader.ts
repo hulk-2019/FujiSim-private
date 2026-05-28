@@ -29,6 +29,7 @@ export function usePreviewLoader({
   showOriginal,
   canUseGpuInteractivePreview,
   useFullResolutionPreview,
+  projectId,
   setPreviewSize,
 }: {
   focused: Asset | null;
@@ -38,6 +39,7 @@ export function usePreviewLoader({
   showOriginal: boolean;
   canUseGpuInteractivePreview: boolean;
   useFullResolutionPreview: boolean;
+  projectId?: number | null;
   setPreviewSize: (size: { width: number; height: number }, assetId?: number) => void;
 }) {
   const [preview, setPreview] = useState<AssetPreviewImage | null>(null);
@@ -95,7 +97,7 @@ export function usePreviewLoader({
     setPreviewLoading(false);
 
     if (shouldProbeDiskBase) {
-      api.getPreviewBase(focused.id)
+      api.getPreviewBase(focused.id, projectId)
         .then((base) => {
           if (currentTokenRef.current !== token) return;
           if (!base) {
@@ -130,7 +132,7 @@ export function usePreviewLoader({
       return;
     }
 
-    if (canUseGpuInteractivePreview && !!baselineRef.current[focused.id]) {
+    if (canUseGpuInteractivePreview && isAdjustingFilter && !!baselineRef.current[focused.id]) {
       pendingTokenRef.current = null;
       return;
     }
@@ -147,7 +149,7 @@ export function usePreviewLoader({
       inFlightRef.current = true;
       setPreviewLoading(true);
       try {
-        const result = await api.getPreview(focused.id, filter, mode, maxEdge, token);
+        const result = await api.getPreview(focused.id, filter, mode, maxEdge, token, null, projectId);
         if (currentTokenRef.current !== token) return;
         const nextImage = previewResultToImage(result);
         if (isIdentity && !useFullResolutionPreview) {
@@ -196,7 +198,7 @@ export function usePreviewLoader({
     }, delay);
 
     return () => clearTimeout(handle);
-  }, [focused?.id, filter, isIdentity, isAdjustingFilter, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, requestKey, requestTick, setPreviewLoading, setPreviewSize]);
+  }, [focused?.id, filter, isIdentity, isAdjustingFilter, canUseGpuInteractivePreview, showOriginal, useFullResolutionPreview, projectId, requestKey, requestTick, setPreviewLoading, setPreviewSize]);
 
   useEffect(() => {
     revokePreviewImage(previewRef.current);

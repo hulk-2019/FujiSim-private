@@ -4,7 +4,7 @@ use sqlx::{ConnectOptions, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
 
-pub mod albums;
+pub mod projects;
 pub mod app_settings;
 pub mod asset_render_cache;
 pub mod assets;
@@ -19,7 +19,7 @@ pub mod watermark_presets;
 ///
 /// - 自动建库（`create_if_missing`）；
 /// - 启用 WAL 模式：写并发更友好，预览/导入时不会卡住 UI 查询；
-/// - 启用外键约束：保证 `album_assets` 这类关联表的引用一致性；
+/// - 启用外键约束：保证 `project_assets` 这类关联表的引用一致性；
 /// - 同步级别 Normal：在保留 fsync 安全的前提下加速插入（适合本地工具）；
 /// - 连接池最多 8 个连接，足以支撑前端并发请求。
 ///
@@ -49,6 +49,9 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     sqlx::query(SCHEMA).execute(pool).await?;
     // 增量迁移：补充新列（列已存在时 ALTER TABLE 会报错，直接忽略）
     for sql in [
+        "ALTER TABLE albums RENAME TO projects",
+        "ALTER TABLE album_assets RENAME TO project_assets",
+        "ALTER TABLE project_assets RENAME COLUMN album_id TO project_id",
         "ALTER TABLE batch_tasks ADD COLUMN asset_ids_json TEXT NOT NULL DEFAULT '[]'",
         "ALTER TABLE batch_tasks ADD COLUMN watermark_json TEXT",
         "ALTER TABLE batch_tasks ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
@@ -59,8 +62,8 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         "ALTER TABLE watermark_presets ADD COLUMN deleted_at TEXT",
         "ALTER TABLE assets ADD COLUMN exif_extracted INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE assets ADD COLUMN cover_path TEXT",
-        "ALTER TABLE albums ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE albums ADD COLUMN deleted_at TEXT",
+        "ALTER TABLE projects ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE projects ADD COLUMN deleted_at TEXT",
         "ALTER TABLE filter_presets ADD COLUMN category_id INTEGER",
         "ALTER TABLE user_luts      ADD COLUMN category_id INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_filter_presets_category ON filter_presets(category_id)",
@@ -221,8 +224,8 @@ CREATE INDEX IF NOT EXISTS idx_assets_date ON assets(date_taken);
 CREATE INDEX IF NOT EXISTS idx_assets_camera ON assets(camera_model);
 CREATE INDEX IF NOT EXISTS idx_assets_rating ON assets(star_rating);
 
--- 虚拟相册：纯逻辑分组，不影响物理文件
-CREATE TABLE IF NOT EXISTS albums (
+-- 项目：纯逻辑分组，不影响物理文件
+CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -230,12 +233,12 @@ CREATE TABLE IF NOT EXISTS albums (
     deleted_at TEXT
 );
 
--- 相册 ↔ 资产 多对多关联
-CREATE TABLE IF NOT EXISTS album_assets (
-    album_id INTEGER NOT NULL,
+-- 项目 ↔ 资产 多对多关联
+CREATE TABLE IF NOT EXISTS project_assets (
+    project_id INTEGER NOT NULL,
     asset_id INTEGER NOT NULL,
-    PRIMARY KEY (album_id, asset_id),
-    FOREIGN KEY (album_id) REFERENCES albums(id) ON DELETE CASCADE,
+    PRIMARY KEY (project_id, asset_id),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
 );
 

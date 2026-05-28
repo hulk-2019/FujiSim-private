@@ -13,63 +13,63 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
-import type { AlbumSummary } from "@/types";
+import type { ProjectSummary } from "@/types";
 
 export function ProjectsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const albumSummaries = useStore((s) => s.albumSummaries);
-  const refreshAlbumSummaries = useStore((s) => s.refreshAlbumSummaries);
-  const refreshAlbums = useStore((s) => s.refreshAlbums);
+  const projectSummaries = useStore((s) => s.projectSummaries);
+  const refreshProjectSummaries = useStore((s) => s.refreshProjectSummaries);
+  const refreshProjects = useStore((s) => s.refreshProjects);
 
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newNameError, setNewNameError] = useState("");
   const [renameOpen, setRenameOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<AlbumSummary | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ProjectSummary | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameError, setRenameError] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<AlbumSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
 
   // 进入页面时刷新一次，避免从编辑器导入素材后回来看到的是导入前的快照
   useEffect(() => {
-    refreshAlbumSummaries();
-  }, [refreshAlbumSummaries]);
+    refreshProjectSummaries();
+  }, [refreshProjectSummaries]);
 
   async function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    const exists = await api.checkAlbumNameExists(name);
+    const exists = await api.checkProjectNameExists(name);
     if (exists) {
       setNewNameError(t("projects.nameExists"));
       return;
     }
-    const album = await api.createAlbum(name);
+    const project = await api.createProject(name);
     setNewName("");
     setNewOpen(false);
     setNewNameError("");
-    await Promise.all([refreshAlbums(), refreshAlbumSummaries()]);
-    navigate(`/projects/${album.id}`);
+    await Promise.all([refreshProjects(), refreshProjectSummaries()]);
+    navigate(`/projects/${project.id}`);
   }
 
   async function handleRename() {
     if (!renameTarget) return;
     const name = renameName.trim();
     if (!name) return;
-    const exists = await api.checkAlbumNameExists(name, renameTarget.id);
+    const exists = await api.checkProjectNameExists(name, renameTarget.id);
     if (exists) {
       setRenameError(t("projects.nameExists"));
       return;
     }
-    await api.renameAlbum(renameTarget.id, name);
+    await api.renameProject(renameTarget.id, name);
     setRenameOpen(false);
     setRenameTarget(null);
-    await Promise.all([refreshAlbums(), refreshAlbumSummaries()]);
+    await Promise.all([refreshProjects(), refreshProjectSummaries()]);
   }
 
-  async function handleDelete(summary: AlbumSummary) {
+  async function handleDelete(summary: ProjectSummary) {
     await api.deleteFolder(summary.id);
-    await Promise.all([refreshAlbums(), refreshAlbumSummaries()]);
+    await Promise.all([refreshProjects(), refreshProjectSummaries()]);
   }
 
   async function confirmDelete() {
@@ -94,7 +94,7 @@ export function ProjectsPage() {
               setNewOpen(true);
             }}
           />
-          {albumSummaries.map((s) => (
+          {projectSummaries.map((s) => (
             <ProjectCard
               key={s.id}
               summary={s}
@@ -111,7 +111,7 @@ export function ProjectsPage() {
             />
           ))}
         </div>
-        {albumSummaries.length === 0 && (
+        {projectSummaries.length === 0 && (
           <p className="text-zinc-500 text-sm text-center mt-16">
             {t("projects.noProjects")}
           </p>
@@ -214,7 +214,7 @@ function NewProjectCard({ onClick }: { onClick: () => void }) {
 }
 
 interface ProjectCardProps {
-  summary: AlbumSummary;
+  summary: ProjectSummary;
   onClick: () => void;
   onRename: () => void;
   onDelete: () => void;

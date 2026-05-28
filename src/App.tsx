@@ -41,14 +41,14 @@ export default function App() {
 
   useEffect(() => {
     const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts,
-            refreshAlbums, refreshAlbumSummaries, refreshCategories, setCoverDir } = useStore.getState();
+            refreshProjects, refreshProjectSummaries, refreshCategories, setCoverDir } = useStore.getState();
     refreshAssets();
     refreshFacets();
     refreshPresets();
     refreshCategories();
     refreshUserLuts();
-    refreshAlbums();
-    refreshAlbumSummaries();
+    refreshProjects();
+    refreshProjectSummaries();
     api.getCoverDir().then(setCoverDir).catch(() => {});
   }, []);
 

@@ -56,8 +56,12 @@ pub struct ThumbnailDonePayload {
 ///
 /// 只检查 `{asset_id}_baseline.tif` 是否存在，不做解码；用于前端决定是否需要展示首次解析 loading。
 #[tauri::command]
-pub async fn has_preview_base(state: State<'_, SharedState>, asset_id: i64) -> Result<bool> {
-    Ok(processing::raw::preview_base_path(&state.raw_original_dir, asset_id).exists())
+pub async fn has_preview_base(
+    state: State<'_, SharedState>,
+    asset_id: i64,
+    project_id: Option<i64>,
+) -> Result<bool> {
+    Ok(processing::raw::preview_base_path(&state.raw_original_dir, project_id, asset_id).exists())
 }
 
 /// Frontend-only interaction marker. Used when WebGL handles immediate feedback
@@ -72,8 +76,12 @@ pub async fn mark_preview_interaction(state: State<'_, SharedState>, duration_ms
 ///
 /// 用于切回已经完成首次解析的 RAW 时直接显示 baseline，避免先进入骨架屏。
 #[tauri::command]
-pub async fn get_preview_base(state: State<'_, SharedState>, asset_id: i64) -> Result<Option<PreviewResult>> {
-    let path = processing::raw::preview_base_path(&state.raw_original_dir, asset_id);
+pub async fn get_preview_base(
+    state: State<'_, SharedState>,
+    asset_id: i64,
+    project_id: Option<i64>,
+) -> Result<Option<PreviewResult>> {
+    let path = processing::raw::preview_base_path(&state.raw_original_dir, project_id, asset_id);
     if !path.exists() {
         return Ok(None);
     }
@@ -100,6 +108,7 @@ pub async fn get_preview(
     max_edge: Option<u32>,
     token: u64,
     tile: Option<PreviewTileRequest>,
+    project_id: Option<i64>,
 ) -> Result<PreviewResult> {
     use std::sync::atomic::Ordering;
     let is_tile = matches!(mode, PreviewMode::Tile);
@@ -130,6 +139,7 @@ pub async fn get_preview(
     let tile_token = state.tile_token.clone();
     let preview_generation = preview_token.load(Ordering::SeqCst);
     let state_for_render = state.inner().clone();
+    let project_id_for_render = project_id;
 
     let permit = sem
         .try_acquire_owned()
@@ -156,6 +166,7 @@ pub async fn get_preview(
                 if is_tile { None } else { max_edge },
                 native_max_edge,
                 persist_to_disk,
+                project_id_for_render,
             )?;
             let resized = if is_tile {
                 Arc::new(crop_tile(&resized, tile.ok_or_else(|| AppError::other("preview_tile_required"))?)?)
@@ -259,6 +270,7 @@ pub(crate) fn load_preview_base(
     max_edge: Option<u32>,
     native_max_edge: Option<u32>,
     persist_to_disk: bool,
+    project_id: Option<i64>,
 ) -> Result<Arc<Rgb16Image>> {
     let key = PreviewBaseCacheKey { asset_id, max_edge };
 
@@ -269,7 +281,7 @@ pub(crate) fn load_preview_base(
         }
     }
 
-    let cache_path = processing::raw::preview_base_path(&state.raw_original_dir, asset_id);
+    let cache_path = processing::raw::preview_base_path(&state.raw_original_dir, project_id, asset_id);
     let use_disk_base = matches!(
         crate::asset::format::classify(path),
         crate::asset::format::FileKind::Raw
@@ -294,6 +306,9 @@ pub(crate) fn load_preview_base(
     };
 
     if use_disk_base && should_write_disk {
+        if let Some(parent) = cache_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         if let Err(e) = crate::vips_io::encode_rgb16_to_file(
             &img,
             &cache_path,

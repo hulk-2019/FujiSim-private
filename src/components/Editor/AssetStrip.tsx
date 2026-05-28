@@ -52,7 +52,7 @@ export function AssetStrip() {
   const setImporting = useStore((s) => s.setImporting);
   const refreshAssets = useStore((s) => s.refreshAssets);
   const refreshFacets = useStore((s) => s.refreshFacets);
-  const refreshAlbumSummaries = useStore((s) => s.refreshAlbumSummaries);
+  const refreshProjectSummaries = useStore((s) => s.refreshProjectSummaries);
   const toggleSelect = useStore((s) => s.toggleSelect);
   const selectRange = useStore((s) => s.selectRange);
   const focusAsset = useStore((s) => s.focusAsset);
@@ -101,7 +101,7 @@ export function AssetStrip() {
     try {
       // kind=db: 仅删除表中数据，不动磁盘文件；kind=disk: 文件入回收站 + 删除记录
       await api.deleteAssets(ids, kind === "disk");
-      await Promise.all([refreshAssets(), refreshFacets(), refreshAlbumSummaries()]);
+      await Promise.all([refreshAssets(), refreshFacets(), refreshProjectSummaries()]);
     } catch (e) {
       console.error("[AssetStrip] delete failed:", e);
     }
@@ -173,9 +173,9 @@ export function AssetStrip() {
     if (!selected || typeof selected !== "string") return;
     setImporting(true);
     try {
-      const report = await api.importDirectory(selected, query.album_id ?? null);
+      const report = await api.importDirectory(selected, query.project_id ?? null);
       setImporting(false, { inserted: report.inserted, scanned: report.scanned });
-      await Promise.all([refreshAssets(), refreshFacets(), refreshAlbumSummaries()]);
+      await Promise.all([refreshAssets(), refreshFacets(), refreshProjectSummaries()]);
     } catch {
       setImporting(false);
     }
@@ -191,9 +191,9 @@ export function AssetStrip() {
     if (paths.length === 0) return;
     setImporting(true);
     try {
-      const report = await api.importFiles(paths, query.album_id ?? null);
+      const report = await api.importFiles(paths, query.project_id ?? null);
       setImporting(false, { inserted: report.inserted, scanned: report.scanned });
-      await Promise.all([refreshAssets(), refreshFacets(), refreshAlbumSummaries()]);
+      await Promise.all([refreshAssets(), refreshFacets(), refreshProjectSummaries()]);
     } catch {
       setImporting(false);
     }

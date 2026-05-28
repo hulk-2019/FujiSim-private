@@ -4,7 +4,7 @@ import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
-import type { AlbumSummary } from "@/types";
+import type { ProjectSummary } from "@/types";
 
 function daysLeft(deletedAt: string | null): number {
   if (!deletedAt) return 30;
@@ -15,11 +15,11 @@ function daysLeft(deletedAt: string | null): number {
 
 export function TrashPage() {
   const { t } = useTranslation();
-  const trashedAlbums = useStore((s) => s.trashedAlbums);
+  const trashedProjects = useStore((s) => s.trashedProjects);
   const refreshTrash = useStore((s) => s.refreshTrash);
-  const restoreAlbum = useStore((s) => s.restoreAlbum);
-  const purgeAlbum = useStore((s) => s.purgeAlbum);
-  const purgeAllTrash = useStore((s) => s.purgeAllTrash);
+  const restoreProject = useStore((s) => s.restoreProject);
+  const purgeProject = useStore((s) => s.purgeProject);
+  const purgeAllTrashProjects = useStore((s) => s.purgeAllTrashProjects);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false);
@@ -39,33 +39,33 @@ export function TrashPage() {
   }
 
   function toggleSelectAll() {
-    if (selectedIds.size === trashedAlbums.length) {
+    if (selectedIds.size === trashedProjects.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(trashedAlbums.map((a) => a.id)));
+      setSelectedIds(new Set(trashedProjects.map((a) => a.id)));
     }
   }
 
   async function handleRestore() {
-    await Promise.all([...selectedIds].map((id) => restoreAlbum(id)));
+    await Promise.all([...selectedIds].map((id) => restoreProject(id)));
     setSelectedIds(new Set());
   }
 
   async function handlePurge() {
-    await Promise.all([...selectedIds].map((id) => purgeAlbum(id)));
+    await Promise.all([...selectedIds].map((id) => purgeProject(id)));
     setSelectedIds(new Set());
     setConfirmPurgeOpen(false);
   }
 
   async function handleClearAll() {
-    await purgeAllTrash();
+    await purgeAllTrashProjects();
     setSelectedIds(new Set());
     setConfirmClearOpen(false);
   }
 
   const hasSelection = selectedIds.size > 0;
   const allSelected =
-    trashedAlbums.length > 0 && selectedIds.size === trashedAlbums.length;
+    trashedProjects.length > 0 && selectedIds.size === trashedProjects.length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-zinc-950">
@@ -100,9 +100,9 @@ export function TrashPage() {
           ) : (
             <>
               <span className="text-sm text-zinc-500">
-                {t("trash.totalCount", { count: trashedAlbums.length })}
+                {t("trash.totalCount", { count: trashedProjects.length })}
               </span>
-              {trashedAlbums.length > 0 && (
+              {trashedProjects.length > 0 && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -117,19 +117,19 @@ export function TrashPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {trashedAlbums.length === 0 ? (
+        {trashedProjects.length === 0 ? (
           <p className="text-zinc-500 text-sm text-center mt-16">
             {t("trash.empty")}
           </p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-            {trashedAlbums.map((album) => (
+            {trashedProjects.map((project) => (
               <TrashCard
-                key={album.id}
-                album={album}
-                selected={selectedIds.has(album.id)}
-                onToggle={() => toggleSelect(album.id)}
-                daysLeftValue={daysLeft(album.deleted_at)}
+                key={project.id}
+                project={project}
+                selected={selectedIds.has(project.id)}
+                onToggle={() => toggleSelect(project.id)}
+                daysLeftValue={daysLeft(project.deleted_at)}
               />
             ))}
           </div>
@@ -170,20 +170,20 @@ export function TrashPage() {
 }
 
 interface TrashCardProps {
-  album: AlbumSummary;
+  project: ProjectSummary;
   selected: boolean;
   onToggle: () => void;
   daysLeftValue: number;
 }
 
 export function TrashCard({
-  album,
+  project,
   selected,
   onToggle,
   daysLeftValue,
 }: TrashCardProps) {
   const { t } = useTranslation();
-  const covers = album.cover_paths.slice(0, 4);
+  const covers = project.cover_paths.slice(0, 4);
   return (
     <div
       onClick={onToggle}
@@ -205,7 +205,7 @@ export function TrashCard({
         ))}
       </div>
       <div className="px-3 py-2">
-        <p className="text-sm font-medium text-zinc-100 truncate">{album.name}</p>
+        <p className="text-sm font-medium text-zinc-100 truncate">{project.name}</p>
         <p className="text-xs text-zinc-500 mt-0.5">
           {t("trash.daysLeft", { days: daysLeftValue })}
         </p>

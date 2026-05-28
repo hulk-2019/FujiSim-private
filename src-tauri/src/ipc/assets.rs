@@ -1,7 +1,7 @@
 //! 资产导入、查询和文件操作。
 
 use crate::asset::{fileops, scanner};
-use crate::db::{albums, assets};
+use crate::db::{projects, assets};
 use crate::error::{AppError, Result};
 use crate::state::SharedState;
 use serde::Serialize;
@@ -24,7 +24,7 @@ pub struct ImportReport {
 /// 全程后台执行：扫描走 `spawn_blocking`（阻塞 IO），数据库写入走 sqlx 异步。
 /// 进度通过 Tauri Events 推送，UI 不会被卡住。
 ///
-/// 当 `album_id` 不为 None 时，会把**本次扫到的所有路径**（不论是新增还是已存在）
+/// 当 `project_id` 不为 None 时，会把**本次扫到的所有路径**（不论是新增还是已存在）
 /// 一并挂到该相册——这样用户在某个相册视图下点"导入目录"，新导入的资产会立刻
 /// 出现在当前相册里，而不是只能在"全部资产"中找到。
 #[tauri::command]
@@ -32,7 +32,7 @@ pub async fn import_directory(
     state: State<'_, SharedState>,
     app: tauri::AppHandle,
     path: String,
-    album_id: Option<i64>,
+    project_id: Option<i64>,
 ) -> Result<ImportReport> {
     let path = PathBuf::from(path);
     if !path.is_dir() {
@@ -45,11 +45,11 @@ pub async fn import_directory(
     let scanned = scan.items.len();
     let inserted = assets::insert_many(&state.pool, &scan.items).await?;
 
-    if let Some(album_id) = album_id {
+    if let Some(project_id) = project_id {
         let paths: Vec<String> = scan.items.iter().map(|a| a.file_path.clone()).collect();
         let ids = assets::ids_by_paths(&state.pool, &paths).await?;
         if !ids.is_empty() {
-            albums::add_assets(&state.pool, album_id, &ids).await?;
+            projects::add_assets(&state.pool, project_id, &ids).await?;
         }
     }
 
@@ -67,13 +67,13 @@ pub async fn import_directory(
 ///
 /// 与 `import_directory` 的区别：接受的是文件路径列表而非目录，
 /// 适合用户在文件选择对话框里多选图片的场景。
-/// 同样支持 `album_id`：若提供则把所有文件挂到该相册。
+/// 同样支持 `project_id`：若提供则把所有文件挂到该相册。
 #[tauri::command]
 pub async fn import_files(
     state: State<'_, SharedState>,
     app: tauri::AppHandle,
     paths: Vec<String>,
-    album_id: Option<i64>,
+    project_id: Option<i64>,
 ) -> Result<ImportReport> {
     let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let _ = app.emit("import:start", paths.len());
@@ -83,11 +83,11 @@ pub async fn import_files(
     let scanned = scan.items.len();
     let inserted = assets::insert_many(&state.pool, &scan.items).await?;
 
-    if let Some(album_id) = album_id {
+    if let Some(project_id) = project_id {
         let file_paths: Vec<String> = scan.items.iter().map(|a| a.file_path.clone()).collect();
         let ids = assets::ids_by_paths(&state.pool, &file_paths).await?;
         if !ids.is_empty() {
-            albums::add_assets(&state.pool, album_id, &ids).await?;
+            projects::add_assets(&state.pool, project_id, &ids).await?;
         }
     }
 
@@ -115,7 +115,9 @@ pub async fn list_assets(
         .map(|a| a.id)
         .collect();
     if !ids.is_empty() {
-        state.cover_queue.enqueue(ids, state.inner().clone(), app);
+        state
+            .cover_queue
+            .enqueue(ids, query.project_id, state.inner().clone(), app);
     }
     Ok(result)
 }

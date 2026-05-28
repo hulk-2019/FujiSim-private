@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  Album,
-  AlbumSummary,
+  Project,
+  ProjectSummary,
   Asset,
   AssetQuery,
   BatchProgress,
@@ -36,12 +36,12 @@ import type {
 export const api = {
   // ===== 资产导入 / 查询 =====
   /** 选择目录后递归扫描并入库，返回扫描统计。
-   *  传 `albumId` 时会把本次扫到的资产一并挂到该相册（新增 + 已存在都挂）。 */
-  importDirectory: (path: string, albumId?: number | null) =>
-    invoke<ImportReport>("import_directory", { path, albumId: albumId ?? null }),
-  /** 批量导入用户手动选择的图片文件（不递归）。传 `albumId` 时同样挂到相册。 */
-  importFiles: (paths: string[], albumId?: number | null) =>
-    invoke<ImportReport>("import_files", { paths, albumId: albumId ?? null }),
+   *  传 `projectId` 时会把本次扫到的资产一并挂到该相册（新增 + 已存在都挂）。 */
+  importDirectory: (path: string, projectId?: number | null) =>
+    invoke<ImportReport>("import_directory", { path, projectId: projectId ?? null }),
+  /** 批量导入用户手动选择的图片文件（不递归）。传 `projectId` 时同样挂到相册。 */
+  importFiles: (paths: string[], projectId?: number | null) =>
+    invoke<ImportReport>("import_files", { paths, projectId: projectId ?? null }),
   listAssets: (query: AssetQuery = {}) => invoke<{ items: Asset[]; total: number }>("list_assets", { query }),
   getAsset: (id: number) => invoke<Asset>("get_asset", { id }),
   libraryStats: () => invoke<LibraryStats>("library_stats"),
@@ -67,29 +67,29 @@ export const api = {
   revealInFinder: (path: string) => invoke<void>("reveal_in_finder", { path }),
 
   // ===== 虚拟相册 =====
-  listAlbums: () => invoke<Album[]>("list_albums"),
-  createAlbum: (name: string) => invoke<Album>("create_album", { name }),
-  deleteAlbum: (id: number) => invoke<void>("delete_album", { id }),
-  checkAlbumNameExists: (name: string, excludeId?: number | null) =>
-    invoke<boolean>("check_album_name_exists", {
+  listProjects: () => invoke<Project[]>("list_projects"),
+  createProject: (name: string) => invoke<Project>("create_project", { name }),
+  deleteProject: (id: number) => invoke<void>("delete_project", { id }),
+  checkProjectNameExists: (name: string, excludeId?: number | null) =>
+    invoke<boolean>("check_project_name_exists", {
       name,
       excludeId: excludeId ?? null,
     }),
-  renameAlbum: (id: number, name: string) =>
-    invoke<Album>("rename_album", { id, name }),
+  renameProject: (id: number, name: string) =>
+    invoke<Project>("rename_project", { id, name }),
   getFolderAssetCount: (id: number) =>
     invoke<number>("get_folder_asset_count", { id }),
   deleteFolder: (id: number) => invoke<void>("delete_folder", { id }),
-  albumAdd: (albumId: number, assetIds: number[]) =>
-    invoke<void>("album_add", { albumId, assetIds }),
-  albumRemove: (albumId: number, assetIds: number[]) =>
-    invoke<void>("album_remove", { albumId, assetIds }),
+  projectAdd: (projectId: number, assetIds: number[]) =>
+    invoke<void>("project_add", { projectId, assetIds }),
+  projectRemove: (projectId: number, assetIds: number[]) =>
+    invoke<void>("project_remove", { projectId, assetIds }),
 
-  getAlbumSummaries: () => invoke<AlbumSummary[]>("get_album_summaries"),
-  listTrashAlbums: () => invoke<AlbumSummary[]>("list_trash_albums"),
-  restoreAlbum: (id: number) => invoke<void>("restore_album", { id }),
-  purgeAlbum: (id: number) => invoke<void>("purge_album", { id }),
-  purgeAllTrash: () => invoke<void>("purge_all_trash"),
+  getProjectSummaries: () => invoke<ProjectSummary[]>("get_project_summaries"),
+  listTrashProjects: () => invoke<ProjectSummary[]>("list_trash_projects"),
+  restoreProject: (id: number) => invoke<void>("restore_project", { id }),
+  purgeProject: (id: number) => invoke<void>("purge_project", { id }),
+  purgeAllTrashProjects: () => invoke<void>("purge_all_trash"),
 
   // ===== 滤镜预设 CRUD =====
   listPresets: () => invoke<FilterPreset[]>("list_presets"),
@@ -137,6 +137,7 @@ export const api = {
     maxEdge?: number,
     token?: number,
     tile?: PreviewTileRequest | null,
+    projectId?: number | null,
   ) =>
     invoke<PreviewResult>("get_preview", {
       assetId,
@@ -145,18 +146,19 @@ export const api = {
       maxEdge,
       token: token ?? 0,
       tile: tile ?? null,
+      projectId: projectId ?? null,
     }),
 
   markPreviewInteraction: (durationMs?: number) =>
     invoke<void>("mark_preview_interaction", { durationMs: durationMs ?? null }),
 
   /** 判断 RAW 预览基线 TIFF 是否已经解析完成。 */
-  hasPreviewBase: (assetId: number) =>
-    invoke<boolean>("has_preview_base", { assetId }),
+  hasPreviewBase: (assetId: number, projectId?: number | null) =>
+    invoke<boolean>("has_preview_base", { assetId, projectId: projectId ?? null }),
 
   /** 返回已解析 RAW 预览基线 TIFF 的路径和尺寸。 */
-  getPreviewBase: (assetId: number) =>
-    invoke<PreviewResult | null>("get_preview_base", { assetId }),
+  getPreviewBase: (assetId: number, projectId?: number | null) =>
+    invoke<PreviewResult | null>("get_preview_base", { assetId, projectId: projectId ?? null }),
 
   /** 独立直方图计算（512px 工作图、独立 token）。与 getPreview 平行调用 */
   computeHistogram: (assetId: number, settings: FilterSettings | null, token: number) =>

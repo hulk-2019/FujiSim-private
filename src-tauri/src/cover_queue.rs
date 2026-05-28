@@ -40,6 +40,7 @@ impl CoverQueue {
     pub fn enqueue(
         self: &Arc<Self>,
         asset_ids: Vec<i64>,
+        project_id: Option<i64>,
         state: SharedState,
         app: tauri::AppHandle,
     ) {
@@ -86,7 +87,7 @@ impl CoverQueue {
                         queue: queue.clone(),
                         asset_id,
                     };
-                    process_one(asset_id, &state, &app);
+                    process_one(asset_id, project_id, &state, &app);
                 });
             }
 
@@ -97,7 +98,7 @@ impl CoverQueue {
 }
 
 /// Must only be called from a `spawn_blocking` context — calls `block_on` internally.
-fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
+fn process_one(asset_id: i64, project_id: Option<i64>, state: &SharedState, app: &tauri::AppHandle) {
     let rt = tokio::runtime::Handle::current();
 
     let asset = match rt.block_on(crate::db::assets::get(&state.pool, asset_id)) {
@@ -109,15 +110,8 @@ fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
     };
 
     let file_path = PathBuf::from(&asset.file_path);
-    let mtime = file_path
-        .metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    let cover_path = state.cover_dir.join(format!("{}_{}.jpg", asset_id, mtime));
+    let cover_dir = crate::processing::raw::cache_scope_dir(&state.cover_dir, project_id);
+    let cover_path = cover_dir.join(format!("{asset_id}.jpg"));
 
     if cover_path.exists() {
         let _ = app.emit(
@@ -135,7 +129,7 @@ fn process_one(asset_id: i64, state: &SharedState, app: &tauri::AppHandle) {
         }
     };
 
-    if let Err(e) = std::fs::create_dir_all(&state.cover_dir)
+    if let Err(e) = std::fs::create_dir_all(&cover_dir)
         .and_then(|_| std::fs::write(&cover_path, &cover_jpeg))
     {
         tracing::warn!(asset_id, error = %e, "cover_queue: write failed");

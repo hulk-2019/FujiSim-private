@@ -43,13 +43,13 @@ export const createCategorySlice: StateCreator<AppState, [], [], CategorySlice> 
 
   enterFolder: async (id, name) => {
     set({ currentFolderId: id, currentFolderName: name });
-    await get().setQuery({ album_id: id });
+    await get().setQuery({ project_id: id });
   },
 
   exitFolder: async () => {
     set({ currentFolderId: null, currentFolderName: null });
     get().clearSelection();
     get().focusAsset(null);
-    await get().setQuery({ album_id: null });
+    await get().setQuery({ project_id: null });
   },
 });

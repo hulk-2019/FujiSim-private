@@ -59,6 +59,7 @@ pub async fn compute_histogram(
                 Some(512),
                 native_max_edge,
                 false,
+                None,
             )?;
 
             if histogram_token.load(Ordering::SeqCst) != token

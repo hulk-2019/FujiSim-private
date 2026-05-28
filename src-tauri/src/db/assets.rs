@@ -64,7 +64,7 @@ pub struct AssetQuery {
     pub color_label: Option<String>,
     pub min_iso: Option<i64>,
     pub max_iso: Option<i64>,
-    pub album_id: Option<i64>,
+    pub project_id: Option<i64>,
     pub search: Option<String>,
     #[serde(default)]
     pub sort_by: SortBy,
@@ -172,10 +172,10 @@ pub async fn list(pool: &SqlitePool, q: &AssetQuery) -> Result<ListAssetsResult>
     let mut where_clauses: Vec<String> = Vec::new();
     let mut binds: Vec<Bind> = Vec::new();
 
-    if let Some(album_id) = q.album_id {
-        sql.push_str(" INNER JOIN album_assets aa ON aa.asset_id = a.id");
-        where_clauses.push("aa.album_id = ?".into());
-        binds.push(Bind::I64(album_id));
+    if let Some(project_id) = q.project_id {
+        sql.push_str(" INNER JOIN project_assets aa ON aa.asset_id = a.id");
+        where_clauses.push("aa.project_id = ?".into());
+        binds.push(Bind::I64(project_id));
     }
     if let Some(cm) = &q.camera_model {
         where_clauses.push("a.camera_model = ?".into());
