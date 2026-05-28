@@ -58,12 +58,14 @@ export interface FilterSlice {
   histogram: HistogramData | null;
   eyedropperMode: EyedropperMode;
   isAdjustingFilter: boolean;
+  filterInteraction: "idle" | "dragging" | "preset_applied" | "settling";
   setFilter: (patch: Partial<FilterSettings>) => void;
   resetFilter: () => void;
   applyPreset: (preset: FilterPreset) => void;
   setEyedropperMode: (mode: EyedropperMode) => void;
   setHistogram: (data: HistogramData | null) => void;
   setIsAdjustingFilter: (isAdjusting: boolean) => void;
+  setFilterInteraction: (interaction: FilterSlice["filterInteraction"]) => void;
 }
 
 /**

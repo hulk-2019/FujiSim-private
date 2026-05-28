@@ -24,6 +24,7 @@ export function PresetGroupedList({ search }: Props) {
   const filter = useStore((s) => s.filter);
   const applyPreset = useStore((s) => s.applyPreset);
   const setFilter = useStore((s) => s.setFilter);
+  const setFilterInteraction = useStore((s) => s.setFilterInteraction);
   const deleteCategory = useStore((s) => s.deleteCategory);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -156,6 +157,7 @@ export function PresetGroupedList({ search }: Props) {
                             entry,
                             (patch: Partial<FilterSettings>) => setFilter(patch),
                             applyPreset,
+                            () => setFilterInteraction("preset_applied"),
                           )
                         }
                       />

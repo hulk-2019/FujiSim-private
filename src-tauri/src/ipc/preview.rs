@@ -60,6 +60,14 @@ pub async fn has_preview_base(state: State<'_, SharedState>, asset_id: i64) -> R
     Ok(processing::raw::preview_base_path(&state.raw_original_dir, asset_id).exists())
 }
 
+/// Frontend-only interaction marker. Used when WebGL handles immediate feedback
+/// without calling `get_preview`, so background queues still yield to the editor.
+#[tauri::command]
+pub async fn mark_preview_interaction(state: State<'_, SharedState>, duration_ms: Option<u64>) -> Result<()> {
+    state.mark_interaction_active_for(duration_ms.unwrap_or(900).clamp(100, 5000));
+    Ok(())
+}
+
 /// 返回已解析 RAW baseline TIFF 的路径和尺寸。
 ///
 /// 用于切回已经完成首次解析的 RAW 时直接显示 baseline，避免先进入骨架屏。
@@ -94,8 +102,14 @@ pub async fn get_preview(
     tile: Option<PreviewTileRequest>,
 ) -> Result<PreviewResult> {
     use std::sync::atomic::Ordering;
-    // 注册为当前最新 token，同时让旧的请求在检查时发现自己已过期
-    state.preview_token.store(token, Ordering::SeqCst);
+    let is_tile = matches!(mode, PreviewMode::Tile);
+    if is_tile {
+        state.tile_token.store(token, Ordering::SeqCst);
+    } else {
+        // 主预览优先级高于 tile refinement，所以主预览更新也会打断旧 tile。
+        state.preview_token.store(token, Ordering::SeqCst);
+        state.tile_token.store(token, Ordering::SeqCst);
+    }
     state.mark_preview_active_for(1500);
 
     let asset = assets::get(&state.pool, asset_id).await?;
@@ -107,8 +121,14 @@ pub async fn get_preview(
     let settings = settings.unwrap_or_default();
     let lut = super::cached_lut(&state, settings.lut_file_path.as_deref())?;
     let preview_pool = state.preview_pool.clone();
-    let sem = state.preview_sem.clone();
+    let sem = if is_tile {
+        state.tile_sem.clone()
+    } else {
+        state.preview_sem.clone()
+    };
     let preview_token = state.preview_token.clone();
+    let tile_token = state.tile_token.clone();
+    let preview_generation = preview_token.load(Ordering::SeqCst);
     let state_for_render = state.inner().clone();
 
     let permit = sem
@@ -116,7 +136,7 @@ pub async fn get_preview(
         .map_err(|_| AppError::other("preview_busy"))?;
 
     // 等到拿到 permit 后再检查一次，可能已经有更新的请求进来了
-    if preview_token.load(Ordering::SeqCst) != token {
+    if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
         return Err(AppError::other("preview_cancelled"));
     }
 
@@ -133,11 +153,11 @@ pub async fn get_preview(
                 &state_for_render,
                 asset_id,
                 &path,
-                if matches!(mode, PreviewMode::Tile) { None } else { max_edge },
+                if is_tile { None } else { max_edge },
                 native_max_edge,
                 persist_to_disk,
             )?;
-            let resized = if matches!(mode, PreviewMode::Tile) {
+            let resized = if is_tile {
                 Arc::new(crop_tile(&resized, tile.ok_or_else(|| AppError::other("preview_tile_required"))?)?)
             } else {
                 resized
@@ -145,7 +165,7 @@ pub async fn get_preview(
             let base_ms = base_start.elapsed().as_millis();
 
             // Check token after decode (decode is the most expensive part)
-            if preview_token.load(Ordering::SeqCst) != token {
+            if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
                 return Err(AppError::other("preview_cancelled"));
             }
 
@@ -160,7 +180,7 @@ pub async fn get_preview(
             let processed =
                 crate::processing::process_image(&resized, &render_settings, lut.as_deref())?;
             let process_ms = process_start.elapsed().as_millis();
-            if preview_token.load(Ordering::SeqCst) != token {
+            if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
                 return Err(AppError::other("preview_cancelled"));
             }
             let jpeg_quality = if interactive_preview {
@@ -172,7 +192,7 @@ pub async fn get_preview(
             let jpeg =
                 crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, jpeg_quality)?;
             let encode_ms = encode_start.elapsed().as_millis();
-            if preview_token.load(Ordering::SeqCst) != token {
+            if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
                 return Err(AppError::other("preview_cancelled"));
             }
             let transport_start = Instant::now();
@@ -214,6 +234,22 @@ pub async fn get_preview(
     })
     .await
     .map_err(|e| AppError::other(e.to_string()))?
+}
+
+fn request_cancelled(
+    is_tile: bool,
+    token: u64,
+    preview_generation: u64,
+    preview_token: &std::sync::atomic::AtomicU64,
+    tile_token: &std::sync::atomic::AtomicU64,
+) -> bool {
+    use std::sync::atomic::Ordering;
+    if is_tile {
+        tile_token.load(Ordering::SeqCst) != token
+            || preview_token.load(Ordering::SeqCst) != preview_generation
+    } else {
+        preview_token.load(Ordering::SeqCst) != token
+    }
 }
 
 pub(crate) fn load_preview_base(

@@ -24,6 +24,10 @@ import {
 } from "@/components/preview/usePreviewGestures";
 import { usePreviewLoader } from "@/components/preview/usePreviewLoader";
 import { useFullResolutionPreviewTrigger } from "@/components/preview/useFullResolutionPreviewTrigger";
+import { usePreviewInteractionMarker } from "@/components/preview/usePreviewInteractionMarker";
+import { useElementSize } from "@/components/preview/useElementSize";
+import { useTilePreview } from "@/components/preview/useTilePreview";
+import { TilePreviewOverlay } from "@/components/preview/TilePreviewOverlay";
 
 const FIT_FILL = 0.8;
 
@@ -53,8 +57,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const setFilter = useStore((s) => s.setFilter);
     const focused = assets.find((a) => a?.id === focusedId) ?? null;
     const isAdjustingFilter = useStore((s) => s.isAdjustingFilter);
+    const filterInteraction = useStore((s) => s.filterInteraction);
+    const setFilterInteraction = useStore((s) => s.setFilterInteraction);
 
     useHistogramSync(focusedId, filter);
+    usePreviewInteractionMarker({
+      filter,
+      filterInteraction,
+      isAdjustingFilter,
+    });
 
     const [scale, setScale] = useState<number>(1);
     const [tx, setTx] = useState(0);
@@ -68,12 +79,17 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     const viewportRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
+    const viewportSize = useElementSize(viewportRef);
     // 防止全分辨率预览替换缩略图时重复 fit
     const hasFitRef = useRef(false);
     const fitScaleRef = useRef(1);
     const wasAdjustingFilterRef = useRef(false);
     const currentFilterIsIdentity = isIdentityFilter(filter);
     const canApproximateCurrentFilter = canApproximateWithGpu(filter);
+    const approximateFilterWithGpu =
+      isAdjustingFilter ||
+      filterInteraction === "preset_applied" ||
+      filterInteraction === "settling";
     const { useFullResolutionPreview } = useFullResolutionPreviewTrigger({
       nativeWidth: focused?.width,
       nativeHeight: focused?.height,
@@ -81,6 +97,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       filter,
       isAdjustingFilter,
     });
+    const useTileDetailPreview = useFullResolutionPreview && !showOriginal;
 
     const { preview, baselinePreviews, loading, loadingRef, initializingBase, error } =
       usePreviewLoader({
@@ -93,9 +110,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
           !!focused &&
           !currentFilterIsIdentity &&
           canApproximateCurrentFilter &&
-          isAdjustingFilter &&
+          approximateFilterWithGpu &&
           !showOriginal,
-        useFullResolutionPreview,
+        useFullResolutionPreview: useFullResolutionPreview && !useTileDetailPreview,
         setPreviewSize,
       });
     const focusedBaselinePreview = focused
@@ -104,7 +121,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const focusedPreviewImage =
       focused &&
       preview?.assetId === focused.id &&
-      (!currentFilterIsIdentity || useFullResolutionPreview)
+      (!currentFilterIsIdentity || (useFullResolutionPreview && !useTileDetailPreview))
         ? preview
         : null;
     const gpuInteractiveSrc: string | null = (() => {
@@ -118,6 +135,18 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       !showOriginal &&
       !!gpuInteractiveSrc;
     const markZooming = useCallback(() => {}, []);
+    const tilePreviews = useTilePreview({
+      focused,
+      filter,
+      enabled: useTileDetailPreview && !approximateFilterWithGpu && imgVisible,
+      scale,
+      tx,
+      ty,
+      viewportWidth: viewportSize.width,
+      viewportHeight: viewportSize.height,
+      imageWidth: focused?.width ?? containerW,
+      imageHeight: focused?.height ?? containerH,
+    });
 
     // 重置到 fit 状态：容器为图片原始尺寸，scale 缩放到占 viewport 80% 并居中
     // 优先用 store 里的 focused 尺寸（DB EXIF），缺失时回退到已加载 img 的 naturalWidth/Height，
@@ -171,6 +200,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       }
     }, [gpuInteractiveSrc]);
 
+    const shouldApproximateWithGpu = canUseGpuInteractivePreview && approximateFilterWithGpu;
+
     useLayoutEffect(() => {
       if (!canUseGpuInteractivePreview || currentFilterIsIdentity) {
         setGpuHandoffActive(false);
@@ -186,17 +217,19 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
         setGpuHandoffActive(true);
       }
       wasAdjustingFilterRef.current = isAdjustingFilter;
-    }, [
-      canUseGpuInteractivePreview,
-      currentFilterIsIdentity,
-      gpuInteractiveReady,
-      isAdjustingFilter,
-    ]);
+    }, [canUseGpuInteractivePreview, currentFilterIsIdentity, gpuInteractiveReady, isAdjustingFilter]);
 
     useEffect(() => {
       setGpuHandoffActive(false);
       wasAdjustingFilterRef.current = false;
+      setFilterInteraction("idle");
     }, [focused?.id]);
+
+    useEffect(() => {
+      if (filterInteraction !== "preset_applied") return;
+      const handle = setTimeout(() => setFilterInteraction("settling"), 450);
+      return () => clearTimeout(handle);
+    }, [filterInteraction, setFilterInteraction]);
 
     // 切换素材时重置 fit。用 useLayoutEffect 保证在浏览器 paint 之前同步完成布局，
     // 否则会先以「旧 scale + 新图」画一帧，视觉上像放大然后缩小。
@@ -290,7 +323,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       !!gpuInteractiveSrc &&
       gpuInteractiveReady &&
       canUseGpuInteractivePreview &&
-      (isAdjustingFilter || gpuHandoffActive);
+      (shouldApproximateWithGpu || gpuHandoffActive);
 
     const wmDims: { width: number; height: number } | null = (() => {
       if (focused.width && focused.height)
@@ -376,19 +409,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       draggable={false}
                       onLoad={(e) => {
                         const el = e.currentTarget as HTMLImageElement;
-                        console.log(
-                          "[PreviewPanel] onLoad",
-                          el.src,
-                          el.naturalWidth,
-                          "x",
-                          el.naturalHeight,
-                        );
                         if (
                           gpuHandoffActive &&
                           previewSrc &&
                           el.src === previewSrc
                         ) {
                           setGpuHandoffActive(false);
+                          setFilterInteraction("idle");
+                        } else if (previewSrc && el.src === previewSrc) {
+                          setFilterInteraction("idle");
                         }
                         if (previewSrc || baselineSrc) {
                           if (!hasFitRef.current) {
@@ -435,6 +464,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       onReadyChange={setGpuInteractiveReady}
                     />
                   )}
+                  <TilePreviewOverlay tilePreviews={tilePreviews} assetId={focused.id} />
                   {!showOriginal && watermark.enabled && wmDims && (
                     <WatermarkOverlay
                       wm={watermark}

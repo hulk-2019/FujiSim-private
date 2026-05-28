@@ -119,7 +119,7 @@ pub async fn start_batch_export(
 
 /// 从数据库取出 pending 任务填充空闲并发槽位。
 async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
-    while state.preview_is_active() {
+    while !state.low_priority_work_can_start() {
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     }
 

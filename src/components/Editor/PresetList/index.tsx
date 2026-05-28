@@ -13,6 +13,7 @@ export function PresetList() {
   const filter = useStore((s) => s.filter);
   const applyPreset = useStore((s) => s.applyPreset);
   const setFilter = useStore((s) => s.setFilter);
+  const setFilterInteraction = useStore((s) => s.setFilterInteraction);
   const refreshPresets = useStore((s) => s.refreshPresets);
   const refreshUserLuts = useStore((s) => s.refreshUserLuts);
   const refreshCategories = useStore((s) => s.refreshCategories);
@@ -60,6 +61,7 @@ export function PresetList() {
                     entry,
                     (patch: Partial<FilterSettings>) => setFilter(patch),
                     applyPreset,
+                    () => setFilterInteraction("preset_applied"),
                   )
                 }
               />

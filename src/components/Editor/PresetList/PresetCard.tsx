@@ -106,10 +106,12 @@ export function applyEntry(
   entry: PresetEntry,
   setFilter: (patch: Partial<FilterSettings>) => void,
   applyPreset: (p: FilterPreset) => void,
+  markPresetApplied?: () => void,
 ) {
   if (entry.kind === "preset") {
     applyPreset(entry.preset);
   } else {
     setFilter({ base_simulation: PASS_THROUGH_SIM, lut_file_path: entry.lut.file_path });
+    markPresetApplied?.();
   }
 }

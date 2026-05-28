@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 pub mod albums;
 pub mod app_settings;
+pub mod asset_render_cache;
 pub mod assets;
 pub mod preset_categories;
 pub mod presets;
@@ -305,6 +306,26 @@ CREATE TABLE IF NOT EXISTS asset_generations (
     FOREIGN KEY (task_id) REFERENCES batch_tasks(id) ON DELETE CASCADE,
     FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
 );
+
+-- 渲染缓存元数据。只记录非 assets 源数据的派生缓存；
+-- deterministic baseline TIFF 不写入这里。
+CREATE TABLE IF NOT EXISTS asset_render_cache (
+    asset_id INTEGER NOT NULL,
+    cache_kind TEXT NOT NULL,
+    cache_key TEXT NOT NULL,
+    path TEXT NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    pipeline_version INTEGER NOT NULL,
+    filter_hash TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (asset_id, cache_kind, cache_key),
+    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_asset_render_cache_access
+    ON asset_render_cache(cache_kind, last_accessed_at);
 
 -- 水印自定义预设：settings_json 存一个完整的 WatermarkSettings 序列化串
 CREATE TABLE IF NOT EXISTS watermark_presets (

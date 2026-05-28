@@ -147,6 +147,9 @@ export const api = {
       tile: tile ?? null,
     }),
 
+  markPreviewInteraction: (durationMs?: number) =>
+    invoke<void>("mark_preview_interaction", { durationMs: durationMs ?? null }),
+
   /** 判断 RAW 预览基线 TIFF 是否已经解析完成。 */
   hasPreviewBase: (assetId: number) =>
     invoke<boolean>("has_preview_base", { assetId }),

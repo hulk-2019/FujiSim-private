@@ -22,6 +22,9 @@ pub async fn compute_histogram(
     use std::sync::atomic::Ordering;
 
     state.histogram_token.store(token, Ordering::SeqCst);
+    if state.interaction_is_active() {
+        return Err(AppError::other("preview_busy"));
+    }
 
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);

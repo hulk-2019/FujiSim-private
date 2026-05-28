@@ -38,11 +38,16 @@ export const createFilterSlice: StateCreator<AppState, [], [], FilterSlice> = (s
   histogram: null,
   eyedropperMode: DEFAULT_EYEDROPPER_MODE,
   isAdjustingFilter: false,
+  filterInteraction: "idle",
 
   setFilter: (patch) => set({ filter: { ...get().filter, ...patch } }),
-  resetFilter: () => set({ filter: { ...DEFAULT_FILTER }, isAdjustingFilter: false }),
-  applyPreset: (preset) => set({ filter: presetToFilter(preset) }),
+  resetFilter: () => set({ filter: { ...DEFAULT_FILTER }, isAdjustingFilter: false, filterInteraction: "idle" }),
+  applyPreset: (preset) => set({ filter: presetToFilter(preset), filterInteraction: "preset_applied" }),
   setEyedropperMode: (mode: EyedropperMode) => set({ eyedropperMode: mode }),
   setHistogram: (data: HistogramData | null) => set({ histogram: data }),
-  setIsAdjustingFilter: (isAdjusting) => set({ isAdjustingFilter: isAdjusting }),
+  setIsAdjustingFilter: (isAdjusting) => set({
+    isAdjustingFilter: isAdjusting,
+    filterInteraction: isAdjusting ? "dragging" : "settling",
+  }),
+  setFilterInteraction: (interaction) => set({ filterInteraction: interaction }),
 });
