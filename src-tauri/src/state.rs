@@ -13,9 +13,16 @@ use tokio::sync::Semaphore;
 pub type Rgb16Image = ImageBuffer<Rgb<u16>, Vec<u16>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PreviewBaseCacheKind {
+    Display,
+    LinearProxy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PreviewBaseCacheKey {
     pub asset_id: i64,
     pub max_edge: Option<u32>,
+    pub kind: PreviewBaseCacheKind,
 }
 
 pub struct PreviewBaseCache {

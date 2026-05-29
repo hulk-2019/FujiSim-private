@@ -236,7 +236,29 @@ pub fn decode_raw_rgb16_for_preview(
     decode_raw_rgb16_from_bytes(&data, max_edge)
 }
 
+/// Decode a RAW preview base without FujiSim's display baseline tone.
+///
+/// This is the authority source for interactive previews: callers resize this
+/// linear proxy first, then apply the app baseline tone and filter pipeline on
+/// the much smaller image.
+pub fn decode_raw_linear_rgb16_for_preview(
+    path: &Path,
+    max_edge: Option<u32>,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    let data = std::fs::read(path)?;
+    decode_raw_linear_rgb16_from_bytes(&data, max_edge)
+}
+
 fn decode_raw_rgb16_from_bytes(
+    data: &[u8],
+    max_edge: Option<u32>,
+) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
+    let mut img = decode_raw_linear_rgb16_from_bytes(data, max_edge)?;
+    apply_app_baseline_tone(&mut img);
+    Ok(img)
+}
+
+fn decode_raw_linear_rgb16_from_bytes(
     data: &[u8],
     max_edge: Option<u32>,
 ) -> Result<ImageBuffer<Rgb<u16>, Vec<u16>>> {
@@ -252,9 +274,7 @@ fn decode_raw_rgb16_from_bytes(
         decode_linear_dng(data)?
     };
 
-    let mut img = apply_orientation_rgb16(img, orientation);
-    apply_app_baseline_tone(&mut img);
-    Ok(img)
+    Ok(apply_orientation_rgb16(img, orientation))
 }
 
 fn apply_orientation_rgb16(
@@ -330,14 +350,13 @@ fn decode_with_libraw(
     // ProcessedImage<BIT_DEPTH_16> derefs to [u16] directly
     let pixels: Vec<u16> = processed.to_vec();
 
-    let mut img = ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(width, height, pixels)
+    let img = ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(width, height, pixels)
         .ok_or_else(|| AppError::other("LibRaw: pixel buffer size mismatch"))?;
 
-    apply_app_baseline_tone(&mut img);
     Ok(img)
 }
 
-fn apply_app_baseline_tone(img: &mut ImageBuffer<Rgb<u16>, Vec<u16>>) {
+pub(crate) fn apply_app_baseline_tone(img: &mut ImageBuffer<Rgb<u16>, Vec<u16>>) {
     for px in img.pixels_mut() {
         let r = px.0[0] as f32 / 65535.0;
         let g = px.0[1] as f32 / 65535.0;

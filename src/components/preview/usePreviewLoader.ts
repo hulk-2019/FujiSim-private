@@ -123,7 +123,6 @@ export function usePreviewLoader({
     ) {
       const fastToken = nextPreviewToken();
       currentTokenRef.current = fastToken;
-      setPreviewLoading(true, "interactive");
       api.getFastPreview(focused.id, SETTLED_PREVIEW_MAX_EDGE, fastToken)
         .then((result) => {
           if (currentTokenRef.current !== fastToken) return;
@@ -136,7 +135,6 @@ export function usePreviewLoader({
           });
           setPreviewSize({ width: result.width, height: result.height }, focused.id);
           setInitializingBase(false);
-          setPreviewLoading(false);
           setRequestTick((v) => v + 1);
         })
         .catch((e) => {
@@ -145,7 +143,6 @@ export function usePreviewLoader({
             fastPreviewFailedRef.current.add(focused.id);
           }
           if (currentTokenRef.current === fastToken) {
-            setPreviewLoading(false);
             setRequestTick((v) => v + 1);
           }
         });
@@ -172,13 +169,14 @@ export function usePreviewLoader({
       if (inFlightRequestRef.current === requestSignature) return;
       pendingRequestRef.current = requestSignature;
       currentTokenRef.current = nextPreviewToken();
+      setPreviewLoading(true, mode);
       return;
     }
 
     const delay = !hasDisplay ? 0 : isAdjustingFilter ? INTERACTIVE_PREVIEW_DELAY_MS : SETTLED_PREVIEW_DELAY_MS;
     const token = nextPreviewToken();
     currentTokenRef.current = token;
-    setPreviewLoading(false);
+    setPreviewLoading(true, mode);
 
     const handle = setTimeout(async () => {
       if (currentTokenRef.current !== token) return;
@@ -208,16 +206,20 @@ export function usePreviewLoader({
         }
         setPreviewSize({ width: result.width, height: result.height }, focused.id);
         completedRequestRef.current = requestSignature;
-        setPreviewLoading(false);
+        if (pendingRequestRef.current === null) {
+          setPreviewLoading(false);
+        }
       } catch (e) {
         const message = String(e);
-        if (currentTokenRef.current !== token || message.includes("preview_cancelled")) {
-          setPreviewLoading(false);
+        if (currentTokenRef.current !== token) {
+          return;
+        }
+        if (message.includes("preview_cancelled")) {
           return;
         }
         if (message.includes("preview_busy")) {
           pendingRequestRef.current = requestSignature;
-          setPreviewLoading(false);
+          setPreviewLoading(true, mode);
         } else {
           setError(message);
           setPreviewLoading(false);
@@ -242,8 +244,9 @@ export function usePreviewLoader({
     revokePreviewImage(previewRef.current);
     previewRef.current = null;
     setPreview(null);
+    setPreviewLoading(false);
     setInitializingBase(false);
-  }, [focused?.id]);
+  }, [focused?.id, setPreviewLoading]);
 
   useEffect(() => {
     return () => {

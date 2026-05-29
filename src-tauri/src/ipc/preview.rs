@@ -3,12 +3,14 @@
 use crate::db::assets;
 use crate::error::{AppError, Result};
 use crate::processing::{self, FilterSettings};
-use crate::state::{PreviewBaseCacheKey, Rgb16Image, SharedState};
+use crate::state::{PreviewBaseCacheKey, PreviewBaseCacheKind, Rgb16Image, SharedState};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
+
+const RAW_PREVIEW_PROXY_MAX_EDGE: u32 = 2048;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -362,41 +364,138 @@ pub(crate) fn load_preview_base(
     project_id: Option<i64>,
 ) -> Result<Arc<Rgb16Image>> {
     let _ = project_id;
-    let key = PreviewBaseCacheKey { asset_id, max_edge };
+    use crate::asset::format::classify;
+
+    let file_kind = classify(path);
+    let cache_max_edge = preview_base_cache_max_edge(file_kind, max_edge);
+    let display_key = PreviewBaseCacheKey {
+        asset_id,
+        max_edge,
+        kind: PreviewBaseCacheKind::Display,
+    };
 
     if let Ok(mut cache) = state.preview_base_cache.lock() {
-        if let Some(img) = cache.get(key) {
-            tracing::debug!(asset_id, ?max_edge, "preview base memory cache hit");
+        if let Some(img) = cache.get(display_key) {
+            tracing::debug!(
+                asset_id,
+                ?max_edge,
+                "preview display base memory cache hit"
+            );
+            return Ok(img);
+        }
+    }
+
+    let proxy = load_preview_proxy(
+        state,
+        asset_id,
+        path,
+        file_kind,
+        cache_max_edge,
+        native_max_edge,
+    )?;
+    let derive_start = Instant::now();
+    let display = derive_preview_base(proxy, file_kind, max_edge)?;
+    let derive_ms = derive_start.elapsed().as_millis();
+    if let Ok(mut cache) = state.preview_base_cache.lock() {
+        cache.insert(display_key, display.clone());
+    }
+    tracing::debug!(
+        asset_id,
+        ?max_edge,
+        derive_ms,
+        "preview display base derived"
+    );
+    Ok(display)
+}
+
+fn preview_base_cache_max_edge(
+    file_kind: crate::asset::format::FileKind,
+    requested_max_edge: Option<u32>,
+) -> Option<u32> {
+    match file_kind {
+        crate::asset::format::FileKind::Raw => {
+            requested_max_edge.map(|_| RAW_PREVIEW_PROXY_MAX_EDGE)
+        }
+        _ => requested_max_edge,
+    }
+}
+
+fn decode_preview_proxy(
+    path: &std::path::Path,
+    max_edge: Option<u32>,
+    file_kind: crate::asset::format::FileKind,
+) -> crate::error::Result<Rgb16Image> {
+    use crate::processing;
+    let src = match file_kind {
+        crate::asset::format::FileKind::Raw => {
+            processing::raw::decode_raw_linear_rgb16_for_preview(path, max_edge)?
+        }
+        _ => processing::load_image_rgb16(path)?,
+    };
+    resize_to_max_edge(src, max_edge)
+}
+
+fn load_preview_proxy(
+    state: &SharedState,
+    asset_id: i64,
+    path: &std::path::Path,
+    file_kind: crate::asset::format::FileKind,
+    cache_max_edge: Option<u32>,
+    native_max_edge: Option<u32>,
+) -> Result<Arc<Rgb16Image>> {
+    let proxy_key = PreviewBaseCacheKey {
+        asset_id,
+        max_edge: cache_max_edge,
+        kind: match file_kind {
+            crate::asset::format::FileKind::Raw => PreviewBaseCacheKind::LinearProxy,
+            _ => PreviewBaseCacheKind::Display,
+        },
+    };
+
+    if let Ok(mut cache) = state.preview_base_cache.lock() {
+        if let Some(img) = cache.get(proxy_key) {
+            tracing::debug!(
+                asset_id,
+                ?cache_max_edge,
+                "preview proxy memory cache hit"
+            );
             return Ok(img);
         }
     }
 
     tracing::debug!(
         asset_id,
-        ?max_edge,
+        ?cache_max_edge,
         ?native_max_edge,
-        "preview base memory cache miss"
+        "preview proxy memory cache miss"
     );
-    let img = decode_and_resize(path, max_edge)?;
-
-    let img = Arc::new(img);
+    let decode_start = Instant::now();
+    let img = Arc::new(decode_preview_proxy(path, cache_max_edge, file_kind)?);
+    let decode_ms = decode_start.elapsed().as_millis();
     if let Ok(mut cache) = state.preview_base_cache.lock() {
-        cache.insert(key, img.clone());
+        cache.insert(proxy_key, img.clone());
     }
+    tracing::debug!(
+        asset_id,
+        ?cache_max_edge,
+        decode_ms,
+        "preview proxy decoded"
+    );
     Ok(img)
 }
 
-fn decode_and_resize(
-    path: &std::path::Path,
-    max_edge: Option<u32>,
-) -> crate::error::Result<Rgb16Image> {
-    use crate::asset::format::{classify, FileKind};
-    use crate::processing;
-    let src = match classify(path) {
-        FileKind::Raw => processing::raw::decode_raw_rgb16_for_preview(path, max_edge)?,
-        _ => processing::load_image_rgb16(path)?,
+fn derive_preview_base(
+    proxy: Arc<Rgb16Image>,
+    file_kind: crate::asset::format::FileKind,
+    requested_max_edge: Option<u32>,
+) -> Result<Arc<Rgb16Image>> {
+    let requested = match file_kind {
+        crate::asset::format::FileKind::Raw => requested_max_edge,
+        _ => return Ok(proxy),
     };
-    resize_to_max_edge(src, max_edge)
+    let mut img = resize_to_max_edge((*proxy).clone(), requested)?;
+    crate::processing::raw::apply_app_baseline_tone(&mut img);
+    Ok(Arc::new(img))
 }
 
 fn resize_to_max_edge(src: Rgb16Image, max_edge: Option<u32>) -> Result<Rgb16Image> {
@@ -433,6 +532,62 @@ fn crop_tile(src: &Rgb16Image, tile: PreviewTileRequest) -> Result<Rgb16Image> {
     } else {
         crate::vips_io::resize_rgb16(&cropped, output_width, output_height)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::asset::format::FileKind;
+    use image::{ImageBuffer, Rgb};
+
+    #[test]
+    fn raw_preview_base_uses_authority_proxy_cache_edge() {
+        assert_eq!(
+            preview_base_cache_max_edge(FileKind::Raw, Some(INTERACTIVE_TEST_EDGE)),
+            Some(RAW_PREVIEW_PROXY_MAX_EDGE)
+        );
+        assert_eq!(
+            preview_base_cache_max_edge(FileKind::Raw, Some(1920)),
+            Some(RAW_PREVIEW_PROXY_MAX_EDGE)
+        );
+        assert_eq!(preview_base_cache_max_edge(FileKind::Raw, None), None);
+    }
+
+    #[test]
+    fn non_raw_preview_base_keeps_requested_cache_edge() {
+        assert_eq!(
+            preview_base_cache_max_edge(FileKind::Image, Some(INTERACTIVE_TEST_EDGE)),
+            Some(INTERACTIVE_TEST_EDGE)
+        );
+        assert_eq!(preview_base_cache_max_edge(FileKind::Image, None), None);
+    }
+
+    #[test]
+    fn raw_preview_base_derives_requested_size_and_applies_baseline_tone() {
+        let proxy = Arc::new(ImageBuffer::from_pixel(3000, 1500, Rgb([32_000, 32_000, 32_000])));
+        let derived = derive_preview_base(proxy, FileKind::Raw, Some(INTERACTIVE_TEST_EDGE))
+            .expect("derive raw preview base");
+
+        assert_eq!(derived.dimensions(), (INTERACTIVE_TEST_EDGE, 480));
+        assert_ne!(derived.get_pixel(0, 0).0, [32_000, 32_000, 32_000]);
+    }
+
+    #[test]
+    fn image_preview_base_reuses_cached_proxy_without_derivation() {
+        let proxy = Arc::new(ImageBuffer::from_pixel(3000, 1500, Rgb([32_000, 32_000, 32_000])));
+        let derived =
+            derive_preview_base(proxy.clone(), FileKind::Image, Some(INTERACTIVE_TEST_EDGE))
+                .expect("derive image preview base");
+
+        assert!(Arc::ptr_eq(&derived, &proxy));
+    }
+
+    #[test]
+    fn raw_full_preview_keeps_native_cache_edge() {
+        assert_eq!(preview_base_cache_max_edge(FileKind::Raw, None), None);
+    }
+
+    const INTERACTIVE_TEST_EDGE: u32 = 960;
 }
 
 /// 使用 Gray World 算法计算自动白平衡偏移量。

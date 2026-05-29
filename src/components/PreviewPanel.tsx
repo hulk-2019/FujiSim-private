@@ -202,7 +202,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     });
     const useTileDetailPreview = useFullResolutionPreview && !showOriginal;
 
-    const { preview, baselinePreviews, placeholders, initializingBase, error } =
+    const {
+      preview,
+      baselinePreviews,
+      placeholders,
+      loading,
+      loadingMode,
+      initializingBase,
+      error,
+    } =
       usePreviewLoader({
         focused,
         filter,
@@ -371,6 +379,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       (!displaySrc || loadedMainSrc !== displaySrc) &&
       !!focusedPlaceholder?.blobUrl;
     const showMainImage = !!displaySrc && imgVisible && !showingOriginal;
+    const showRenderingBadge = loading && !showOriginal;
+    const blurPlaceholder =
+      loading &&
+      !!focused?.is_raw &&
+      !currentBaselinePreview &&
+      !!focusedPlaceholder?.blobUrl;
 
     return (
       <main className="w-full h-full flex flex-col bg-transparent min-w-0">
@@ -413,7 +427,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       containerH={containerH}
                       orientation={focusedPlaceholder.orientation}
                       objectFit="cover"
-                      opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 0.72}
+                      opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 1}
+                      style={
+                        blurPlaceholder
+                          ? {
+                              filter: "blur(14px) brightness(0.82)",
+                              transform: "scale(1.025)",
+                            }
+                          : undefined
+                      }
                     />
                   )}
                   {displaySrc && (
@@ -493,6 +515,13 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
             <div className="absolute bottom-3 right-3 text-[10px] text-zinc-500 bg-zinc-950/60 px-2 py-1 rounded">
               {focused.width} × {focused.height} ·{" "}
               {formatBytes(focused.file_size)}
+            </div>
+          )}
+          {showRenderingBadge && (
+            <div className="pointer-events-none absolute left-3 top-3 z-20 inline-flex h-6 items-center rounded bg-zinc-950/55 px-2.5 text-[11px] leading-none text-zinc-200 shadow-sm backdrop-blur-sm">
+              {loadingMode === "full"
+                ? t("previewPanel.loadingOriginal")
+                : t("previewPanel.rendering")}
             </div>
           )}
         </div>
