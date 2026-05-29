@@ -11,6 +11,7 @@ use std::time::Instant;
 use tauri::State;
 
 const RAW_PREVIEW_PROXY_MAX_EDGE: u32 = 2048;
+const WHITE_BALANCE_SAMPLE_MAX_EDGE: u32 = 2048;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -587,6 +588,11 @@ mod tests {
         assert_eq!(preview_base_cache_max_edge(FileKind::Raw, None), None);
     }
 
+    #[test]
+    fn white_balance_sampling_uses_bounded_preview_edge() {
+        assert_eq!(white_balance_sample_max_edge(), Some(2048));
+    }
+
     const INTERACTIVE_TEST_EDGE: u32 = 960;
 }
 
@@ -602,11 +608,18 @@ pub async fn auto_white_balance(
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
     let export_pool = state.export_pool.clone();
+    let state_for_sample = state.inner().clone();
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let _ = (project_id, asset_id);
-            let img = load_white_balance_image(asset.is_raw != 0, &path)?;
+            let img = load_white_balance_image(
+                &state_for_sample,
+                asset_id,
+                asset.is_raw != 0,
+                &path,
+                asset.width.zip(asset.height).map(|(w, h)| w.max(h).max(1) as u32),
+                project_id,
+            )?;
             Ok(processing::white_balance::auto_white_balance(&img))
         })
     })
@@ -628,11 +641,18 @@ pub async fn eyedrop_color(
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
     let export_pool = state.export_pool.clone();
+    let state_for_sample = state.inner().clone();
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let _ = (project_id, asset_id);
-            let img = load_white_balance_image(asset.is_raw != 0, &path)?;
+            let img = load_white_balance_image(
+                &state_for_sample,
+                asset_id,
+                asset.is_raw != 0,
+                &path,
+                asset.width.zip(asset.height).map(|(w, h)| w.max(h).max(1) as u32),
+                project_id,
+            )?;
             let (w, h) = img.dimensions();
             let sample_x = asset
                 .width
@@ -661,11 +681,27 @@ pub async fn eyedrop_color(
 }
 
 fn load_white_balance_image(
+    state: &SharedState,
+    asset_id: i64,
     is_raw: bool,
     source_path: &std::path::Path,
+    native_max_edge: Option<u32>,
+    project_id: Option<i64>,
 ) -> Result<Rgb16Image> {
     if is_raw {
-        return processing::raw::decode_raw_rgb16_for_preview(source_path, None);
+        return load_preview_base(
+            state,
+            asset_id,
+            source_path,
+            white_balance_sample_max_edge(),
+            native_max_edge,
+            project_id,
+        )
+        .map(|img| (*img).clone());
     }
     processing::load_image_rgb16(source_path)
+}
+
+fn white_balance_sample_max_edge() -> Option<u32> {
+    Some(WHITE_BALANCE_SAMPLE_MAX_EDGE)
 }

@@ -122,11 +122,11 @@ function OrientedImage({
           width: "100%",
           height: "100%",
           objectFit,
+          filter: "none",
+          transition: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
           ...style,
-          filter: "none",
-          transition: "none",
         }}
         draggable={draggable}
         onLoad={onLoad}
@@ -249,6 +249,23 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       canApproximateCurrentFilter &&
       !showOriginal &&
       !!gpuInteractiveSrc;
+    const sourceCoordinateSize =
+      focused?.width && focused.height
+        ? { width: focused.width, height: focused.height }
+        : { width: containerW, height: containerH };
+    const toSourceCoordinate = useCallback(
+      (x: number, y: number) => ({
+        x:
+          containerW && sourceCoordinateSize.width
+            ? Math.round((x / containerW) * sourceCoordinateSize.width)
+            : x,
+        y:
+          containerH && sourceCoordinateSize.height
+            ? Math.round((y / containerH) * sourceCoordinateSize.height)
+            : y,
+      }),
+      [containerH, containerW, sourceCoordinateSize.height, sourceCoordinateSize.width],
+    );
     const { gpuHandoffActive, setGpuHandoffActive } = useGpuPreviewHandoff({
       focusedId,
       canUseGpuInteractivePreview,
@@ -268,8 +285,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       ty,
       viewportWidth: viewportSize.width,
       viewportHeight: viewportSize.height,
-      imageWidth: focused?.width ?? containerW,
-      imageHeight: focused?.height ?? containerH,
+      imageWidth: sourceCoordinateSize.width,
+      imageHeight: sourceCoordinateSize.height,
+      displayWidth: containerW,
+      displayHeight: containerH,
       projectId,
     });
 
@@ -327,6 +346,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       eyedropperMode,
       viewportRef,
       imageTransform: { scale, tx, ty, width: containerW, height: containerH },
+      toSourceCoordinate,
       setFilter,
       setEyedropperMode,
     });
@@ -426,13 +446,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       containerW={containerW}
                       containerH={containerH}
                       orientation={focusedPlaceholder.orientation}
-                      objectFit="cover"
+                      objectFit="contain"
                       opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 1}
                       style={
                         blurPlaceholder
                           ? {
                               filter: "blur(14px) brightness(0.82)",
-                              transform: "scale(1.025)",
                             }
                           : undefined
                       }
@@ -499,7 +518,14 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       onReadyChange={setGpuInteractiveReady}
                     />
                   )}
-                  <TilePreviewOverlay tilePreviews={tilePreviews} assetId={focused.id} />
+                  <TilePreviewOverlay
+                    tilePreviews={tilePreviews}
+                    assetId={focused.id}
+                    displayWidth={containerW}
+                    displayHeight={containerH}
+                    sourceWidth={sourceCoordinateSize.width}
+                    sourceHeight={sourceCoordinateSize.height}
+                  />
                   {!showOriginal && watermark.enabled && wmDims && (
                     <WatermarkOverlay
                       wm={watermark}

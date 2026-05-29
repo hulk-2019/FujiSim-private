@@ -69,6 +69,8 @@ export function useTilePreview({
   viewportHeight,
   imageWidth,
   imageHeight,
+  displayWidth,
+  displayHeight,
   projectId,
 }: {
   focused: Asset | null;
@@ -81,6 +83,8 @@ export function useTilePreview({
   viewportHeight: number;
   imageWidth: number;
   imageHeight: number;
+  displayWidth?: number;
+  displayHeight?: number;
   projectId?: number | null;
 }) {
   const [previews, setPreviews] = useState<TilePreview[]>([]);
@@ -91,10 +95,18 @@ export function useTilePreview({
       return null;
     }
 
-    const visibleX0 = Math.max(0, Math.floor((0 - tx) / scale));
-    const visibleY0 = Math.max(0, Math.floor((0 - ty) / scale));
-    const visibleX1 = Math.min(imageWidth, Math.ceil((viewportWidth - tx) / scale));
-    const visibleY1 = Math.min(imageHeight, Math.ceil((viewportHeight - ty) / scale));
+    const frameW = displayWidth || imageWidth;
+    const frameH = displayHeight || imageHeight;
+    const sourceScaleX = imageWidth / frameW;
+    const sourceScaleY = imageHeight / frameH;
+    const visibleFrameX0 = Math.max(0, Math.floor((0 - tx) / scale));
+    const visibleFrameY0 = Math.max(0, Math.floor((0 - ty) / scale));
+    const visibleFrameX1 = Math.min(frameW, Math.ceil((viewportWidth - tx) / scale));
+    const visibleFrameY1 = Math.min(frameH, Math.ceil((viewportHeight - ty) / scale));
+    const visibleX0 = Math.max(0, Math.floor(visibleFrameX0 * sourceScaleX));
+    const visibleY0 = Math.max(0, Math.floor(visibleFrameY0 * sourceScaleY));
+    const visibleX1 = Math.min(imageWidth, Math.ceil(visibleFrameX1 * sourceScaleX));
+    const visibleY1 = Math.min(imageHeight, Math.ceil(visibleFrameY1 * sourceScaleY));
     if (visibleX1 <= visibleX0 || visibleY1 <= visibleY0) return null;
 
     const minTileX = Math.max(0, Math.floor(visibleX0 / TILE_SOURCE_SIZE) - TILE_PREFETCH_MARGIN);
@@ -155,7 +167,7 @@ export function useTilePreview({
 
     tiles.sort((a, b) => a.distance - b.distance);
     return { assetId: focused.id, tiles: tiles.slice(0, MAX_TILES_PER_PASS) };
-  }, [enabled, filter, focused, imageHeight, imageWidth, scale, tx, ty, viewportHeight, viewportWidth]);
+  }, [displayHeight, displayWidth, enabled, filter, focused, imageHeight, imageWidth, scale, tx, ty, viewportHeight, viewportWidth]);
 
   useEffect(() => {
     if (!enabled || !focused || !request) {

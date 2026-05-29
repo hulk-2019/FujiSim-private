@@ -10,6 +10,7 @@ export function useEyedropper({
   eyedropperMode,
   viewportRef,
   imageTransform,
+  toSourceCoordinate,
   setFilter,
   setEyedropperMode,
 }: {
@@ -24,6 +25,7 @@ export function useEyedropper({
     width: number;
     height: number;
   };
+  toSourceCoordinate?: (x: number, y: number) => { x: number; y: number };
   setFilter: (patch: Partial<FilterSettings>) => void;
   setEyedropperMode: (mode: EyedropperMode) => void;
 }) {
@@ -44,7 +46,8 @@ export function useEyedropper({
       if (imgX < 0 || imgX >= width || imgY < 0 || imgY >= height) return;
 
       try {
-        const { r, g, b } = await api.eyedropColor(focusedId, imgX, imgY, projectId);
+        const sample = toSourceCoordinate?.(imgX, imgY) ?? { x: imgX, y: imgY };
+        const { r, g, b } = await api.eyedropColor(focusedId, sample.x, sample.y, projectId);
         const avg = (r + g + b) / 3;
         if (avg < 1 || r < 1 || g < 1 || b < 1) return;
         setFilter({
@@ -59,6 +62,6 @@ export function useEyedropper({
         setEyedropperMode("none");
       }
     },
-    [eyedropperMode, focusedId, imageTransform, projectId, setFilter, setEyedropperMode, setFilterInteraction, viewportRef],
+    [eyedropperMode, focusedId, imageTransform, projectId, setFilter, setEyedropperMode, setFilterInteraction, toSourceCoordinate, viewportRef],
   );
 }

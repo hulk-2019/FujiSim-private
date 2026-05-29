@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import type { Asset } from "@/types";
+import { previewFitSize, type PreviewFitSize } from "./previewFitSize";
 
 const FIT_FILL = 0.8;
 
@@ -23,7 +24,7 @@ export function usePreviewFit({
   onScaleChange,
   viewportRef,
 }: {
-  fallbackSize?: { width?: number | null; height?: number | null } | null;
+  fallbackSize?: PreviewFitSize;
   focused: Asset | null;
   onScaleChange?: (scale: number, fitScale: number) => void;
   viewportRef: React.RefObject<HTMLDivElement>;
@@ -35,6 +36,7 @@ export function usePreviewFit({
   const [containerH, setContainerH] = useState(0);
   const [imgVisible, setImgVisible] = useState(false);
   const [fitScale, setFitScale] = useState(1);
+  const fitSize = previewFitSize({ focused, fallbackSize });
 
   const applyFit = useCallback(
     (imgW: number, imgH: number) => {
@@ -56,10 +58,8 @@ export function usePreviewFit({
   );
 
   const resetToFit = useCallback(() => {
-    const imgW = focused?.width || fallbackSize?.width || 0;
-    const imgH = focused?.height || fallbackSize?.height || 0;
-    return applyFit(imgW, imgH);
-  }, [applyFit, fallbackSize?.height, fallbackSize?.width, focused?.height, focused?.width]);
+    return applyFit(fitSize.width, fitSize.height);
+  }, [applyFit, fitSize.height, fitSize.width]);
 
   useEffect(() => {
     onScaleChange?.(scale, fitScale);
@@ -68,17 +68,14 @@ export function usePreviewFit({
   useLayoutEffect(() => {
     setImgVisible(false);
 
-    const imgW = focused?.width || fallbackSize?.width || 0;
-    const imgH = focused?.height || fallbackSize?.height || 0;
-
-    if (!imgW || !imgH) {
+    if (!fitSize.width || !fitSize.height) {
       setFitScale(1);
       setContainerW(0);
       setContainerH(0);
       return;
     }
-    applyFit(imgW, imgH);
-  }, [applyFit, fallbackSize?.height, fallbackSize?.width, focused?.height, focused?.id, focused?.width]);
+    applyFit(fitSize.width, fitSize.height);
+  }, [applyFit, fitSize.height, fitSize.width, focused?.id]);
 
   return {
     containerH,
