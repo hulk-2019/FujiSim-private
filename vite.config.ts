@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -12,6 +13,9 @@ export default defineConfig(async () => ({
     },
   },
   clearScreen: false,
+  test: {
+    environment: "node",
+  },
   server: {
     port: 1420,
     strictPort: true,
