@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWatermarkSvg } from "@/lib/watermarkSvg";
+import { buildWatermarkSvg, svgToDataUrl } from "@/lib/watermarkSvg";
 import { DEFAULT_WATERMARK } from "@/types";
 
 describe("buildWatermarkSvg", () => {
@@ -76,5 +76,9 @@ describe("buildWatermarkSvg", () => {
     expect(svg).toContain('stroke="#123456"');
     expect(svg).toContain(">New<");
     expect(svg).not.toContain(">Old<");
+  });
+
+  it("encodes svg as a data url", () => {
+    expect(svgToDataUrl('<svg width="1" height="1"></svg>')).toMatch(/^data:image\/svg\+xml,/);
   });
 });

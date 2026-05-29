@@ -74,3 +74,7 @@ export function buildWatermarkSvg(wm: WatermarkSettings, width: number, height: 
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g opacity="${opacity}" transform="${transform}">${body}</g></svg>`;
 }
+
+export function svgToDataUrl(svg: string): string {
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}

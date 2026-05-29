@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import type { WatermarkSettings } from "@/types";
-import { renderWatermarkLayer } from "@/lib/watermarkCanvas";
+import { buildWatermarkSvg, svgToDataUrl } from "@/lib/watermarkSvg";
 
 export function WatermarkOverlay({
   wm,
@@ -11,23 +11,11 @@ export function WatermarkOverlay({
   imgW: number;
   imgH: number;
 }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const dataUrl = useMemo(
+    () => svgToDataUrl(buildWatermarkSvg(wm, imgW, imgH)),
+    [wm, imgW, imgH],
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    const max = 1280;
-    const s = Math.min(1, max / Math.max(imgW, imgH));
-    const canvasW = Math.round(imgW * s);
-    const canvasH = Math.round(imgH * s);
-    renderWatermarkLayer(wm, canvasW, canvasH, 1).then((result) => {
-      if (!cancelled) setDataUrl(`data:image/png;base64,${result.data}`);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [wm, imgW, imgH]);
-
-  if (!dataUrl) return null;
   return (
     <img
       src={dataUrl}
