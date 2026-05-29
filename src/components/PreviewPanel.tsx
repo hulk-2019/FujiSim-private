@@ -50,6 +50,16 @@ interface PreviewPanelProps {
   onScaleChange?: (scale: number, fitScale: number) => void;
 }
 
+type DisplayFrame = {
+  containerH: number;
+  containerW: number;
+  orientation?: number | null;
+  scale: number;
+  src: string;
+  tx: number;
+  ty: number;
+};
+
 function orientationStyle(
   orientation: number | null | undefined,
   containerW: number,
@@ -186,6 +196,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     });
     const [gpuInteractiveReady, setGpuInteractiveReady] = useState(false);
     const [loadedMainSrc, setLoadedMainSrc] = useState<string | null>(null);
+    const [lastDisplayFrame, setLastDisplayFrame] =
+      useState<DisplayFrame | null>(null);
     const currentFilterIsIdentity = isIdentityFilter(filter);
     const canApproximateCurrentFilter = canApproximateWithGpu(filter);
     // GPU 近似只覆盖交互阶段；后端 settled 图仍然是最终权威结果。
@@ -311,6 +323,22 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       [resetToFit, setZoomLevel],
     );
 
+    const rememberDisplayFrame = useCallback(
+      (src: string | null, orientation?: number | null) => {
+        if (!src || !containerW || !containerH || !scale) return;
+        setLastDisplayFrame({
+          containerH,
+          containerW,
+          orientation,
+          scale,
+          src,
+          tx,
+          ty,
+        });
+      },
+      [containerH, containerW, scale, tx, ty],
+    );
+
     useEffect(() => {
       if (!gpuInteractiveSrc) {
         setGpuInteractiveReady(false);
@@ -399,6 +427,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       (!displaySrc || loadedMainSrc !== displaySrc) &&
       !!focusedPlaceholder?.blobUrl;
     const showMainImage = !!displaySrc && imgVisible && !showingOriginal;
+    const waitingForCurrentImage =
+      !showingOriginal && !!displaySrc && loadedMainSrc !== displaySrc;
+    const showTransitionFrame =
+      !showingOriginal &&
+      !!lastDisplayFrame &&
+      ((waitingForCurrentImage && !showPlaceholder) ||
+        (!displaySrc &&
+      !originalSrc &&
+          !showPlaceholder));
     const showRenderingBadge = loading && !showOriginal;
     const blurPlaceholder =
       loading &&
@@ -426,19 +463,45 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                     {error}
                   </div>
                 </div>
-              ) : displaySrc || originalSrc || showPlaceholder ? (
-                <div
-                  style={{
-                    transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
-                    transformOrigin: "0 0",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: containerW || undefined,
-                    height: containerH || undefined,
-                    lineHeight: 0,
-                  }}
-                >
+              ) : displaySrc || originalSrc || showPlaceholder || showTransitionFrame ? (
+                <>
+                  {showTransitionFrame && lastDisplayFrame && (
+                    <div
+                      style={{
+                        transform: `translate(${lastDisplayFrame.tx}px, ${lastDisplayFrame.ty}px) scale(${lastDisplayFrame.scale})`,
+                        transformOrigin: "0 0",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: lastDisplayFrame.containerW,
+                        height: lastDisplayFrame.containerH,
+                        lineHeight: 0,
+                      }}
+                    >
+                      <OrientedImage
+                        src={lastDisplayFrame.src}
+                        alt=""
+                        containerW={lastDisplayFrame.containerW}
+                        containerH={lastDisplayFrame.containerH}
+                        orientation={lastDisplayFrame.orientation}
+                        objectFit="contain"
+                        opacity={1}
+                      />
+                    </div>
+                  )}
+                  {(displaySrc || originalSrc || showPlaceholder) && (
+                    <div
+                      style={{
+                        transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+                        transformOrigin: "0 0",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: containerW || undefined,
+                        height: containerH || undefined,
+                        lineHeight: 0,
+                      }}
+                    >
                   {showPlaceholder && (
                     <OrientedImage
                       src={focusedPlaceholder.blobUrl}
@@ -448,6 +511,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       orientation={focusedPlaceholder.orientation}
                       objectFit="contain"
                       opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 1}
+                      onLoad={() =>
+                        rememberDisplayFrame(
+                          focusedPlaceholder.blobUrl,
+                          focusedPlaceholder.orientation,
+                        )
+                      }
                       style={
                         blurPlaceholder
                           ? {
@@ -469,6 +538,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       onLoad={(e) => {
                         const el = e.currentTarget as HTMLImageElement;
                         setLoadedMainSrc(displaySrc);
+                        rememberDisplayFrame(displaySrc, displayOrientation);
                         // 后端权威预览真正加载进 <img> 后，才释放 GPU 接管层。
                         if (
                           gpuHandoffActive &&
@@ -508,6 +578,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                         transition: "none",
                       }}
                       draggable={false}
+                      onLoad={() => rememberDisplayFrame(originalSrc, null)}
                     />
                   )}
                   {gpuInteractiveSrc && (
@@ -533,7 +604,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       imgH={wmDims.height}
                     />
                   )}
-                </div>
+                    </div>
+                  )}
+                </>
               ) : null}
             </>
           )}
