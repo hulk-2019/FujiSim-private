@@ -57,9 +57,12 @@ export function normalizeWatermark(wm: WatermarkSettings): WatermarkSettings {
 }
 
 function transformFor(wm: WatermarkSettings, x: number, y: number): string {
-  const sx = wm.flipH ? -wm.scale : wm.scale;
-  const sy = wm.flipV ? -wm.scale : wm.scale;
-  return `translate(${wm.offsetX} ${wm.offsetY}) translate(${x} ${y}) rotate(${wm.rotation}) scale(${sx} ${sy}) translate(${-x} ${-y})`;
+  return `translate(${wm.offsetX} ${wm.offsetY}) translate(${x} ${y}) rotate(${wm.rotation}) scale(${wm.scale}) translate(${-x} ${-y})`;
+}
+
+function wrapWithSelfCenteredFlip(body: string, wm: WatermarkSettings): string {
+  if (!wm.flipH && !wm.flipV) return body;
+  return `<g style="transform-box: fill-box; transform-origin: center; transform: scale(${wm.flipH ? -1 : 1}, ${wm.flipV ? -1 : 1});">${body}</g>`;
 }
 
 function overrideImportedSvg(svg: string, wm: WatermarkSettings): string {
@@ -92,12 +95,13 @@ export function buildWatermarkSvg(wm: WatermarkSettings, width: number, height: 
   const italicDegree = Math.max(0, normalized.italicDegree ?? 0);
 
   const textBody = `<text x="${x}" y="${y}" dy="${pos.dy}" text-anchor="${pos.textAnchor}" dominant-baseline="${pos.dominantBaseline}" font-family="${escapeXml(normalized.fontFamily)}" font-size="${normalized.fontSize}" font-weight="${normalized.bold ? 700 : 400}" font-style="${normalized.italic ? "italic" : "normal"}" fill="${normalized.color}">${escapeXml(normalized.text)}</text>`;
-  const body =
+  const unflippedBody =
     normalized.kind === "svg" && normalized.svgMarkup
       ? overrideImportedSvg(normalized.svgMarkup, normalized)
       : italicDegree > 0
         ? `<g transform="translate(${x} ${skewY}) skewX(${-italicDegree}) translate(${-x} ${-skewY})">${textBody}</g>`
         : textBody;
+  const body = wrapWithSelfCenteredFlip(unflippedBody, normalized);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g opacity="${opacity}" transform="${transform}">${body}</g></svg>`;
 }

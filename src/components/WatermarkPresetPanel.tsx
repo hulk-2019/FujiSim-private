@@ -18,6 +18,7 @@ const PRESET_STYLES_DATA: { text: string; fontSize: number; color: string; opaci
 ];
 const CARD_PREVIEW_W = 220;
 const CARD_PREVIEW_H = 84;
+const CARD_PREVIEW_FONT_SIZE = 26;
 
 export function WatermarkPresetPanel() {
   const { t } = useTranslation();
@@ -164,7 +165,7 @@ export function WatermarkPresetPanel() {
                 key={p.label}
                 active={wm.source === "builtin" && wm.name === recommendedId(p)}
                 label={p.label}
-                wm={watermarkPreviewSettings({ kind: "text", text: p.text, fontSize: previewFontSize(p.fontSize), color: p.color, opacity: p.opacity, italic: p.italic, position: p.position })}
+                wm={watermarkPreviewSettings({ kind: "text", text: p.text, color: p.color, opacity: p.opacity, italic: p.italic })}
                 onClick={() => applyPreset(p)}
                 onDoubleClick={() => {
                   if (wm.source === "builtin" && wm.name === recommendedId(p)) setWatermark({ enabled: false });
@@ -216,20 +217,18 @@ function watermarkPreviewSettings(patch: Partial<WatermarkSettings>): WatermarkS
   return {
     ...DEFAULT_WATERMARK,
     enabled: true,
-    position: "bottom-center",
     offsetX: 0,
     offsetY: 0,
     rotation: 0,
     scale: 1,
     flipH: false,
     flipV: false,
+    italicDegree: 0,
     ...patch,
-    fontSize: previewFontSize(patch.fontSize ?? DEFAULT_WATERMARK.fontSize),
+    position: "center",
+    fontSize: CARD_PREVIEW_FONT_SIZE,
+    padding: 0,
   };
-}
-
-function previewFontSize(fontSize: number) {
-  return Math.max(18, Math.min(34, fontSize * 0.78));
 }
 
 function WatermarkStyleCard({
@@ -260,7 +259,9 @@ function WatermarkStyleCard({
           : "border-zinc-800 hover:border-zinc-600",
       )}
     >
-      <img src={preview} alt="" className={cn("h-12 w-full object-contain bg-zinc-900", active && "bg-blue-950/25")} />
+      <div className={cn("flex h-12 w-full items-center justify-center bg-zinc-900", active && "bg-blue-950/25")}>
+        <img src={preview} alt="" className="block h-full w-full object-contain" />
+      </div>
       <span className={cn("block px-2 py-1 text-[11px] truncate", active ? "text-blue-100" : "text-zinc-300")}>{label}</span>
       {onDelete && (
         <span

@@ -152,6 +152,25 @@ describe("buildWatermarkSvg", () => {
     expect(svg).toContain('skewX(-22)');
   });
 
+  it("flips watermarks around their own center instead of the anchor point", () => {
+    const svg = buildWatermarkSvg(
+      {
+        ...DEFAULT_WATERMARK,
+        enabled: true,
+        flipH: true,
+        flipV: true,
+        scale: 1.4,
+      },
+      400,
+      300,
+    );
+
+    expect(svg).toContain('scale(1.4)');
+    expect(svg).not.toContain('scale(-1.4 -1.4)');
+    expect(svg).toContain('style="transform-box: fill-box; transform-origin: center; transform: scale(-1, -1);"');
+    expect(svg).not.toContain('scale(-1.4 -1.4)');
+  });
+
   it("encodes svg as a data url", () => {
     expect(svgToDataUrl('<svg width="1" height="1"></svg>')).toMatch(/^data:image\/svg\+xml,/);
   });
