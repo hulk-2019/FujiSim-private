@@ -433,9 +433,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       !showingOriginal &&
       !!lastDisplayFrame &&
       ((waitingForCurrentImage && !showPlaceholder) ||
-        (!displaySrc &&
-      !originalSrc &&
-          !showPlaceholder));
+        (!displaySrc && !originalSrc && !showPlaceholder));
     const showRenderingBadge = loading && !showOriginal;
     const blurPlaceholder =
       loading &&
@@ -502,108 +500,108 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                         lineHeight: 0,
                       }}
                     >
-                  {showPlaceholder && (
-                    <OrientedImage
-                      src={focusedPlaceholder.blobUrl}
-                      alt=""
-                      containerW={containerW}
-                      containerH={containerH}
-                      orientation={focusedPlaceholder.orientation}
-                      objectFit="contain"
-                      opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 1}
-                      onLoad={() =>
-                        rememberDisplayFrame(
-                          focusedPlaceholder.blobUrl,
-                          focusedPlaceholder.orientation,
-                        )
-                      }
-                      style={
-                        blurPlaceholder
-                          ? {
-                              filter: "blur(14px) brightness(0.82)",
+                      {showPlaceholder && (
+                        <OrientedImage
+                          src={focusedPlaceholder.blobUrl}
+                          alt=""
+                          containerW={containerW}
+                          containerH={containerH}
+                          orientation={focusedPlaceholder.orientation}
+                          objectFit="contain"
+                          opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 1}
+                          onLoad={() =>
+                            rememberDisplayFrame(
+                              focusedPlaceholder.blobUrl,
+                              focusedPlaceholder.orientation,
+                            )
+                          }
+                          style={
+                            blurPlaceholder
+                              ? {
+                                  filter: "blur(14px) brightness(0.82)",
+                                }
+                              : undefined
+                          }
+                        />
+                      )}
+                      {displaySrc && (
+                        <OrientedImage
+                          src={displaySrc}
+                          alt="preview"
+                          containerW={containerW}
+                          containerH={containerH}
+                          orientation={displayOrientation}
+                          objectFit="contain"
+                          opacity={showMainImage ? 1 : 0}
+                          onLoad={(e) => {
+                            const el = e.currentTarget as HTMLImageElement;
+                            setLoadedMainSrc(displaySrc);
+                            rememberDisplayFrame(displaySrc, displayOrientation);
+                            // 后端权威预览真正加载进 <img> 后，才释放 GPU 接管层。
+                            if (
+                              gpuHandoffActive &&
+                              previewSrc &&
+                              el.src === previewSrc
+                            ) {
+                              setGpuHandoffActive(false);
+                              setFilterInteraction("idle");
+                            } else if (previewSrc && el.src === previewSrc) {
+                              setFilterInteraction("idle");
                             }
-                          : undefined
-                      }
-                    />
-                  )}
-                  {displaySrc && (
-                    <OrientedImage
-                      src={displaySrc}
-                      alt="preview"
-                      containerW={containerW}
-                      containerH={containerH}
-                      orientation={displayOrientation}
-                      objectFit="contain"
-                      opacity={showMainImage ? 1 : 0}
-                      onLoad={(e) => {
-                        const el = e.currentTarget as HTMLImageElement;
-                        setLoadedMainSrc(displaySrc);
-                        rememberDisplayFrame(displaySrc, displayOrientation);
-                        // 后端权威预览真正加载进 <img> 后，才释放 GPU 接管层。
-                        if (
-                          gpuHandoffActive &&
-                          previewSrc &&
-                          el.src === previewSrc
-                        ) {
-                          setGpuHandoffActive(false);
-                          setFilterInteraction("idle");
-                        } else if (previewSrc && el.src === previewSrc) {
-                          setFilterInteraction("idle");
-                        }
-                      }}
-                      onError={(e) => {
-                        // asset:// 协议加载失败时浏览器默认静默；这里把错误冒出来，
-                        // 否则 imgVisible 永远是 false，整个面板卡在不可见状态。
-                        const failedSrc = (e.currentTarget as HTMLImageElement)
-                          .src;
-                        console.error(
-                          "[PreviewPanel] image load failed:",
-                          failedSrc,
-                        );
-                      }}
-                    />
-                  )}
-                  {showingOriginal && (
-                    <img
-                      src={originalSrc ?? undefined}
-                      alt="original"
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        filter: "none",
-                        opacity: 1,
-                        transition: "none",
-                      }}
-                      draggable={false}
-                      onLoad={() => rememberDisplayFrame(originalSrc, null)}
-                    />
-                  )}
-                  {gpuInteractiveSrc && (
-                    <GpuInteractivePreviewCanvas
-                      src={gpuInteractiveSrc}
-                      filter={filter}
-                      visible={showGpuInteractiveLayer}
-                      onReadyChange={setGpuInteractiveReady}
-                    />
-                  )}
-                  <TilePreviewOverlay
-                    tilePreviews={tilePreviews}
-                    assetId={focused.id}
-                    displayWidth={containerW}
-                    displayHeight={containerH}
-                    sourceWidth={sourceCoordinateSize.width}
-                    sourceHeight={sourceCoordinateSize.height}
-                  />
-                  {!showOriginal && watermark.enabled && wmDims && (
-                    <WatermarkOverlay
-                      wm={watermark}
-                      imgW={wmDims.width}
-                      imgH={wmDims.height}
-                    />
-                  )}
+                          }}
+                          onError={(e) => {
+                            // asset:// 协议加载失败时浏览器默认静默；这里把错误冒出来，
+                            // 否则 imgVisible 永远是 false，整个面板卡在不可见状态。
+                            const failedSrc = (e.currentTarget as HTMLImageElement)
+                              .src;
+                            console.error(
+                              "[PreviewPanel] image load failed:",
+                              failedSrc,
+                            );
+                          }}
+                        />
+                      )}
+                      {showingOriginal && (
+                        <img
+                          src={originalSrc ?? undefined}
+                          alt="original"
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            filter: "none",
+                            opacity: 1,
+                            transition: "none",
+                          }}
+                          draggable={false}
+                          onLoad={() => rememberDisplayFrame(originalSrc, null)}
+                        />
+                      )}
+                      {gpuInteractiveSrc && (
+                        <GpuInteractivePreviewCanvas
+                          src={gpuInteractiveSrc}
+                          filter={filter}
+                          visible={showGpuInteractiveLayer}
+                          onReadyChange={setGpuInteractiveReady}
+                        />
+                      )}
+                      <TilePreviewOverlay
+                        tilePreviews={tilePreviews}
+                        assetId={focused.id}
+                        displayWidth={containerW}
+                        displayHeight={containerH}
+                        sourceWidth={sourceCoordinateSize.width}
+                        sourceHeight={sourceCoordinateSize.height}
+                      />
+                      {!showOriginal && watermark.enabled && wmDims && (
+                        <WatermarkOverlay
+                          wm={watermark}
+                          imgW={wmDims.width}
+                          imgH={wmDims.height}
+                        />
+                      )}
                     </div>
                   )}
                 </>
