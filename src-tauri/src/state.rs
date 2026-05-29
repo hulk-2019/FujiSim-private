@@ -76,11 +76,11 @@ impl PreviewBaseCache {
 pub struct AppState {
     pub pool: SqlitePool,
     pub data_dir: PathBuf,
-    pub raw_original_dir: PathBuf,
     pub lut_dir: PathBuf,
     /// 水印层 PNG 文件目录：<data_dir>/watermarks/<task_id>.png
     pub watermark_dir: PathBuf,
-    pub cover_dir: PathBuf,
+    /// 项目汇总页封面缓存目录：<data_dir>/project_covers/<asset_id>.jpg
+    pub project_cover_dir: PathBuf,
     pub font_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
     pub preview_base_cache: Mutex<PreviewBaseCache>,
@@ -89,9 +89,7 @@ pub struct AppState {
     /// 全局 GPU 上下文。Tauri setup 阶段一次性初始化，进程生命周期内长存。
     pub gpu: Arc<GpuContext>,
     pub task_queue: TaskQueue,
-    pub cover_queue: Arc<crate::cover_queue::CoverQueue>,
-    /// 统一限制缩略图生成和 EXIF 提取的总并发数（固定 4），
-    /// 两个 worker 共享同一个信号量，无论同时跑都不超过 4 个 blocking 线程。
+    /// 统一限制缩略图读取和 EXIF 提取的总并发数（固定 4）。
     pub io_sem: Arc<Semaphore>,
     /// 导出内存预算（MB）：每个导出任务按 file_size×7 估算内存占用，
     /// 先 CAS 扣减预算再开始处理，完成后归还，防止多张大图同时处理导致 OOM。
@@ -134,15 +132,12 @@ impl AppState {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("FujiSim");
         std::fs::create_dir_all(&data_dir)?;
-        let raw_original_dir = data_dir.join("raw_originals");
-        std::fs::create_dir_all(&raw_original_dir)?;
-        cleanup_legacy_raw_cache(&raw_original_dir);
         let lut_dir = data_dir.join("luts");
         std::fs::create_dir_all(&lut_dir)?;
         let watermark_dir = data_dir.join("watermarks");
         std::fs::create_dir_all(&watermark_dir)?;
-        let cover_dir = data_dir.join("covers");
-        std::fs::create_dir_all(&cover_dir)?;
+        let project_cover_dir = data_dir.join("project_covers");
+        std::fs::create_dir_all(&project_cover_dir)?;
         let font_dir = data_dir.join("fonts");
         std::fs::create_dir_all(&font_dir)?;
         let db_path = data_dir.join("library.db");
@@ -179,10 +174,9 @@ impl AppState {
         let state = Arc::new(AppState {
             pool,
             data_dir,
-            raw_original_dir,
             lut_dir,
             watermark_dir,
-            cover_dir,
+            project_cover_dir,
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),
             preview_base_cache: Mutex::new(PreviewBaseCache::new(8)),
@@ -190,8 +184,7 @@ impl AppState {
             export_pool,
             gpu,
             task_queue: TaskQueue::new(1),
-            cover_queue: Arc::new(crate::cover_queue::CoverQueue::new(1)),
-            // 缩略图生成和 EXIF 提取共享信号量，总并发固定 4
+            // 缩略图读取和 EXIF 提取共享信号量，总并发固定 4
             io_sem: Arc::new(Semaphore::new(4)),
             export_memory_budget: Arc::new(AtomicU64::new(budget_mb)),
             preview_token: Arc::new(AtomicU64::new(0)),
@@ -244,26 +237,6 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
-}
-
-fn cleanup_legacy_raw_cache(dir: &PathBuf) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        let is_legacy_raw_cache =
-            name.ends_with(".jpg") || (name.ends_with(".tif") && !name.ends_with("_baseline.tif"));
-        if is_legacy_raw_cache {
-            let _ = std::fs::remove_file(path);
-        }
-    }
 }
 
 /// 把 [`crate::processing::fuji::BUILTIN_NAMES`] 中的每个名字写入 `filter_presets` 表，

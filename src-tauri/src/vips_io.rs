@@ -11,7 +11,7 @@ use std::path::Path;
 
 static VIPS: Lazy<VipsApp> = Lazy::new(|| {
     let app = VipsApp::new("FujiSim", false).expect("libvips init failed");
-    // 限制 libvips 内部线程数为 1，由应用层（CoverQueue / rayon）自己控制并发，
+    // 限制 libvips 内部线程数为 1，由应用层 rayon/信号量自己控制并发，
     // 避免多任务同时触发 vips 操作时 libvips 各自展开线程池导致 CPU 爆满。
     app.concurrency_set(1);
     app

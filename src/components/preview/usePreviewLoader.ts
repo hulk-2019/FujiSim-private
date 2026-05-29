@@ -143,6 +143,8 @@ export function usePreviewLoader({
           const message = String(e);
           if (currentTokenRef.current === fastToken && !message.includes("preview_cancelled")) {
             fastPreviewFailedRef.current.add(focused.id);
+          }
+          if (currentTokenRef.current === fastToken) {
             setPreviewLoading(false);
             setRequestTick((v) => v + 1);
           }

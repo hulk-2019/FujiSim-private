@@ -108,17 +108,7 @@ pub async fn list_assets(
     query: assets::AssetQuery,
 ) -> Result<assets::ListAssetsResult> {
     let result = assets::list(&state.pool, &query).await?;
-    let ids: Vec<i64> = result
-        .items
-        .iter()
-        .filter(|a| a.is_raw != 0 && a.cover_path.is_none())
-        .map(|a| a.id)
-        .collect();
-    if !ids.is_empty() {
-        state
-            .cover_queue
-            .enqueue(ids, query.project_id, state.inner().clone(), app);
-    }
+    let _ = app;
     Ok(result)
 }
 

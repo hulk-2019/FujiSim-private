@@ -157,16 +157,12 @@ export const api = {
       token: token ?? 0,
     }),
 
+  /** 资产缩略图：RAW 返回内嵌 JPEG bytes，普通图片返回源文件 path。 */
+  getAssetThumbnail: (assetId: number) =>
+    invoke<PreviewResult>("get_asset_thumbnail", { assetId }),
+
   markPreviewInteraction: (durationMs?: number) =>
     invoke<void>("mark_preview_interaction", { durationMs: durationMs ?? null }),
-
-  /** 兼容旧调用：RAW baseline TIFF 已停用。 */
-  hasPreviewBase: (assetId: number, projectId?: number | null) =>
-    invoke<boolean>("has_preview_base", { assetId, projectId: projectId ?? null }),
-
-  /** 兼容旧调用：RAW baseline TIFF 已停用。 */
-  getPreviewBase: (assetId: number, projectId?: number | null) =>
-    invoke<PreviewResult | null>("get_preview_base", { assetId, projectId: projectId ?? null }),
 
   /** 独立直方图计算（512px 工作图、独立 token）。与 getPreview 平行调用 */
   computeHistogram: (assetId: number, settings: FilterSettings | null, token: number) =>
@@ -175,12 +171,6 @@ export const api = {
       settings,
       token,
     }),
-
-  /** 返回封面图缓存目录的绝对路径（macOS 通常为 ~/Library/Application Support/FujiSim/covers）。 */
-  getCoverDir: () => invoke<string>("get_cover_dir"),
-
-  setCoverConcurrency: (n: number) =>
-    invoke<void>("set_cover_concurrency", { n }),
 
   /**
    * 启动批量导出。返回新建的 task_id；

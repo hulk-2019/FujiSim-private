@@ -56,15 +56,10 @@ pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
         let _ = std::fs::remove_dir_all(&state.watermark_dir);
         let _ = std::fs::create_dir_all(&state.watermark_dir);
     }
-    // raw_originals 目录整体清空
-    if state.raw_original_dir.exists() {
-        let _ = std::fs::remove_dir_all(&state.raw_original_dir);
-        let _ = std::fs::create_dir_all(&state.raw_original_dir);
-    }
-    // covers 目录整体清空
-    if state.cover_dir.exists() {
-        let _ = std::fs::remove_dir_all(&state.cover_dir);
-        let _ = std::fs::create_dir_all(&state.cover_dir);
+    // 项目封面缓存整体清空
+    if state.project_cover_dir.exists() {
+        let _ = std::fs::remove_dir_all(&state.project_cover_dir);
+        let _ = std::fs::create_dir_all(&state.project_cover_dir);
     }
     // 软删除所有字体记录，清空 fonts 目录
     user_fonts::delete_all(&state.pool).await?;

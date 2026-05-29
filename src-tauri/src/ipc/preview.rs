@@ -46,23 +46,6 @@ pub struct PreviewResult {
     pub orientation: Option<u32>,
 }
 
-/// `thumbnail:done` 事件载荷：单张封面写盘完成。
-#[derive(Debug, Serialize, Clone)]
-pub struct ThumbnailDonePayload {
-    pub asset_id: i64,
-}
-
-/// RAW 预览不再落盘生成 baseline TIFF；画布预览直接从 RAW 解码并复用内存缓存。
-#[tauri::command]
-pub async fn has_preview_base(
-    state: State<'_, SharedState>,
-    asset_id: i64,
-    project_id: Option<i64>,
-) -> Result<bool> {
-    let _ = (state, asset_id, project_id);
-    Ok(false)
-}
-
 /// Frontend-only interaction marker. Used when WebGL handles immediate feedback
 /// without calling `get_preview`, so background queues still yield to the editor.
 #[tauri::command]
@@ -72,17 +55,6 @@ pub async fn mark_preview_interaction(
 ) -> Result<()> {
     state.mark_interaction_active_for(duration_ms.unwrap_or(900).clamp(100, 5000));
     Ok(())
-}
-
-/// RAW baseline TIFF 磁盘缓存已停用；保留命令形状以兼容前端旧调用。
-#[tauri::command]
-pub async fn get_preview_base(
-    state: State<'_, SharedState>,
-    asset_id: i64,
-    project_id: Option<i64>,
-) -> Result<Option<PreviewResult>> {
-    let _ = (state, asset_id, project_id);
-    Ok(None)
 }
 
 /// 返回可秒开的预览图：RAW 直接返回相机内嵌 JPEG，普通图片使用源文件下采样。
@@ -95,22 +67,16 @@ pub async fn get_fast_preview(
     max_edge: Option<u32>,
     token: u64,
 ) -> Result<PreviewResult> {
-    use std::sync::atomic::Ordering;
-    state.preview_token.store(token, Ordering::SeqCst);
-    state.tile_token.store(token, Ordering::SeqCst);
     state.mark_preview_active_for(800);
 
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
-    let preview_token = state.preview_token.clone();
     let preview_pool = state.preview_pool.clone();
     let max_edge = max_edge.unwrap_or(1920).clamp(320, 4096);
 
     tokio::task::spawn_blocking(move || {
         preview_pool.install(|| {
-            if preview_token.load(Ordering::SeqCst) != token {
-                return Err(AppError::other("preview_cancelled"));
-            }
+            let _ = token;
             let start = Instant::now();
             let (jpeg, width, height, orientation) = if asset.is_raw != 0 {
                 let (jpeg, orientation) = processing::raw::extract_raw_thumbnail_fast(&path)?;
@@ -125,9 +91,6 @@ pub async fn get_fast_preview(
                     crate::vips_io::encode_rgb16(&img, crate::export::ExportFormat::Jpeg, 86)?;
                 (jpeg, width, height, None)
             };
-            if preview_token.load(Ordering::SeqCst) != token {
-                return Err(AppError::other("preview_cancelled"));
-            }
             tracing::debug!(
                 asset_id,
                 width,
@@ -150,8 +113,52 @@ pub async fn get_fast_preview(
     .map_err(|e| AppError::other(e.to_string()))?
 }
 
+/// 缩略图直接读取源文件。RAW 优先返回接近 256px 长边的相机内嵌 JPEG；
+/// 普通图片返回原始 path，由浏览器按缩略格显示。
+#[tauri::command]
+pub async fn get_asset_thumbnail(
+    state: State<'_, SharedState>,
+    asset_id: i64,
+) -> Result<PreviewResult> {
+    let asset = assets::get(&state.pool, asset_id).await?;
+    let path = PathBuf::from(&asset.file_path);
+
+    if asset.is_raw == 0 {
+        return Ok(PreviewResult {
+            path: Some(asset.file_path),
+            data: None,
+            mime_type: None,
+            width: asset.width.unwrap_or(0).max(0) as u32,
+            height: asset.height.unwrap_or(0).max(0) as u32,
+            orientation: None,
+        });
+    }
+
+    let permit = state
+        .io_sem
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|e| AppError::other(e.to_string()))?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let (jpeg, width, height, orientation) =
+            processing::raw::extract_raw_thumbnail_fast_for_edge(&path, 256)?;
+        Ok(PreviewResult {
+            path: None,
+            data: Some(jpeg),
+            mime_type: Some("image/jpeg".to_string()),
+            width,
+            height,
+            orientation: Some(orientation).filter(|o| *o > 1),
+        })
+    })
+    .await
+    .map_err(|e| AppError::other(e.to_string()))?
+}
+
 /// 实时渲染单张照片的预览图。RAW 会直接从源文件解码到内存基线，
-/// 再走下采样 + 色彩流水线；不再生成 raw_originals 下的 TIFF 缓存。
+/// 再走下采样 + 色彩流水线。
 /// token 用于取消：前端每次切换文件时递增 token，后端在解码完成后检查，
 /// 若 token 已过期则返回 preview_cancelled，前端静默丢弃。
 #[tauri::command]
@@ -428,18 +435,6 @@ fn crop_tile(src: &Rgb16Image, tile: PreviewTileRequest) -> Result<Rgb16Image> {
     }
 }
 
-/// 返回封面图缓存目录的绝对路径，供前端拼接 convertFileSrc 使用。
-#[tauri::command]
-pub async fn get_cover_dir(state: State<'_, SharedState>) -> Result<String> {
-    Ok(state.cover_dir.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-pub async fn set_cover_concurrency(state: State<'_, SharedState>, n: usize) -> Result<()> {
-    state.cover_queue.set_concurrency(n);
-    Ok(())
-}
-
 /// 使用 Gray World 算法计算自动白平衡偏移量。
 ///
 /// 返回 `(wb_shift_r, wb_shift_g, wb_shift_b)`，范围 -100..100（整数）。
@@ -451,18 +446,12 @@ pub async fn auto_white_balance(
 ) -> Result<(i32, i32, i32)> {
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
-    let raw_original_dir = state.raw_original_dir.clone();
     let export_pool = state.export_pool.clone();
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let img = load_white_balance_image(
-                &raw_original_dir,
-                project_id,
-                asset_id,
-                asset.is_raw != 0,
-                &path,
-            )?;
+            let _ = (project_id, asset_id);
+            let img = load_white_balance_image(asset.is_raw != 0, &path)?;
             Ok(processing::white_balance::auto_white_balance(&img))
         })
     })
@@ -483,18 +472,12 @@ pub async fn eyedrop_color(
 ) -> Result<(f32, f32, f32)> {
     let asset = assets::get(&state.pool, asset_id).await?;
     let path = PathBuf::from(&asset.file_path);
-    let raw_original_dir = state.raw_original_dir.clone();
     let export_pool = state.export_pool.clone();
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let img = load_white_balance_image(
-                &raw_original_dir,
-                project_id,
-                asset_id,
-                asset.is_raw != 0,
-                &path,
-            )?;
+            let _ = (project_id, asset_id);
+            let img = load_white_balance_image(asset.is_raw != 0, &path)?;
             let (w, h) = img.dimensions();
             let sample_x = asset
                 .width
@@ -523,13 +506,9 @@ pub async fn eyedrop_color(
 }
 
 fn load_white_balance_image(
-    raw_original_dir: &std::path::Path,
-    project_id: Option<i64>,
-    asset_id: i64,
     is_raw: bool,
     source_path: &std::path::Path,
 ) -> Result<Rgb16Image> {
-    let _ = (raw_original_dir, project_id, asset_id);
     if is_raw {
         return processing::raw::decode_raw_rgb16_for_preview(source_path, None);
     }

@@ -12,6 +12,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
 import { api } from "@/api";
+import { orientationCss } from "@/lib/orientation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +34,11 @@ const THUMB_W = 80;
 const GAP = 8;
 const SLOT = THUMB_W + GAP;
 const PAGE = 60;
+type ThumbImage = {
+  orientation?: number | null;
+  src: string;
+};
+const rawThumbCache = new Map<number, ThumbImage>();
 
 const IMAGE_EXT = [
   "jpg", "jpeg", "png", "tif", "tiff", "webp", "heic", "heif",
@@ -374,15 +380,7 @@ function Thumb({
   onClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
-  const src = (() => {
-    try {
-      if (!asset.is_raw) return convertFileSrc(asset.file_path);
-      if (asset.cover_path) return convertFileSrc(asset.cover_path);
-      return null;
-    } catch {
-      return null;
-    }
-  })();
+  const image = useThumbImage(asset);
   return (
     <button
       type="button"
@@ -398,8 +396,13 @@ function Thumb({
       )}
       title={asset.file_name}
     >
-      {src ? (
-        <img src={src} className="w-full h-full object-cover" alt="" />
+      {image ? (
+        <img
+          src={image.src}
+          className="w-full h-full object-cover"
+          style={orientationCss(image.orientation)}
+          alt=""
+        />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-zinc-700">
           <ImageIcon size={20} />
@@ -407,4 +410,64 @@ function Thumb({
       )}
     </button>
   );
+}
+
+function useThumbImage(asset: Asset) {
+  const [image, setImage] = useState<ThumbImage | null>(() => {
+    if (asset.is_raw) return rawThumbCache.get(asset.id) ?? null;
+    try {
+      return { src: convertFileSrc(asset.file_path) };
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!asset.is_raw) {
+      try {
+        setImage({ src: convertFileSrc(asset.file_path) });
+      } catch {
+        setImage(null);
+      }
+      return;
+    }
+
+    const cached = rawThumbCache.get(asset.id);
+    if (cached) {
+      setImage(cached);
+      return;
+    }
+
+    setImage(null);
+    api.getAssetThumbnail(asset.id)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.data?.length) {
+          const blob = new Blob([new Uint8Array(result.data)], {
+            type: result.mimeType ?? "image/jpeg",
+          });
+          const url = URL.createObjectURL(blob);
+          const next = { src: url, orientation: result.orientation ?? null };
+          rawThumbCache.set(asset.id, next);
+          setImage(next);
+          return;
+        }
+        if (result.path) {
+          const url = convertFileSrc(result.path);
+          const next = { src: url, orientation: result.orientation ?? null };
+          rawThumbCache.set(asset.id, next);
+          setImage(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setImage(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [asset.file_path, asset.id, asset.is_raw]);
+
+  return image;
 }

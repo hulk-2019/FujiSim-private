@@ -11,6 +11,7 @@ import {
 import { ImageIcon } from "lucide-react";
 import { useStore } from "@/store";
 import { formatBytes } from "@/lib/utils";
+import { isOrientationSwapped, orientationTransform } from "@/lib/orientation";
 import { useTranslation } from "react-i18next";
 import { isIdentityFilter } from "@/lib/filterIdentity";
 import { useHistogramSync } from "@/hooks/useHistogramSync";
@@ -54,8 +55,7 @@ function orientationStyle(
   containerW: number,
   containerH: number,
 ): CSSProperties {
-  const swapped =
-    orientation === 5 || orientation === 6 || orientation === 7 || orientation === 8;
+  const swapped = isOrientationSwapped(orientation);
   const base: CSSProperties = swapped
     ? {
         position: "absolute",
@@ -73,24 +73,8 @@ function orientationStyle(
         transformOrigin: "center center",
       };
 
-  switch (orientation) {
-    case 2:
-      return { ...base, transform: "scaleX(-1)" };
-    case 3:
-      return { ...base, transform: "rotate(180deg)" };
-    case 4:
-      return { ...base, transform: "scaleY(-1)" };
-    case 5:
-      return { ...base, transform: "rotate(90deg) scaleX(-1)" };
-    case 6:
-      return { ...base, transform: "rotate(90deg)" };
-    case 7:
-      return { ...base, transform: "rotate(270deg) scaleX(-1)" };
-    case 8:
-      return { ...base, transform: "rotate(270deg)" };
-    default:
-      return base;
-  }
+  const transform = orientationTransform(orientation);
+  return transform ? { ...base, transform } : base;
 }
 
 function OrientedImage({
@@ -160,6 +144,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const projectId = useStore((s) => s.currentFolderId);
     const filter = useStore((s) => s.filter);
     const watermark = useStore((s) => s.watermark);
+    const previewSize = useStore((s) => s.previewSize);
+    const previewSizeAssetId = useStore((s) => s.previewSizeAssetId);
     const setPreviewSize = useStore((s) => s.setPreviewSize);
     const eyedropperMode = useStore((s) => s.eyedropperMode);
     const setEyedropperMode = useStore((s) => s.setEyedropperMode);
@@ -178,6 +164,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     const viewportRef = useRef<HTMLDivElement>(null);
     const viewportSize = useElementSize(viewportRef);
+    const fallbackFitSize =
+      previewSizeAssetId === focusedId ? previewSize : null;
     const {
       containerH,
       containerW,
@@ -190,7 +178,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       setTy,
       tx,
       ty,
-    } = usePreviewFit({ focused, onScaleChange, viewportRef });
+    } = usePreviewFit({
+      fallbackSize: fallbackFitSize,
+      focused,
+      onScaleChange,
+      viewportRef,
+    });
     const [gpuInteractiveReady, setGpuInteractiveReady] = useState(false);
     const [loadedMainSrc, setLoadedMainSrc] = useState<string | null>(null);
     const currentFilterIsIdentity = isIdentityFilter(filter);

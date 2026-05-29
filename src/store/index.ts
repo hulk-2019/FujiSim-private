@@ -10,7 +10,6 @@ import { createExportSlice } from "./slices/exports";
 import { createWatermarkSlice } from "./slices/watermark";
 import { createFontSlice } from "./slices/fonts";
 import { createFacetSlice } from "./slices/facets";
-import { createCoverSlice } from "./slices/cover";
 
 export { DEFAULT_FILTER } from "./defaults";
 
@@ -37,5 +36,4 @@ export const useStore = create<AppState>((...a) => ({
   ...createWatermarkSlice(...a),
   ...createFontSlice(...a),
   ...createFacetSlice(...a),
-  ...createCoverSlice(...a),
 }));

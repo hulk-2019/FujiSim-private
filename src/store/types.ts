@@ -184,15 +184,6 @@ export interface FacetSlice {
 }
 
 /**
- * 后端封面图目录。
- */
-export interface CoverSlice {
-  /** 后端封面图目录的绝对路径，App 启动时从后端获取一次 */
-  coverDir: string | null;
-  setCoverDir: (dir: string) => void;
-}
-
-/**
  * 应用全局状态（zustand store）。
  *
  * 设计原则：
@@ -211,5 +202,4 @@ export type AppState =
   & ExportSlice
   & WatermarkSlice
   & FontSlice
-  & FacetSlice
-  & CoverSlice;
+  & FacetSlice;

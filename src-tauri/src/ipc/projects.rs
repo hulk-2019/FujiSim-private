@@ -1,8 +1,9 @@
 //! 相册 CRUD、汇总信息和回收站。
 
 use crate::db::{assets, projects};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::state::SharedState;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -91,18 +92,19 @@ pub async fn project_remove(
 #[tauri::command]
 pub async fn get_project_summaries(state: State<'_, SharedState>) -> Result<Vec<ProjectSummary>> {
     let projects = projects::list(&state.pool).await?;
-    build_project_summaries(&state.pool, projects).await
+    build_project_summaries(&state, projects).await
 }
 
 /// 给定一组 project，批量查询每个相册的资产数量和前 4 张封面（按拍摄时间倒序），
 /// 组装成 [`ProjectSummary`] 列表。get_project_summaries 和 list_trash_projects 共用。
 async fn build_project_summaries(
-    pool: &sqlx::SqlitePool,
+    state: &SharedState,
     projects: Vec<projects::Project>,
 ) -> Result<Vec<ProjectSummary>> {
     if projects.is_empty() {
         return Ok(vec![]);
     }
+    let pool = &state.pool;
 
     // 一次查询所有相册的资产数量
     let totals: Vec<(i64, i64)> = sqlx::query_as(
@@ -113,9 +115,9 @@ async fn build_project_summaries(
     let total_map: std::collections::HashMap<i64, i64> = totals.into_iter().collect();
 
     // 一次查询所有相册的前4张封面（用 ROW_NUMBER 窗口函数）
-    let cover_rows: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT project_id, path FROM ( \
-            SELECT aa.project_id, COALESCE(a.cover_path, a.file_path) as path, \
+    let cover_rows: Vec<(i64, i64, String, i64, Option<String>)> = sqlx::query_as(
+        "SELECT project_id, asset_id, file_path, is_raw, cover_path FROM ( \
+            SELECT aa.project_id, a.id as asset_id, a.file_path, a.is_raw, a.cover_path, \
                    ROW_NUMBER() OVER (PARTITION BY aa.project_id ORDER BY a.date_taken DESC) as rn \
             FROM project_assets aa \
             JOIN assets a ON a.id = aa.asset_id \
@@ -126,7 +128,20 @@ async fn build_project_summaries(
 
     let mut cover_map: std::collections::HashMap<i64, Vec<String>> =
         std::collections::HashMap::new();
-    for (project_id, path) in cover_rows {
+    for (project_id, asset_id, file_path, is_raw, cover_path) in cover_rows {
+        let path = if is_raw == 0 {
+            file_path
+        } else if let Some(path) = cover_path.filter(|p| Path::new(p).exists()) {
+            path
+        } else {
+            match ensure_project_cover(state, asset_id, &file_path).await {
+                Ok(path) => path,
+                Err(e) => {
+                    tracing::warn!(asset_id, error = %e, "project cover cache failed");
+                    continue;
+                }
+            }
+        };
         cover_map.entry(project_id).or_default().push(path);
     }
 
@@ -152,7 +167,43 @@ async fn build_project_summaries(
 #[tauri::command]
 pub async fn list_trash_projects(state: State<'_, SharedState>) -> Result<Vec<ProjectSummary>> {
     let projects = projects::list_trash(&state.pool).await?;
-    build_project_summaries(&state.pool, projects).await
+    build_project_summaries(&state, projects).await
+}
+
+async fn ensure_project_cover(
+    state: &SharedState,
+    asset_id: i64,
+    file_path: &str,
+) -> Result<String> {
+    let out_path = state.project_cover_dir.join(format!("{asset_id}.jpg"));
+    if out_path.exists() {
+        return Ok(out_path.to_string_lossy().to_string());
+    }
+
+    std::fs::create_dir_all(&state.project_cover_dir)?;
+    let src_path = PathBuf::from(file_path);
+    let permit = state
+        .io_sem
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|e| AppError::other(e.to_string()))?;
+    let out_for_task = out_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let (jpeg, _, _, orientation) = crate::processing::raw::extract_raw_thumbnail_fast_for_edge(
+            &src_path,
+            512,
+        )?;
+        let jpeg = crate::vips_io::apply_jpeg_orientation(jpeg, orientation)
+            .map_err(|e| AppError::other(format!("project cover orient: {e}")))?;
+        std::fs::write(&out_for_task, jpeg)?;
+        Ok::<(), AppError>(())
+    })
+    .await
+    .map_err(|e| AppError::other(e.to_string()))??;
+
+    Ok(out_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]

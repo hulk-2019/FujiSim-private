@@ -41,7 +41,7 @@ export default function App() {
 
   useEffect(() => {
     const { refreshAssets, refreshFacets, refreshPresets, refreshUserLuts,
-            refreshProjects, refreshProjectSummaries, refreshCategories, setCoverDir } = useStore.getState();
+            refreshProjects, refreshProjectSummaries, refreshCategories } = useStore.getState();
     refreshAssets();
     refreshFacets();
     refreshPresets();
@@ -49,7 +49,6 @@ export default function App() {
     refreshUserLuts();
     refreshProjects();
     refreshProjectSummaries();
-    api.getCoverDir().then(setCoverDir).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -63,35 +62,6 @@ export default function App() {
     });
     return () => {
       cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    const pendingIds = new Set<number>();
-    let batchTimer: ReturnType<typeof setTimeout> | null = null;
-
-    listen<{ asset_id: number }>("thumbnail:done", (e) => {
-      if (cancelled) return;
-      pendingIds.add(e.payload.asset_id);
-      if (batchTimer) clearTimeout(batchTimer);
-      batchTimer = setTimeout(async () => {
-        if (cancelled) return;
-        const ids = [...pendingIds];
-        pendingIds.clear();
-        const updates = await Promise.all(ids.map((id) => api.getAsset(id).catch(() => null)));
-        const valid = updates.filter((a): a is NonNullable<typeof a> => a !== null);
-        if (valid.length > 0) useStore.getState().batchPatchAssets(valid);
-      }, 200);
-    }).then((u) => {
-      if (cancelled) u();
-      else unlisten = u;
-    });
-    return () => {
-      cancelled = true;
-      if (batchTimer) clearTimeout(batchTimer);
       unlisten?.();
     };
   }, []);

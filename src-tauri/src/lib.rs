@@ -18,7 +18,6 @@
 
 pub mod asset;
 pub mod cache_cleanup;
-pub mod cover_queue;
 pub mod db;
 pub mod error;
 pub mod export;
@@ -106,10 +105,7 @@ pub fn run() {
             ipc::get_fast_preview,
             ipc::get_preview,
             ipc::mark_preview_interaction,
-            ipc::has_preview_base,
-            ipc::get_preview_base,
-            ipc::get_cover_dir,
-            ipc::set_cover_concurrency,
+            ipc::get_asset_thumbnail,
             ipc::auto_white_balance,
             ipc::eyedrop_color,
             ipc::compute_histogram,

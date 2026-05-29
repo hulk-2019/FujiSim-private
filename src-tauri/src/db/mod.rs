@@ -310,8 +310,7 @@ CREATE TABLE IF NOT EXISTS asset_generations (
     FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
 );
 
--- 渲染缓存元数据。只记录非 assets 源数据的派生缓存；
--- deterministic baseline TIFF 不写入这里。
+-- 渲染缓存元数据。只记录非 assets 源数据的派生缓存。
 CREATE TABLE IF NOT EXISTS asset_render_cache (
     asset_id INTEGER NOT NULL,
     cache_kind TEXT NOT NULL,

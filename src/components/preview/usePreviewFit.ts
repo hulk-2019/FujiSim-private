@@ -18,10 +18,12 @@ const FIT_FILL = 0.8;
  * - 记录 fitScale，供外部缩放控件判断当前倍率。
  */
 export function usePreviewFit({
+  fallbackSize,
   focused,
   onScaleChange,
   viewportRef,
 }: {
+  fallbackSize?: { width?: number | null; height?: number | null } | null;
   focused: Asset | null;
   onScaleChange?: (scale: number, fitScale: number) => void;
   viewportRef: React.RefObject<HTMLDivElement>;
@@ -54,8 +56,10 @@ export function usePreviewFit({
   );
 
   const resetToFit = useCallback(() => {
-    return applyFit(focused?.width || 0, focused?.height || 0);
-  }, [applyFit, focused?.height, focused?.width]);
+    const imgW = focused?.width || fallbackSize?.width || 0;
+    const imgH = focused?.height || fallbackSize?.height || 0;
+    return applyFit(imgW, imgH);
+  }, [applyFit, fallbackSize?.height, fallbackSize?.width, focused?.height, focused?.width]);
 
   useEffect(() => {
     onScaleChange?.(scale, fitScale);
@@ -64,14 +68,17 @@ export function usePreviewFit({
   useLayoutEffect(() => {
     setImgVisible(false);
 
-    if (!focused?.width || !focused.height) {
+    const imgW = focused?.width || fallbackSize?.width || 0;
+    const imgH = focused?.height || fallbackSize?.height || 0;
+
+    if (!imgW || !imgH) {
       setFitScale(1);
       setContainerW(0);
       setContainerH(0);
       return;
     }
-    applyFit(focused.width, focused.height);
-  }, [applyFit, focused?.height, focused?.id, focused?.width]);
+    applyFit(imgW, imgH);
+  }, [applyFit, fallbackSize?.height, fallbackSize?.width, focused?.height, focused?.id, focused?.width]);
 
   return {
     containerH,

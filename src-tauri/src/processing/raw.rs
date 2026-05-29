@@ -2,25 +2,7 @@ use crate::error::{AppError, Result};
 use crate::processing::color;
 use image::{ImageBuffer, Rgb};
 use rsraw::BIT_DEPTH_16;
-use std::path::{Path, PathBuf};
-
-pub fn cache_scope_dir(base_dir: &Path, project_id: Option<i64>) -> PathBuf {
-    match project_id {
-        Some(id) if id > 0 => base_dir.join(format!("project_{id}")),
-        _ => base_dir.to_path_buf(),
-    }
-}
-
-/// Returns the path to the disk-cached preview base TIFF for a given asset_id.
-pub fn preview_base_path(
-    raw_original_dir: &Path,
-    project_id: Option<i64>,
-    asset_id: i64,
-) -> PathBuf {
-    // Lightroom-like app baseline develop. Embedded JPEGs are
-    // placeholders only and are not used to tone-match the editing base.
-    cache_scope_dir(raw_original_dir, project_id).join(format!("{asset_id}_baseline.tif"))
-}
+use std::path::Path;
 
 /// 提取 RAW/DNG 文件中嵌入的最大 JPEG 预览，返回原始 JPEG 字节。
 ///
@@ -161,6 +143,10 @@ fn extract_thumb_rsraw(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 fn extract_thumb_tiff(data: &[u8]) -> Result<Vec<u8>> {
+    extract_thumb_tiff_for_edge(data, u32::MAX).map(|t| t.0)
+}
+
+fn extract_thumb_tiff_for_edge(data: &[u8], target_edge: u32) -> Result<(Vec<u8>, u32, u32)> {
     let t = Tiff::new(data)?;
     let ifd0 = t.u32(4) as usize;
 
@@ -172,8 +158,8 @@ fn extract_thumb_tiff(data: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    // 找最大的 JPEG 图像（compression 6 = old JPEG, 7 = JPEG）
-    let best = ifds
+    // 找最小的“够用”JPEG；没有够用的再退回最大 JPEG。
+    let candidates: Vec<(u32, u32, u32, u32)> = ifds
         .iter()
         .filter_map(|&ifd| {
             let comp = t.tag(ifd, 259)?.2;
@@ -187,19 +173,47 @@ fn extract_thumb_tiff(data: &[u8]) -> Result<Vec<u8>> {
                 let offsets = t.u32_array(val, cnt);
                 let sizes = t.tag(ifd, 279).map(|(_, c, v)| t.u32_array(v, c))?;
                 let total: u32 = sizes.iter().sum();
-                return Some((w * h, offsets[0], total));
+                return Some((w, h, offsets[0], total));
             }
             None
         })
-        .max_by_key(|&(area, _, _)| area);
+        .collect();
 
-    if let Some((_, off, size)) = best {
-        return Ok(data[off as usize..(off + size) as usize].to_vec());
+    let best = candidates
+        .iter()
+        .filter(|(w, h, _, _)| (*w).max(*h) >= target_edge)
+        .min_by_key(|(w, h, _, _)| w * h)
+        .or_else(|| candidates.iter().max_by_key(|(w, h, _, _)| w * h));
+
+    if let Some((w, h, off, size)) = best {
+        return Ok((
+            data[*off as usize..(*off + *size) as usize].to_vec(),
+            *w,
+            *h,
+        ));
     }
 
     Err(AppError::other(
         "no embedded JPEG preview found in DNG/TIFF",
     ))
+}
+
+pub fn extract_raw_thumbnail_fast_for_edge(path: &Path, target_edge: u32) -> Result<(Vec<u8>, u32, u32, u32)> {
+    let data = std::fs::read(path)?;
+
+    let (jpeg, width, height) = if let Ok(j) = extract_thumb_tiff_for_edge(&data, target_edge) {
+        j
+    } else {
+        let jpeg = extract_thumb_rsraw(&data)?;
+        (jpeg, 0, 0)
+    };
+
+    if read_jpeg_orientation(&jpeg).is_some() {
+        return Ok((jpeg, width, height, 1));
+    }
+
+    let orientation = read_tiff_file_orientation(&data).unwrap_or(1);
+    Ok((jpeg, width, height, orientation))
 }
 
 /// 解码 RAW 文件，输出 16-bit sRGB 图像（已按 EXIF orientation 旋转到正向）。
@@ -284,8 +298,8 @@ fn decode_with_libraw(
     raw.set_use_camera_wb(true);
     raw.set_use_camera_matrix(true);
     // LibRaw enables dcraw-style auto brightness by default. That makes the
-    // generated TIFF preview base much brighter than the camera embedded JPEG
-    // shown while RAW is first loading, so keep the decode at a fixed baseline.
+    // decoded RAW much brighter than the camera embedded JPEG shown while RAW
+    // is first loading, so keep the decode at a fixed baseline.
     raw.as_mut().params.no_auto_bright = 1;
     raw.as_mut().params.bright = 1.0;
     // 预览模式：原始长边 / 2 仍大于目标时启用 half_size，约快 4x；否则全分辨率避免降质
@@ -501,11 +515,10 @@ impl<'a> Tiff<'a> {
     }
 }
 
-/// 从 RAW 文件提取嵌入 JPEG，缩放到 200px 长边后返回 JPEG 字节。
+/// 从 RAW 文件提取嵌入 JPEG，缩放到指定长边后返回已校正方向的 JPEG 字节。
 ///
-/// 用于导入时快速生成封面图，不做 LibRaw 全解码。
-/// 包含 orientation 校正（200px 小图旋转成本可忽略）。
-pub fn extract_cover_fast(path: &Path) -> Result<Vec<u8>> {
+/// 用于资产条缩略图，不做 LibRaw 全解码。
+pub fn extract_raw_thumbnail_jpeg(path: &Path, max_edge: u32) -> Result<(Vec<u8>, u32, u32)> {
     let data = std::fs::read(path)?;
 
     let jpeg = if let Ok(j) = extract_thumb_rsraw(&data) {
@@ -519,21 +532,23 @@ pub fn extract_cover_fast(path: &Path) -> Result<Vec<u8>> {
         .unwrap_or(1);
 
     let src = crate::vips_io::decode_bytes_to_rgb16(&jpeg)
-        .map_err(|e| AppError::other(format!("cover decode: {e}")))?;
+        .map_err(|e| AppError::other(format!("thumbnail decode: {e}")))?;
     let (w, h) = src.dimensions();
-    const MAX_EDGE: u32 = 200;
-    let resized = if w.max(h) > MAX_EDGE {
-        let scale = MAX_EDGE as f32 / w.max(h) as f32;
+    let max_edge = max_edge.clamp(64, 1024);
+    let resized = if w.max(h) > max_edge {
+        let scale = max_edge as f32 / w.max(h) as f32;
         let nw = ((w as f32 * scale).round() as u32).max(1);
         let nh = ((h as f32 * scale).round() as u32).max(1);
         crate::vips_io::resize_rgb16(&src, nw, nh)
-            .map_err(|e| AppError::other(format!("cover resize: {e}")))?
+            .map_err(|e| AppError::other(format!("thumbnail resize: {e}")))?
     } else {
         src
     };
     let resized = apply_orientation_rgb16(resized, orientation);
-    crate::vips_io::encode_rgb16(&resized, crate::export::ExportFormat::Jpeg, 85)
-        .map_err(|e| AppError::other(format!("cover encode: {e}")))
+    let (out_w, out_h) = resized.dimensions();
+    let jpeg = crate::vips_io::encode_rgb16(&resized, crate::export::ExportFormat::Jpeg, 85)
+        .map_err(|e| AppError::other(format!("thumbnail encode: {e}")))?;
+    Ok((jpeg, out_w, out_h))
 }
 
 /// 一次 LibRaw 解码，同时生成 400px cover JPEG 和 800px 16-bit PNG 预览底图。
