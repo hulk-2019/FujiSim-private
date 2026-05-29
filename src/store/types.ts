@@ -12,6 +12,7 @@ import type {
   HistogramData,
   PresetCategory,
   UserFont,
+  UserWatermarkSvg,
   UserLut,
   WatermarkPreset,
   WatermarkSettings,
@@ -146,6 +147,8 @@ export interface WatermarkSlice {
   watermark: WatermarkSettings;
   /** 用户保存的水印自定义预设 */
   watermarkPresets: WatermarkPreset[];
+  /** 用户导入的 SVG 水印 */
+  userWatermarkSvgs: UserWatermarkSvg[];
   /** 当前选中的水印预设 id，null 表示未选中 */
   selectedWatermarkPresetId: number | null;
   /** 当前预览图的实际像素尺寸，用于水印导出时的比例换算 */
@@ -159,6 +162,10 @@ export interface WatermarkSlice {
   updateWatermarkPreset: (id: number, name: string) => void;
   applyWatermarkPreset: (preset: WatermarkPreset) => void;
   refreshWatermarkPresets: () => Promise<void>;
+  refreshUserWatermarkSvgs: () => Promise<void>;
+  importWatermarkSvgs: (paths: string[]) => Promise<UserWatermarkSvg[]>;
+  removeUserWatermarkSvg: (id: number) => Promise<void>;
+  applyImportedWatermarkSvg: (svg: UserWatermarkSvg) => void;
   setSelectedWatermarkPresetId: (id: number | null) => void;
   setPreviewSize: (size: { width: number; height: number } | null, assetId?: number | null) => void;
 }

@@ -6,6 +6,7 @@ import type { AppState, WatermarkSlice } from "../types";
 export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice> = (set, get) => ({
   watermark: { ...DEFAULT_WATERMARK },
   watermarkPresets: [],
+  userWatermarkSvgs: [],
   selectedWatermarkPresetId: null,
   previewSize: null,
   previewSizeAssetId: null,
@@ -15,6 +16,28 @@ export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice
   refreshWatermarkPresets: async () => {
     const presets = await api.listWatermarkPresets().catch(() => []);
     set({ watermarkPresets: presets });
+  },
+  refreshUserWatermarkSvgs: async () => {},
+  importWatermarkSvgs: async (paths) => {
+    void paths;
+    return [];
+  },
+  removeUserWatermarkSvg: async (id) => {
+    void id;
+  },
+  applyImportedWatermarkSvg: (svg) => {
+    set({
+      watermark: {
+        ...get().watermark,
+        enabled: true,
+        kind: "svg",
+        source: "imported",
+        svgId: svg.id,
+        svgMarkup: svg.preview_svg ?? "",
+        name: svg.name,
+      },
+      selectedWatermarkPresetId: null,
+    });
   },
   addWatermarkPreset: async (name) => {
     const { position: _pos, offsetX: _ox, offsetY: _oy, ...rest } = get().watermark;

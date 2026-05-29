@@ -294,6 +294,19 @@ export type WatermarkPreset = {
   created_at: string;
 };
 
+export type WatermarkKind = "text" | "svg";
+export type WatermarkSource = "builtin" | "imported" | "preset";
+
+export type UserWatermarkSvg = {
+  id: number;
+  name: string;
+  file_path: string;
+  preview_svg: string | null;
+  created_at: string;
+  is_deleted: number;
+  deleted_at?: string | null;
+};
+
 /** 水印位置预设 */
 export type WatermarkPosition =
   | "top-left"
@@ -310,6 +323,9 @@ export type WatermarkPosition =
 /** 水印设置，纯前端预览用；导出时可扩展传给后端 */
 export type WatermarkSettings = {
   enabled: boolean;
+  kind: WatermarkKind;
+  source: WatermarkSource;
+  name?: string;
   text: string;
   fontSize: number;
   fontFamily: string;
@@ -333,10 +349,19 @@ export type WatermarkSettings = {
   strokeEnabled: boolean;
   strokeColor: string;
   strokeWidth: number;
+  svgId?: number;
+  svgMarkup?: string;
+  svgTextOverride?: string;
+  svgFillOverride?: string;
+  svgStrokeOverride?: string;
+  svgOriginalViewBox?: string;
+  scale: number;
 };
 
 export const DEFAULT_WATERMARK: WatermarkSettings = {
   enabled: false,
+  kind: "text",
+  source: "builtin",
   text: "© FujiSim",
   fontSize: 32,
   fontFamily: "Arial, sans-serif",
@@ -360,4 +385,5 @@ export const DEFAULT_WATERMARK: WatermarkSettings = {
   strokeEnabled: false,
   strokeColor: "#000000",
   strokeWidth: 2,
+  scale: 1,
 };
