@@ -155,6 +155,8 @@ export interface WatermarkSlice {
   previewSize: { width: number; height: number } | null;
   /** previewSize 对应的资产 id，用于校验是否过期 */
   previewSizeAssetId: number | null;
+  watermarkPreviewSize: { width: number; height: number } | null;
+  watermarkPreviewSizeAssetId: number | null;
 
   setWatermark: (patch: Partial<WatermarkSettings>) => void;
   addWatermarkPreset: (name: string) => void;
@@ -168,6 +170,7 @@ export interface WatermarkSlice {
   applyImportedWatermarkSvg: (svg: UserWatermarkSvg) => void;
   setSelectedWatermarkPresetId: (id: number | null) => void;
   setPreviewSize: (size: { width: number; height: number } | null, assetId?: number | null) => void;
+  setWatermarkPreviewSize: (size: { width: number; height: number } | null, assetId?: number | null) => void;
 }
 
 /**

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { PreviewPanel, type PreviewPanelHandle } from "@/components/PreviewPanel";
 import { FilterPanel } from "@/components/FilterPanel";
 import { PresetList } from "@/components/Editor/PresetList";
+import { WatermarkPresetPanel } from "@/components/WatermarkPresetPanel";
 import { EditorToolbar } from "@/components/Editor/EditorToolbar";
 import { AssetStrip } from "@/components/Editor/AssetStrip";
 import { useStore } from "@/store";
@@ -14,6 +15,7 @@ export function EditorPage() {
   const projects = useStore((s) => s.projects);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showPresetList, setShowPresetList] = useState(true);
+  const [filterPanelTab, setFilterPanelTab] = useState("adjust");
   const [scale, setScale] = useState(1);
   const [fitScale, setFitScale] = useState(1);
   const previewRef = useRef<PreviewPanelHandle>(null);
@@ -56,13 +58,15 @@ export function EditorPage() {
             />
           </div>
 
-          {showPresetList && <PresetList />}
+          {showPresetList && (
+            filterPanelTab === "watermark" ? <WatermarkPresetPanel /> : <PresetList />
+          )}
         </div>
         <AssetStrip />
       </div>
 
       <div className="w-[320px] flex-shrink-0 flex flex-col bg-zinc-950/50 border-l border-zinc-800/60 overflow-hidden">
-        <FilterPanel />
+        <FilterPanel onTabChange={setFilterPanelTab} />
       </div>
     </div>
   );

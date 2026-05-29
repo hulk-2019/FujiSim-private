@@ -355,6 +355,8 @@ export type WatermarkSettings = {
   svgFillOverride?: string;
   svgStrokeOverride?: string;
   svgOriginalViewBox?: string;
+  previewWidth?: number;
+  previewHeight?: number;
   scale: number;
 };
 

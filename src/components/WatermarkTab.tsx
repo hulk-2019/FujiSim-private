@@ -21,9 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { fontFamilyName } from "@/lib/fontManager";
-import { buildWatermarkSvg, svgToDataUrl } from "@/lib/watermarkSvg";
 import { Label, SliderRow, ToggleSwitch } from "@/components/ui/form";
-import type { UserFont, WatermarkPosition, WatermarkPreset, WatermarkSettings } from "@/types";
+import type { UserFont, WatermarkPosition } from "@/types";
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -78,14 +77,6 @@ const BUILTIN_FONTS = [
   { value: "'Comic Sans MS', cursive",                                      label: "Comic Sans MS" },
 ];
 
-const PRESET_STYLE_KEYS = ["whiteBottom", "blackBottom", "italicCenter", "smallBottomRight"] as const;
-const PRESET_STYLES_DATA: { text: string; fontSize: number; color: string; opacity: number; italic: boolean; position: WatermarkPosition }[] = [
-  { text: "© FujiSim", fontSize: 32, color: "#ffffff", opacity: 0.75, italic: false, position: "bottom-center" },
-  { text: "© FujiSim", fontSize: 32, color: "#000000", opacity: 0.6,  italic: false, position: "bottom-center" },
-  { text: "SAMPLE",    fontSize: 48, color: "#ffffff", opacity: 0.3,  italic: true,  position: "center" },
-  { text: "© 2025",   fontSize: 18, color: "#ffffff", opacity: 0.8,  italic: false, position: "bottom-center" },
-];
-
 const POSITION_BUTTON_KEYS: { value: WatermarkPosition; Icon: React.ElementType; titleKey: string }[] = [
   { value: "top-left",      Icon: ArrowUpLeft,                  titleKey: "watermark.positions.topLeft" },
   { value: "top-center",    Icon: AlignCenterHorizontal,        titleKey: "watermark.positions.topCenter" },
@@ -108,15 +99,8 @@ export function WatermarkTab() {
   const removeUserFont = useStore((s) => s.removeUserFont);
   const watermarkPresets = useStore((s) => s.watermarkPresets);
   const addWatermarkPreset = useStore((s) => s.addWatermarkPreset);
-  const removeWatermarkPreset = useStore((s) => s.removeWatermarkPreset);
   const updateWatermarkPreset = useStore((s) => s.updateWatermarkPreset);
-  const applyWatermarkPreset = useStore((s) => s.applyWatermarkPreset);
-  const userWatermarkSvgs = useStore((s) => s.userWatermarkSvgs);
-  const importWatermarkSvgs = useStore((s) => s.importWatermarkSvgs);
-  const removeUserWatermarkSvg = useStore((s) => s.removeUserWatermarkSvg);
-  const applyImportedWatermarkSvg = useStore((s) => s.applyImportedWatermarkSvg);
   const selectedId = useStore((s) => s.selectedWatermarkPresetId);
-  const setSelectedId = useStore((s) => s.setSelectedWatermarkPresetId);
 
   // 旧数据可能存了纯通用关键字（serif/sans-serif/monospace），这些在 canvas 里行为不可靠，
   // 自动迁移到对应的具体字体栈
@@ -134,11 +118,6 @@ export function WatermarkTab() {
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [dialogName, setDialogName] = useState("");
   const selectedPreset = watermarkPresets.find((p) => p.id === selectedId) ?? null;
-
-  const presetStyles = PRESET_STYLE_KEYS.map((key, i) => ({
-    label: t(`watermark.presetStyles.${key}`),
-    ...PRESET_STYLES_DATA[i],
-  }));
 
   function handleSave() {
     if (selectedPreset) {
@@ -171,24 +150,9 @@ export function WatermarkTab() {
     await addUserFont(paths);
   }
 
-  async function importSvg() {
-    const selected = await openDialog({
-      multiple: true,
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    const imported = await importWatermarkSvgs(paths);
-    if (imported[0]) applyImportedWatermarkSvg(imported[0]);
-  }
-
   async function handleRemoveFont(font: UserFont) {
     if (wm.fontFamily === fontFamilyName(font.id)) setWatermark({ fontFamily: "sans-serif" });
     await removeUserFont(font.id);
-  }
-
-  function applyPreset(p: typeof presetStyles[number]) {
-    setWatermark({ enabled: true, kind: "text", source: "builtin", text: p.text, fontSize: p.fontSize, color: p.color, opacity: p.opacity, bold: false, italic: p.italic, position: p.position, offsetX: 0, offsetY: 0 });
   }
 
   const builtinFonts = BUILTIN_FONTS.map((f) => ({
@@ -204,37 +168,6 @@ export function WatermarkTab() {
           <span className="text-xs text-zinc-300 font-semibold">{t("watermark.enable")}</span>
           <ToggleSwitch checked={wm.enabled} onChange={(v) => setWatermark({ enabled: v })} />
         </div>
-
-      <WatermarkCardSection title={t("watermark.recommended")}>
-        {presetStyles.map((p) => (
-          <WatermarkStyleCard
-            key={p.label}
-            label={p.label}
-            wm={{ ...wm, enabled: true, kind: "text", source: "builtin", text: p.text, fontSize: p.fontSize, color: p.color, opacity: p.opacity, italic: p.italic, position: p.position, offsetX: 0, offsetY: 0 }}
-            onClick={() => { applyPreset(p); setSelectedId(null); }}
-          />
-        ))}
-      </WatermarkCardSection>
-
-      <WatermarkCardSection title={t("watermark.custom")} actionLabel={t("watermark.importSvg")} onAction={importSvg}>
-        {userWatermarkSvgs.map((item) => (
-          <WatermarkStyleCard
-            key={`svg-${item.id}`}
-            label={item.name}
-            wm={{ ...wm, enabled: true, kind: "svg", source: "imported", svgId: item.id, svgMarkup: item.preview_svg ?? "" }}
-            onClick={() => applyImportedWatermarkSvg(item)}
-            onDelete={() => removeUserWatermarkSvg(item.id)}
-          />
-        ))}
-        {watermarkPresets.map((preset) => (
-          <WatermarkPresetCard
-            key={`preset-${preset.id}`}
-            preset={preset}
-            onClick={() => applyWatermarkPreset(preset)}
-            onDelete={() => removeWatermarkPreset(preset.id)}
-          />
-        ))}
-      </WatermarkCardSection>
 
       <div>
         <Label>{t("watermark.text")}</Label>
@@ -273,7 +206,7 @@ export function WatermarkTab() {
         </Select>
       </div>
 
-      <SliderRow label={t("watermark.fontSize")} value={wm.fontSize} min={8} max={120} step={1} onChange={(v) => setWatermark({ fontSize: v })} display={(v) => `${v}px`} />
+      <SliderRow label={t("watermark.fontSize")} value={wm.fontSize} min={8} max={120} step={1} onChange={(v) => setWatermark({ fontSize: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-zinc-300">{t("watermark.bold")}</span>
@@ -288,8 +221,8 @@ export function WatermarkTab() {
         </div>
       </div>
 
-      <SliderRow label={t("watermark.opacity")} value={wm.opacity} min={0} max={1} step={0.01} onChange={(v) => setWatermark({ opacity: v })} display={(v) => `${Math.round(v * 100)}%`} />
-      <SliderRow label={t("watermark.scale")} value={wm.scale} min={0.1} max={4} step={0.05} onChange={(v) => setWatermark({ scale: v })} display={(v) => `${Math.round(v * 100)}%`} />
+      <SliderRow label={t("watermark.opacity")} value={wm.opacity} min={0} max={1} step={0.01} onChange={(v) => setWatermark({ opacity: v })} display={(v) => `${Math.round(v * 100)}%`} marksFilterInteraction={false} />
+      <SliderRow label={t("watermark.scale")} value={wm.scale} min={0.1} max={4} step={0.05} onChange={(v) => setWatermark({ scale: v })} display={(v) => `${Math.round(v * 100)}%`} marksFilterInteraction={false} />
 
       {wm.kind === "svg" && (
         <div className="space-y-3">
@@ -308,13 +241,13 @@ export function WatermarkTab() {
           <ToggleSwitch checked={wm.italic} onChange={(v) => setWatermark({ italic: v })} />
         </div>
         {wm.italic && (
-          <SliderRow label={t("watermark.italicAngle")} value={wm.italicDegree} min={0} max={45} step={1} onChange={(v) => setWatermark({ italicDegree: v })} display={(v) => `${v}°`} />
+          <SliderRow label={t("watermark.italicAngle")} value={wm.italicDegree} min={0} max={45} step={1} onChange={(v) => setWatermark({ italicDegree: v })} display={(v) => `${v}°`} marksFilterInteraction={false} />
         )}
       </div>
 
       <div className="space-y-2">
         <Label>{t("watermark.transform")}</Label>
-        <SliderRow label={t("watermark.rotation")} value={wm.rotation} min={-180} max={180} step={1} onChange={(v) => setWatermark({ rotation: v })} display={(v) => `${v}°`} />
+        <SliderRow label={t("watermark.rotation")} value={wm.rotation} min={-180} max={180} step={1} onChange={(v) => setWatermark({ rotation: v })} display={(v) => `${v}°`} marksFilterInteraction={false} />
         <div className="flex items-center gap-2 mt-1">
           <button type="button" title={t("watermark.flipH")} onClick={() => setWatermark({ flipH: !wm.flipH })}
             className={cn("flex items-center gap-1.5 flex-1 justify-center h-7 rounded border text-xs transition-colors", wm.flipH ? "border-blue-600 text-blue-400" : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200")}>
@@ -343,9 +276,9 @@ export function WatermarkTab() {
               <input type="color" value={wm.shadowColor} onChange={(e) => setWatermark({ shadowColor: e.target.value })} className="h-6 w-8 rounded border border-zinc-700 bg-transparent cursor-pointer" />
               <Input value={wm.shadowColor} onChange={(e) => setWatermark({ shadowColor: e.target.value })} className="h-6 text-xs flex-1 font-mono" maxLength={7} />
             </div>
-            <SliderRow label={t("watermark.shadowBlur")} value={wm.shadowBlur} min={0} max={20} step={1} onChange={(v) => setWatermark({ shadowBlur: v })} display={(v) => `${v}px`} />
-            <SliderRow label={t("watermark.offsetX")} value={wm.shadowOffsetX} min={-10} max={10} step={1} onChange={(v) => setWatermark({ shadowOffsetX: v })} display={(v) => `${v}px`} />
-            <SliderRow label={t("watermark.offsetY")} value={wm.shadowOffsetY} min={-10} max={10} step={1} onChange={(v) => setWatermark({ shadowOffsetY: v })} display={(v) => `${v}px`} />
+            <SliderRow label={t("watermark.shadowBlur")} value={wm.shadowBlur} min={0} max={20} step={1} onChange={(v) => setWatermark({ shadowBlur: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+            <SliderRow label={t("watermark.offsetX")} value={wm.shadowOffsetX} min={-10} max={10} step={1} onChange={(v) => setWatermark({ shadowOffsetX: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+            <SliderRow label={t("watermark.offsetY")} value={wm.shadowOffsetY} min={-10} max={10} step={1} onChange={(v) => setWatermark({ shadowOffsetY: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
           </div>
         )}
       </div>
@@ -362,7 +295,7 @@ export function WatermarkTab() {
               <input type="color" value={wm.strokeColor} onChange={(e) => setWatermark({ strokeColor: e.target.value })} className="h-6 w-8 rounded border border-zinc-700 bg-transparent cursor-pointer" />
               <Input value={wm.strokeColor} onChange={(e) => setWatermark({ strokeColor: e.target.value })} className="h-6 text-xs flex-1 font-mono" maxLength={7} />
             </div>
-            <SliderRow label={t("watermark.strokeWidth")} value={wm.strokeWidth} min={1} max={10} step={0.5} onChange={(v) => setWatermark({ strokeWidth: v })} display={(v) => `${v}px`} />
+            <SliderRow label={t("watermark.strokeWidth")} value={wm.strokeWidth} min={1} max={10} step={0.5} onChange={(v) => setWatermark({ strokeWidth: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
           </div>
         )}
       </div>
@@ -504,100 +437,6 @@ function UserFontItem({ font, onDelete }: { font: UserFont; onDelete: () => void
   );
 }
 
-function WatermarkCardSection({
-  actionLabel,
-  children,
-  onAction,
-  title,
-}: {
-  actionLabel?: string;
-  children: React.ReactNode;
-  onAction?: () => void;
-  title: string;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <Label>{title}</Label>
-        {actionLabel && (
-          <button
-            type="button"
-            onClick={onAction}
-            className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-200"
-          >
-            {actionLabel}
-          </button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2">{children}</div>
-    </div>
-  );
-}
-
-function WatermarkStyleCard({
-  label,
-  onClick,
-  onDelete,
-  wm,
-}: {
-  label: string;
-  onClick: () => void;
-  onDelete?: () => void;
-  wm: WatermarkSettings;
-}) {
-  const preview = svgToDataUrl(buildWatermarkSvg(wm, 220, 120));
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative h-24 rounded border border-zinc-800 bg-zinc-950 hover:border-zinc-600 overflow-hidden text-left"
-    >
-      <img src={preview} alt="" className="h-16 w-full object-contain bg-zinc-900" />
-      <span className="block px-2 py-1 text-[11px] text-zinc-300 truncate">{label}</span>
-      {onDelete && (
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-zinc-950/80 text-zinc-500 hover:text-red-400"
-        >
-          <Trash2 size={11} />
-        </span>
-      )}
-    </button>
-  );
-}
-
-function WatermarkPresetCard({
-  onClick,
-  onDelete,
-  preset,
-}: {
-  onClick: () => void;
-  onDelete: () => void;
-  preset: WatermarkPreset;
-}) {
-  let wm: WatermarkSettings | null = null;
-  try {
-    wm = { ...DEFAULT_PRESET_WATERMARK, ...JSON.parse(preset.settings_json), enabled: true };
-  } catch {
-    wm = null;
-  }
-
-  return wm ? (
-    <WatermarkStyleCard label={preset.name} wm={wm} onClick={onClick} onDelete={onDelete} />
-  ) : (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative h-24 rounded border border-zinc-800 bg-zinc-950 hover:border-zinc-600 overflow-hidden text-left"
-    >
-      <span className="block px-2 py-1 text-[11px] text-zinc-300 truncate">{preset.name}</span>
-    </button>
-  );
-}
-
 function ColorInputRow({
   label,
   onChange,
@@ -627,33 +466,3 @@ function ColorInputRow({
     </div>
   );
 }
-
-const DEFAULT_PRESET_WATERMARK: WatermarkSettings = {
-  enabled: true,
-  kind: "text",
-  source: "preset",
-  text: "© FujiSim",
-  fontSize: 32,
-  fontFamily: "Arial, sans-serif",
-  color: "#ffffff",
-  opacity: 0.7,
-  italic: false,
-  italicDegree: 15,
-  shadowEnabled: true,
-  shadowColor: "#000000",
-  shadowBlur: 4,
-  shadowOffsetX: 1,
-  shadowOffsetY: 1,
-  position: "bottom-center",
-  offsetX: 0,
-  offsetY: 0,
-  nudgeStep: 5,
-  rotation: 0,
-  flipH: false,
-  flipV: false,
-  bold: false,
-  strokeEnabled: false,
-  strokeColor: "#000000",
-  strokeWidth: 2,
-  scale: 1,
-};

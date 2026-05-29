@@ -157,6 +157,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const previewSize = useStore((s) => s.previewSize);
     const previewSizeAssetId = useStore((s) => s.previewSizeAssetId);
     const setPreviewSize = useStore((s) => s.setPreviewSize);
+    const setWatermarkPreviewSize = useStore((s) => s.setWatermarkPreviewSize);
     const eyedropperMode = useStore((s) => s.eyedropperMode);
     const setEyedropperMode = useStore((s) => s.setEyedropperMode);
     const setFilter = useStore((s) => s.setFilter);
@@ -350,6 +351,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     useEffect(() => {
       setLoadedMainSrc(null);
     }, [focusedId]);
+
+    useEffect(() => {
+      if (!focusedId || !containerW || !containerH) return;
+      setWatermarkPreviewSize({ width: containerW, height: containerH }, focusedId);
+    }, [containerH, containerW, focusedId, setWatermarkPreviewSize]);
 
     useEffect(() => {
       // 预设/白平衡这类一次性操作先展示 GPU 近似效果，再延迟进入后端 settled 渲染。
@@ -597,6 +603,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                       />
                       {!showOriginal && watermark.enabled && wmDims && (
                         <WatermarkOverlay
+                          displayW={containerW}
+                          displayH={containerH}
                           wm={watermark}
                           imgW={wmDims.width}
                           imgH={wmDims.height}

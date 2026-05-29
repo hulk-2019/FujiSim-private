@@ -10,9 +10,13 @@ export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice
   selectedWatermarkPresetId: null,
   previewSize: null,
   previewSizeAssetId: null,
+  watermarkPreviewSize: null,
+  watermarkPreviewSizeAssetId: null,
 
   setWatermark: (patch) => set({ watermark: { ...get().watermark, ...patch } }),
   setPreviewSize: (size, assetId) => set({ previewSize: size, previewSizeAssetId: assetId ?? null }),
+  setWatermarkPreviewSize: (size, assetId) =>
+    set({ watermarkPreviewSize: size, watermarkPreviewSizeAssetId: assetId ?? null }),
   refreshWatermarkPresets: async () => {
     const presets = await api.listWatermarkPresets().catch(() => []);
     set({ watermarkPresets: presets });
@@ -45,8 +49,7 @@ export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice
     });
   },
   addWatermarkPreset: async (name) => {
-    const { position: _pos, offsetX: _ox, offsetY: _oy, ...rest } = get().watermark;
-    const settingsJson = JSON.stringify(rest);
+    const settingsJson = JSON.stringify(get().watermark);
     const preset = await api.createWatermarkPreset(name, settingsJson);
     set({
       watermarkPresets: [...get().watermarkPresets, preset],
@@ -54,8 +57,7 @@ export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice
     });
   },
   updateWatermarkPreset: async (id, name) => {
-    const { position: _pos, offsetX: _ox, offsetY: _oy, ...rest } = get().watermark;
-    const settingsJson = JSON.stringify(rest);
+    const settingsJson = JSON.stringify(get().watermark);
     const updated = await api.updateWatermarkPreset(id, name, settingsJson);
     set({ watermarkPresets: get().watermarkPresets.map((p) => (p.id === id ? updated : p)) });
   },
@@ -70,21 +72,12 @@ export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice
   },
   applyWatermarkPreset: (preset) => {
     try {
-      const {
-        position: _pos,
-        offsetX: _ox,
-        offsetY: _oy,
-        enabled: _en,
-        ...settings
-      } = JSON.parse(preset.settings_json);
+      const { enabled: _en, ...settings } = JSON.parse(preset.settings_json);
       set({
         watermark: {
           ...get().watermark,
           ...settings,
           enabled: true,
-          position: "bottom-center",
-          offsetX: 0,
-          offsetY: 0,
         },
         selectedWatermarkPresetId: preset.id,
       });

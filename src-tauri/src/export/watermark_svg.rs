@@ -1,5 +1,6 @@
 use crate::error::{AppError, Result};
 use image::RgbaImage;
+use std::sync::Arc;
 
 pub fn sanitize_svg(input: &str) -> Result<String> {
     let trimmed = input.trim();
@@ -21,7 +22,14 @@ pub fn sanitize_svg(input: &str) -> Result<String> {
 }
 
 pub fn rasterize_svg(svg: &str, out_w: u32, out_h: u32) -> Result<RgbaImage> {
-    let opt = usvg::Options::default();
+    let mut fontdb = usvg::fontdb::Database::new();
+    fontdb.load_system_fonts();
+    fontdb.set_sans_serif_family("Arial");
+    fontdb.set_serif_family("Times New Roman");
+    fontdb.set_monospace_family("Courier New");
+
+    let mut opt = usvg::Options::default();
+    opt.fontdb = Arc::new(fontdb);
     let tree =
         usvg::Tree::from_str(svg, &opt).map_err(|e| AppError::other(format!("svg parse: {e}")))?;
     let mut pixmap = tiny_skia::Pixmap::new(out_w, out_h)
@@ -31,7 +39,16 @@ pub fn rasterize_svg(svg: &str, out_w: u32, out_h: u32) -> Result<RgbaImage> {
     let sy = out_h as f32 / size.height();
     let transform = tiny_skia::Transform::from_scale(sx, sy);
     resvg::render(&tree, transform, &mut pixmap.as_mut());
-    let data = pixmap.take();
+    let mut data = pixmap.take();
+    for px in data.chunks_exact_mut(4) {
+        let alpha = px[3] as u16;
+        if alpha == 0 {
+            continue;
+        }
+        for channel in &mut px[..3] {
+            *channel = ((*channel as u16 * 255) / alpha).min(255) as u8;
+        }
+    }
     RgbaImage::from_raw(out_w, out_h, data)
         .ok_or_else(|| AppError::other("svg rgba buffer mismatch"))
 }
@@ -48,8 +65,52 @@ pub fn build_watermark_svg_from_json(
     if kind == "svg" {
         if let Some(markup) = settings.get("svgMarkup").and_then(|v| v.as_str()) {
             let body = apply_svg_overrides(markup, settings)?;
+            let scale = export_scale(settings, out_w, out_h);
+            let position = settings
+                .get("position")
+                .and_then(|v| v.as_str())
+                .unwrap_or("bottom-center");
+            let (x, y, _, _, _) = anchor(position, out_w as f64, out_h as f64, scale);
+            let offset_x = settings
+                .get("offsetX")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+                * scale;
+            let offset_y = settings
+                .get("offsetY")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+                * scale;
+            let rotation = settings
+                .get("rotation")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let user_scale = settings
+                .get("scale")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(1.0)
+                * scale;
+            let flip_h = settings
+                .get("flipH")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let flip_v = settings
+                .get("flipV")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let sx = if flip_h { -user_scale } else { user_scale };
+            let sy = if flip_v { -user_scale } else { user_scale };
+            let opacity = settings
+                .get("opacity")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(1.0)
+                .clamp(0.0, 1.0);
+            let transform = format!(
+                "translate({offset_x} {offset_y}) translate({x} {y}) rotate({rotation}) scale({sx} {sy}) translate({} {})",
+                -x, -y
+            );
             return Ok(format!(
-                r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}">{body}</svg>"#
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}"><g opacity="{opacity}" transform="{transform}">{body}</g></svg>"#
             ));
         }
     }
@@ -59,21 +120,110 @@ pub fn build_watermark_svg_from_json(
         .get("color")
         .and_then(|v| v.as_str())
         .unwrap_or("#ffffff");
+    let font_family = settings
+        .get("fontFamily")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Arial, sans-serif");
     let opacity = settings
         .get("opacity")
         .and_then(|v| v.as_f64())
         .unwrap_or(1.0)
         .clamp(0.0, 1.0);
+    let export_scale = export_scale(settings, out_w, out_h);
     let font_size = settings
         .get("fontSize")
         .and_then(|v| v.as_f64())
-        .unwrap_or(32.0);
-    let x = out_w as f64 / 2.0;
-    let y = out_h as f64 - 16.0;
+        .unwrap_or(32.0)
+        * export_scale;
+    let position = settings
+        .get("position")
+        .and_then(|v| v.as_str())
+        .unwrap_or("bottom-center");
+    let (x, y, dy, text_anchor, dominant_baseline) = anchor(position, out_w as f64, out_h as f64, export_scale);
+    let offset_x = settings
+        .get("offsetX")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0)
+        * export_scale;
+    let offset_y = settings
+        .get("offsetY")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0)
+        * export_scale;
+    let rotation = settings
+        .get("rotation")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let user_scale = settings
+        .get("scale")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+    let flip_h = settings
+        .get("flipH")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let flip_v = settings
+        .get("flipV")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let font_weight = if settings
+        .get("bold")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        700
+    } else {
+        400
+    };
+    let font_style = if settings
+        .get("italic")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        "italic"
+    } else {
+        "normal"
+    };
+    let sx = if flip_h { -user_scale } else { user_scale };
+    let sy = if flip_v { -user_scale } else { user_scale };
+    let transform = format!(
+        "translate({offset_x} {offset_y}) translate({x} {y}) rotate({rotation}) scale({sx} {sy}) translate({} {})",
+        -x, -y
+    );
     Ok(format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}"><g opacity="{opacity}"><text x="{x}" y="{y}" text-anchor="middle" font-size="{font_size}" fill="{color}">{}</text></g></svg>"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}"><g opacity="{opacity}" transform="{transform}"><text x="{x}" y="{y}" dy="{dy}" text-anchor="{text_anchor}" dominant-baseline="{dominant_baseline}" font-family="{}" font-size="{font_size}" font-weight="{font_weight}" font-style="{font_style}" fill="{color}">{}</text></g></svg>"#,
+        xml_escape(font_family),
         xml_escape(text)
     ))
+}
+
+fn export_scale(settings: &serde_json::Value, out_w: u32, out_h: u32) -> f64 {
+    let preview_w = settings
+        .get("previewWidth")
+        .and_then(|v| v.as_f64())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(out_w as f64);
+    let preview_h = settings
+        .get("previewHeight")
+        .and_then(|v| v.as_f64())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(out_h as f64);
+    ((out_w as f64 / preview_w) + (out_h as f64 / preview_h)) / 2.0
+}
+
+fn anchor(position: &str, width: f64, height: f64, scale: f64) -> (f64, f64, f64, &'static str, &'static str) {
+    let pad = 16.0 * scale;
+    match position {
+        "top-left" => (pad, 0.0, pad, "start", "hanging"),
+        "top-center" => (width / 2.0, 0.0, pad, "middle", "hanging"),
+        "top-right" => (width - pad, 0.0, pad, "end", "hanging"),
+        "left-center" => (pad, height / 2.0, 0.0, "start", "middle"),
+        "right-center" => (width - pad, height / 2.0, 0.0, "end", "middle"),
+        "center" => (width / 2.0, height / 2.0, 0.0, "middle", "middle"),
+        "bottom-left" => (pad, height, -pad, "start", "text-after-edge"),
+        "bottom-right" => (width - pad, height, -pad, "end", "text-after-edge"),
+        _ => (width / 2.0, height, -pad, "middle", "text-after-edge"),
+    }
 }
 
 fn apply_svg_overrides(markup: &str, settings: &serde_json::Value) -> Result<String> {
@@ -135,6 +285,17 @@ mod tests {
     }
 
     #[test]
+    fn rasterize_svg_returns_straight_alpha_pixels() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" viewBox="0 0 4 4"><rect width="4" height="4" fill="#ffffff" opacity="0.5"/></svg>"##;
+        let img = rasterize_svg(svg, 4, 4).unwrap();
+        let px = img.get_pixel(1, 1);
+        assert!(px[3] >= 120 && px[3] <= 136);
+        assert!(px[0] >= 250);
+        assert!(px[1] >= 250);
+        assert!(px[2] >= 250);
+    }
+
+    #[test]
     fn build_text_watermark_svg_uses_output_size() {
         let settings = serde_json::json!({
             "enabled": true,
@@ -156,5 +317,61 @@ mod tests {
         let svg = build_watermark_svg_from_json(&settings, 600, 400).unwrap();
         assert!(svg.contains(r#"width="600""#));
         assert!(svg.contains("FujiSim"));
+    }
+
+    #[test]
+    fn build_text_watermark_svg_scales_preview_sized_settings_for_export() {
+        let settings = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 32,
+            "fontFamily": "Arial, sans-serif",
+            "color": "#ffffff",
+            "opacity": 0.7,
+            "bold": true,
+            "italic": true,
+            "position": "bottom-center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 0,
+            "flipH": false,
+            "flipV": false,
+            "previewWidth": 600,
+            "previewHeight": 400
+        });
+        let svg = build_watermark_svg_from_json(&settings, 6000, 4000).unwrap();
+        assert!(svg.contains(r#"font-size="320""#));
+        assert!(svg.contains(r#"font-family="Arial, sans-serif""#));
+        assert!(svg.contains(r#"font-weight="700""#));
+        assert!(svg.contains(r#"font-style="italic""#));
+        assert!(svg.contains(r#"dy="-160""#));
+        assert!(svg.contains(r#"y="4000""#));
+    }
+
+    #[test]
+    fn rasterized_generated_text_watermark_has_visible_pixels() {
+        let settings = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 32,
+            "fontFamily": "Arial, sans-serif",
+            "color": "#ffffff",
+            "opacity": 0.7,
+            "position": "center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 0,
+            "flipH": false,
+            "flipV": false
+        });
+        let svg = build_watermark_svg_from_json(&settings, 300, 200).unwrap();
+        let img = rasterize_svg(&svg, 300, 200).unwrap();
+        assert!(img.pixels().any(|p| p[3] > 0));
     }
 }

@@ -40,6 +40,8 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const focusedId = useStore((s) => s.focusedId);
   const assets = useStore((s) => s.assets);
   const watermark = useStore((s) => s.watermark);
+  const watermarkPreviewSize = useStore((s) => s.watermarkPreviewSize);
+  const watermarkPreviewSizeAssetId = useStore((s) => s.watermarkPreviewSizeAssetId);
   const focusedAsset = assets.find((a) => a?.id === focusedId) ?? null;
   const [format, setFormat] = useState<ExportFormat>("jpeg");
   const [quality, setQuality] = useState(92);
@@ -86,12 +88,22 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
       strip_gps: stripGps,
       filename_template: null,
     };
+    const currentWatermarkPreviewSize =
+      watermarkPreviewSizeAssetId === focusedId ? watermarkPreviewSize : null;
+    const previewSizedWatermark =
+      watermark.enabled && currentWatermarkPreviewSize
+        ? {
+            ...watermark,
+            previewWidth: currentWatermarkPreviewSize.width,
+            previewHeight: currentWatermarkPreviewSize.height,
+          }
+        : watermark;
 
     await api.startBatchExport({
       asset_ids: targetIds,
       filter,
       export: settings,
-      watermark_settings: watermark.enabled ? watermark : null,
+      watermark_settings: watermark.enabled ? previewSizedWatermark : null,
     });
     onOpenChange(false);
     } finally {

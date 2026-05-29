@@ -19,6 +19,7 @@ export function SliderRow({
   display,
   resetValue = 0,
   trackGradient,
+  marksFilterInteraction = true,
 }: {
   label: string;
   value: number;
@@ -30,8 +31,12 @@ export function SliderRow({
   resetValue?: number;
   /** CSS gradient for the slider track background */
   trackGradient?: string;
+  marksFilterInteraction?: boolean;
 }) {
   const setIsAdjustingFilter = useStore((s) => s.setIsAdjustingFilter);
+  const setAdjusting = (value: boolean) => {
+    if (marksFilterInteraction) setIsAdjustingFilter(value);
+  };
 
   return (
     <div className="w-full">
@@ -51,11 +56,11 @@ export function SliderRow({
           max={max}
           step={step}
           onValueChange={([v]) => onChange(v)}
-          onPointerDown={() => setIsAdjustingFilter(true)}
-          onPointerUp={() => setIsAdjustingFilter(false)}
-          onPointerCancel={() => setIsAdjustingFilter(false)}
-          onKeyDown={() => setIsAdjustingFilter(true)}
-          onKeyUp={() => setIsAdjustingFilter(false)}
+          onPointerDown={() => setAdjusting(true)}
+          onPointerUp={() => setAdjusting(false)}
+          onPointerCancel={() => setAdjusting(false)}
+          onKeyDown={() => setAdjusting(true)}
+          onKeyUp={() => setAdjusting(false)}
           onThumbDoubleClick={() => onChange(resetValue)}
           className={trackGradient ? "[&>span:first-child]:bg-transparent [&>span:first-child>span]:bg-transparent" : undefined}
         />

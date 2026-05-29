@@ -27,7 +27,11 @@ import { GrainSection } from "./GrainSection";
 import { InfoTab } from "./InfoTab";
 import { SavePresetDialog } from "./SavePresetDialog";
 
-export function FilterPanel() {
+export function FilterPanel({
+  onTabChange,
+}: {
+  onTabChange?: (tab: string) => void;
+}) {
   const { t } = useTranslation();
   const filter = useStore((s) => s.filter);
   const setFilter = useStore((s) => s.setFilter);
@@ -43,7 +47,7 @@ export function FilterPanel() {
 
   return (
     <aside className="w-full h-full bg-transparent flex text-sm overflow-hidden">
-      <Tabs defaultValue="adjust" className="flex-1 flex flex-row-reverse overflow-hidden">
+      <Tabs defaultValue="adjust" onValueChange={onTabChange} className="flex-1 flex flex-row-reverse overflow-hidden">
         <TabsList className="flex flex-col h-full w-11 flex-shrink-0 items-stretch gap-1 rounded-none bg-zinc-900/50 border-l border-zinc-800/60 p-1">
           <SideTabTrigger value="adjust" label={t("filterPanel.tabs.adjust")} icon={<SlidersHorizontal size={16} />} />
           <SideTabTrigger value="watermark" label={t("filterPanel.tabs.watermark")} icon={<Stamp size={16} />} />
