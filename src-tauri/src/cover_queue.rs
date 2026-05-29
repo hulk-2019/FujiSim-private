@@ -98,7 +98,12 @@ impl CoverQueue {
 }
 
 /// Must only be called from a `spawn_blocking` context — calls `block_on` internally.
-fn process_one(asset_id: i64, project_id: Option<i64>, state: &SharedState, app: &tauri::AppHandle) {
+fn process_one(
+    asset_id: i64,
+    project_id: Option<i64>,
+    state: &SharedState,
+    app: &tauri::AppHandle,
+) {
     let rt = tokio::runtime::Handle::current();
 
     let asset = match rt.block_on(crate::db::assets::get(&state.pool, asset_id)) {
@@ -129,8 +134,8 @@ fn process_one(asset_id: i64, project_id: Option<i64>, state: &SharedState, app:
         }
     };
 
-    if let Err(e) = std::fs::create_dir_all(&cover_dir)
-        .and_then(|_| std::fs::write(&cover_path, &cover_jpeg))
+    if let Err(e) =
+        std::fs::create_dir_all(&cover_dir).and_then(|_| std::fs::write(&cover_path, &cover_jpeg))
     {
         tracing::warn!(asset_id, error = %e, "cover_queue: write failed");
         return;

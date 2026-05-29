@@ -115,10 +115,11 @@ pub async fn rename(pool: &SqlitePool, id: i64, name: &str) -> Result<Project> {
 
 /// 查询文件夹内资产数量（用于删除确认弹框）。
 pub async fn asset_count(pool: &SqlitePool, id: i64) -> Result<i64> {
-    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM project_assets WHERE project_id = ?")
-        .bind(id)
-        .fetch_one(pool)
-        .await?;
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM project_assets WHERE project_id = ?")
+            .bind(id)
+            .fetch_one(pool)
+            .await?;
     Ok(count)
 }
 
@@ -131,10 +132,12 @@ pub async fn delete_with_assets(pool: &SqlitePool, id: i64) -> Result<()> {
 }
 
 pub async fn list_trash(pool: &SqlitePool) -> Result<Vec<Project>> {
-    sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE is_deleted = 1 ORDER BY deleted_at DESC")
-        .fetch_all(pool)
-        .await
-        .map_err(Into::into)
+    sqlx::query_as::<_, Project>(
+        "SELECT * FROM projects WHERE is_deleted = 1 ORDER BY deleted_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
 }
 
 pub async fn restore(pool: &SqlitePool, id: i64) -> Result<()> {

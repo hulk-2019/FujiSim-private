@@ -10,8 +10,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 
-const DISK_PREVIEW_BASE_MAX_EDGE: u32 = 1920;
-
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PreviewMode {
@@ -44,6 +42,8 @@ pub struct PreviewResult {
     pub mime_type: Option<String>,
     pub width: u32,
     pub height: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<u32>,
 }
 
 /// `thumbnail:done` 事件载荷：单张封面写盘完成。
@@ -52,51 +52,106 @@ pub struct ThumbnailDonePayload {
     pub asset_id: i64,
 }
 
-/// 快速判断 RAW 的预览基线是否已经解析完成。
-///
-/// 只检查 `{asset_id}_baseline.tif` 是否存在，不做解码；用于前端决定是否需要展示首次解析 loading。
+/// RAW 预览不再落盘生成 baseline TIFF；画布预览直接从 RAW 解码并复用内存缓存。
 #[tauri::command]
 pub async fn has_preview_base(
     state: State<'_, SharedState>,
     asset_id: i64,
     project_id: Option<i64>,
 ) -> Result<bool> {
-    Ok(processing::raw::preview_base_path(&state.raw_original_dir, project_id, asset_id).exists())
+    let _ = (state, asset_id, project_id);
+    Ok(false)
 }
 
 /// Frontend-only interaction marker. Used when WebGL handles immediate feedback
 /// without calling `get_preview`, so background queues still yield to the editor.
 #[tauri::command]
-pub async fn mark_preview_interaction(state: State<'_, SharedState>, duration_ms: Option<u64>) -> Result<()> {
+pub async fn mark_preview_interaction(
+    state: State<'_, SharedState>,
+    duration_ms: Option<u64>,
+) -> Result<()> {
     state.mark_interaction_active_for(duration_ms.unwrap_or(900).clamp(100, 5000));
     Ok(())
 }
 
-/// 返回已解析 RAW baseline TIFF 的路径和尺寸。
-///
-/// 用于切回已经完成首次解析的 RAW 时直接显示 baseline，避免先进入骨架屏。
+/// RAW baseline TIFF 磁盘缓存已停用；保留命令形状以兼容前端旧调用。
 #[tauri::command]
 pub async fn get_preview_base(
     state: State<'_, SharedState>,
     asset_id: i64,
     project_id: Option<i64>,
 ) -> Result<Option<PreviewResult>> {
-    let path = processing::raw::preview_base_path(&state.raw_original_dir, project_id, asset_id);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let (width, height) = crate::vips_io::image_dimensions(&path)?;
-    Ok(Some(PreviewResult {
-        path: Some(path.to_string_lossy().to_string()),
-        data: None,
-        mime_type: Some("image/tiff".to_string()),
-        width,
-        height,
-    }))
+    let _ = (state, asset_id, project_id);
+    Ok(None)
 }
 
-/// 实时渲染单张照片的预览图。每次调用都重新解码 + 下采样 + 色彩流水线，
-/// 结果写入系统临时目录下的文件，返回路径供前端 convertFileSrc 加载。
+/// 返回可秒开的预览图：RAW 直接返回相机内嵌 JPEG，普通图片使用源文件下采样。
+///
+/// 这张图只作为首帧占位；最终显示仍由 `get_preview` 的 RAW 解码与色彩流水线替换。
+#[tauri::command]
+pub async fn get_fast_preview(
+    state: State<'_, SharedState>,
+    asset_id: i64,
+    max_edge: Option<u32>,
+    token: u64,
+) -> Result<PreviewResult> {
+    use std::sync::atomic::Ordering;
+    state.preview_token.store(token, Ordering::SeqCst);
+    state.tile_token.store(token, Ordering::SeqCst);
+    state.mark_preview_active_for(800);
+
+    let asset = assets::get(&state.pool, asset_id).await?;
+    let path = PathBuf::from(&asset.file_path);
+    let preview_token = state.preview_token.clone();
+    let preview_pool = state.preview_pool.clone();
+    let max_edge = max_edge.unwrap_or(1920).clamp(320, 4096);
+
+    tokio::task::spawn_blocking(move || {
+        preview_pool.install(|| {
+            if preview_token.load(Ordering::SeqCst) != token {
+                return Err(AppError::other("preview_cancelled"));
+            }
+            let start = Instant::now();
+            let (jpeg, width, height, orientation) = if asset.is_raw != 0 {
+                let (jpeg, orientation) = processing::raw::extract_raw_thumbnail_fast(&path)?;
+                let width = asset.width.unwrap_or(0).max(0) as u32;
+                let height = asset.height.unwrap_or(0).max(0) as u32;
+                (jpeg, width, height, Some(orientation).filter(|o| *o > 1))
+            } else {
+                let img = processing::load_image_rgb16(&path)?;
+                let img = resize_to_max_edge(img, Some(max_edge))?;
+                let (width, height) = img.dimensions();
+                let jpeg =
+                    crate::vips_io::encode_rgb16(&img, crate::export::ExportFormat::Jpeg, 86)?;
+                (jpeg, width, height, None)
+            };
+            if preview_token.load(Ordering::SeqCst) != token {
+                return Err(AppError::other("preview_cancelled"));
+            }
+            tracing::debug!(
+                asset_id,
+                width,
+                height,
+                bytes = jpeg.len(),
+                total_ms = start.elapsed().as_millis(),
+                "fast preview ready"
+            );
+            Ok(PreviewResult {
+                path: None,
+                data: Some(jpeg),
+                mime_type: Some("image/jpeg".to_string()),
+                width,
+                height,
+                orientation,
+            })
+        })
+    })
+    .await
+    .map_err(|e| AppError::other(e.to_string()))?
+}
+
+/// 实时渲染单张照片的预览图。RAW 会直接从源文件解码到内存基线，
+/// 再走下采样 + 色彩流水线；不再生成 raw_originals 下的 TIFF 缓存。
 /// token 用于取消：前端每次切换文件时递增 token，后端在解码完成后检查，
 /// 若 token 已过期则返回 preview_cancelled，前端静默丢弃。
 #[tauri::command]
@@ -146,7 +201,13 @@ pub async fn get_preview(
         .map_err(|_| AppError::other("preview_busy"))?;
 
     // 等到拿到 permit 后再检查一次，可能已经有更新的请求进来了
-    if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
+    if request_cancelled(
+        is_tile,
+        token,
+        preview_generation,
+        &preview_token,
+        &tile_token,
+    ) {
         return Err(AppError::other("preview_cancelled"));
     }
 
@@ -156,8 +217,6 @@ pub async fn get_preview(
             let total_start = Instant::now();
             tracing::debug!(asset_id, token, ?mode, ?max_edge, "preview render start");
 
-            let persist_to_disk = matches!(mode, PreviewMode::Settled)
-                && max_edge.is_some_and(|edge| edge >= DISK_PREVIEW_BASE_MAX_EDGE);
             let base_start = Instant::now();
             let resized = load_preview_base(
                 &state_for_render,
@@ -165,18 +224,26 @@ pub async fn get_preview(
                 &path,
                 if is_tile { None } else { max_edge },
                 native_max_edge,
-                persist_to_disk,
                 project_id_for_render,
             )?;
             let resized = if is_tile {
-                Arc::new(crop_tile(&resized, tile.ok_or_else(|| AppError::other("preview_tile_required"))?)?)
+                Arc::new(crop_tile(
+                    &resized,
+                    tile.ok_or_else(|| AppError::other("preview_tile_required"))?,
+                )?)
             } else {
                 resized
             };
             let base_ms = base_start.elapsed().as_millis();
 
             // Check token after decode (decode is the most expensive part)
-            if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
+            if request_cancelled(
+                is_tile,
+                token,
+                preview_generation,
+                &preview_token,
+                &tile_token,
+            ) {
                 return Err(AppError::other("preview_cancelled"));
             }
 
@@ -191,26 +258,41 @@ pub async fn get_preview(
             let processed =
                 crate::processing::process_image(&resized, &render_settings, lut.as_deref())?;
             let process_ms = process_start.elapsed().as_millis();
-            if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
+            if request_cancelled(
+                is_tile,
+                token,
+                preview_generation,
+                &preview_token,
+                &tile_token,
+            ) {
                 return Err(AppError::other("preview_cancelled"));
             }
-            let jpeg_quality = if interactive_preview {
-                78
-            } else {
-                88
-            };
+            let jpeg_quality = if interactive_preview { 78 } else { 88 };
             let encode_start = Instant::now();
-            let jpeg =
-                crate::vips_io::encode_rgb16(&processed, crate::export::ExportFormat::Jpeg, jpeg_quality)?;
+            let jpeg = crate::vips_io::encode_rgb16(
+                &processed,
+                crate::export::ExportFormat::Jpeg,
+                jpeg_quality,
+            )?;
             let encode_ms = encode_start.elapsed().as_millis();
-            if request_cancelled(is_tile, token, preview_generation, &preview_token, &tile_token) {
+            if request_cancelled(
+                is_tile,
+                token,
+                preview_generation,
+                &preview_token,
+                &tile_token,
+            ) {
                 return Err(AppError::other("preview_cancelled"));
             }
             let transport_start = Instant::now();
             let (path, data) = if matches!(mode, PreviewMode::Full) {
-                let variant = if settings.is_identity() { "base" } else { "edit" };
-                let out_path =
-                    std::env::temp_dir().join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
+                let variant = if settings.is_identity() {
+                    "base"
+                } else {
+                    "edit"
+                };
+                let out_path = std::env::temp_dir()
+                    .join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
                 std::fs::write(&out_path, &jpeg)
                     .map_err(|e| AppError::other(format!("preview write: {e}")))?;
                 (Some(out_path.to_string_lossy().to_string()), None)
@@ -240,6 +322,7 @@ pub async fn get_preview(
                 mime_type: Some("image/jpeg".to_string()),
                 width: rw,
                 height: rh,
+                orientation: None,
             })
         })
     })
@@ -269,9 +352,9 @@ pub(crate) fn load_preview_base(
     path: &std::path::Path,
     max_edge: Option<u32>,
     native_max_edge: Option<u32>,
-    persist_to_disk: bool,
     project_id: Option<i64>,
 ) -> Result<Arc<Rgb16Image>> {
+    let _ = project_id;
     let key = PreviewBaseCacheKey { asset_id, max_edge };
 
     if let Ok(mut cache) = state.preview_base_cache.lock() {
@@ -281,63 +364,19 @@ pub(crate) fn load_preview_base(
         }
     }
 
-    let cache_path = processing::raw::preview_base_path(&state.raw_original_dir, project_id, asset_id);
-    let use_disk_base = matches!(
-        crate::asset::format::classify(path),
-        crate::asset::format::FileKind::Raw
+    tracing::debug!(
+        asset_id,
+        ?max_edge,
+        ?native_max_edge,
+        "preview base memory cache miss"
     );
-    let mut should_write_disk = false;
-    let img = if use_disk_base && cache_path.exists() {
-        match crate::vips_io::decode_to_rgb16(&cache_path) {
-            Ok(img) if disk_base_satisfies_request(&img, max_edge, native_max_edge) => {
-                tracing::debug!(asset_id, ?max_edge, "preview base disk cache hit");
-                resize_to_max_edge(img, max_edge)?
-            }
-            _ => {
-                tracing::debug!(asset_id, ?max_edge, "preview base disk cache stale");
-                should_write_disk = persist_to_disk;
-                decode_and_resize(path, max_edge)?
-            }
-        }
-    } else {
-        tracing::debug!(asset_id, ?max_edge, "preview base cache miss");
-        should_write_disk = use_disk_base && persist_to_disk;
-        decode_and_resize(path, max_edge)?
-    };
-
-    if use_disk_base && should_write_disk {
-        if let Some(parent) = cache_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(e) = crate::vips_io::encode_rgb16_to_file(
-            &img,
-            &cache_path,
-            crate::export::ExportFormat::Tiff,
-            0,
-        ) {
-            tracing::warn!("failed to cache preview base for asset {}: {}", asset_id, e);
-        }
-    }
+    let img = decode_and_resize(path, max_edge)?;
 
     let img = Arc::new(img);
     if let Ok(mut cache) = state.preview_base_cache.lock() {
         cache.insert(key, img.clone());
     }
     Ok(img)
-}
-
-fn disk_base_satisfies_request(
-    img: &Rgb16Image,
-    max_edge: Option<u32>,
-    native_max_edge: Option<u32>,
-) -> bool {
-    let requested_output_edge = match (max_edge, native_max_edge) {
-        (Some(requested), Some(native)) => native.min(requested),
-        (Some(requested), None) => requested,
-        (None, Some(native)) => native,
-        (None, None) => return false,
-    };
-    img.width().max(img.height()) >= requested_output_edge
 }
 
 fn decode_and_resize(
@@ -417,7 +456,13 @@ pub async fn auto_white_balance(
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let img = load_white_balance_image(&raw_original_dir, project_id, asset_id, asset.is_raw != 0, &path)?;
+            let img = load_white_balance_image(
+                &raw_original_dir,
+                project_id,
+                asset_id,
+                asset.is_raw != 0,
+                &path,
+            )?;
             Ok(processing::white_balance::auto_white_balance(&img))
         })
     })
@@ -443,7 +488,13 @@ pub async fn eyedrop_color(
 
     tokio::task::spawn_blocking(move || {
         export_pool.install(|| {
-            let img = load_white_balance_image(&raw_original_dir, project_id, asset_id, asset.is_raw != 0, &path)?;
+            let img = load_white_balance_image(
+                &raw_original_dir,
+                project_id,
+                asset_id,
+                asset.is_raw != 0,
+                &path,
+            )?;
             let (w, h) = img.dimensions();
             let sample_x = asset
                 .width
@@ -462,7 +513,9 @@ pub async fn eyedrop_color(
                     "eyedrop out of bounds: ({x}, {y}) exceeds ({w}, {h})"
                 )));
             }
-            Ok(processing::white_balance::eyedrop_color(&img, sample_x, sample_y))
+            Ok(processing::white_balance::eyedrop_color(
+                &img, sample_x, sample_y,
+            ))
         })
     })
     .await
@@ -476,13 +529,9 @@ fn load_white_balance_image(
     is_raw: bool,
     source_path: &std::path::Path,
 ) -> Result<Rgb16Image> {
+    let _ = (raw_original_dir, project_id, asset_id);
     if is_raw {
-        let baseline_path = processing::raw::preview_base_path(raw_original_dir, project_id, asset_id);
-        if baseline_path.exists() {
-            if let Ok(img) = crate::vips_io::decode_to_rgb16(&baseline_path) {
-                return Ok(img);
-            }
-        }
+        return processing::raw::decode_raw_rgb16_for_preview(source_path, None);
     }
     processing::load_image_rgb16(source_path)
 }

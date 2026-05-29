@@ -149,14 +149,22 @@ export const api = {
       projectId: projectId ?? null,
     }),
 
+  /** 首帧快速预览：RAW 使用内嵌 JPEG，随后由 getPreview 的权威渲染替换。 */
+  getFastPreview: (assetId: number, maxEdge?: number, token?: number) =>
+    invoke<PreviewResult>("get_fast_preview", {
+      assetId,
+      maxEdge,
+      token: token ?? 0,
+    }),
+
   markPreviewInteraction: (durationMs?: number) =>
     invoke<void>("mark_preview_interaction", { durationMs: durationMs ?? null }),
 
-  /** 判断 RAW 预览基线 TIFF 是否已经解析完成。 */
+  /** 兼容旧调用：RAW baseline TIFF 已停用。 */
   hasPreviewBase: (assetId: number, projectId?: number | null) =>
     invoke<boolean>("has_preview_base", { assetId, projectId: projectId ?? null }),
 
-  /** 返回已解析 RAW 预览基线 TIFF 的路径和尺寸。 */
+  /** 兼容旧调用：RAW baseline TIFF 已停用。 */
   getPreviewBase: (assetId: number, projectId?: number | null) =>
     invoke<PreviewResult | null>("get_preview_base", { assetId, projectId: projectId ?? null }),
 

@@ -53,7 +53,11 @@ pub fn auto_white_balance(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> (i32, i32, i
     let avg_b = sum_b / count;
     let avg = (avg_r + avg_g + avg_b) / 3.0;
 
-    (shift_for(avg, avg_r), shift_for(avg, avg_g), shift_for(avg, avg_b))
+    (
+        shift_for(avg, avg_r),
+        shift_for(avg, avg_g),
+        shift_for(avg, avg_b),
+    )
 }
 
 /// 从图像的 (x, y) 周围采样小区域 RGB 均值。
@@ -92,12 +96,18 @@ pub fn eyedrop_color(img: &ImageBuffer<Rgb<u16>, Vec<u16>>, x: u32, y: u32) -> (
         return (f32::from(*r), f32::from(*g), f32::from(*b));
     }
 
-    ((sum_r / count) as f32, (sum_g / count) as f32, (sum_b / count) as f32)
+    (
+        (sum_r / count) as f32,
+        (sum_g / count) as f32,
+        (sum_b / count) as f32,
+    )
 }
 
 fn shift_for(target: f64, channel: f64) -> i32 {
     if channel > 0.0 {
-        ((target - channel) / channel * 200.0).round().clamp(-100.0, 100.0) as i32
+        ((target - channel) / channel * 200.0)
+            .round()
+            .clamp(-100.0, 100.0) as i32
     } else {
         0
     }

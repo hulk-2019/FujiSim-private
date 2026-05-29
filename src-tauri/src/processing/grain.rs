@@ -41,11 +41,17 @@ pub fn apply_grain(
             let cy = (y as f32 / cell_size).floor() as u64;
 
             // Cell-based noise (smooth within cell, blocky between cells)
-            let s1 = cx.wrapping_mul(374761393).wrapping_add(cy.wrapping_mul(668265263)).wrapping_add(seed);
+            let s1 = cx
+                .wrapping_mul(374761393)
+                .wrapping_add(cy.wrapping_mul(668265263))
+                .wrapping_add(seed);
             let n1 = hash_to_norm(s1);
 
             // Pixel-based noise (fine, per-pixel variation)
-            let s2 = (x as u64).wrapping_mul(127).wrapping_add((y as u64).wrapping_mul(311)).wrapping_add(seed);
+            let s2 = (x as u64)
+                .wrapping_mul(127)
+                .wrapping_add((y as u64).wrapping_mul(311))
+                .wrapping_add(seed);
             let n2 = hash_to_norm(s2);
 
             // Roughness: high → more cell noise (blocky/coarse), low → more pixel noise (smooth)

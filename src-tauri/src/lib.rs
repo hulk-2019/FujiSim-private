@@ -103,6 +103,7 @@ pub fn run() {
             ipc::list_user_luts,
             ipc::delete_user_lut,
             // ===== 预览 / 批量导出 / 任务历史 =====
+            ipc::get_fast_preview,
             ipc::get_preview,
             ipc::mark_preview_interaction,
             ipc::has_preview_base,

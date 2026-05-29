@@ -295,6 +295,53 @@ pub async fn get_many(pool: &SqlitePool, ids: &[i64]) -> Result<Vec<Asset>> {
     Ok(out)
 }
 
+/// 查询回收站中某个相册永久清除时会变成孤儿的资产。
+///
+/// 必须在 `projects::purge` 删除记录前调用，供 IPC 层清理磁盘缓存使用。
+pub async fn orphaned_for_trashed_project(
+    pool: &SqlitePool,
+    project_id: i64,
+) -> Result<Vec<Asset>> {
+    sqlx::query_as::<_, Asset>(
+        r#"
+        SELECT a.* FROM assets a
+        INNER JOIN project_assets aa ON aa.asset_id = a.id
+        WHERE aa.project_id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM project_assets aa2
+            WHERE aa2.asset_id = aa.asset_id AND aa2.project_id <> ?
+          )
+        "#,
+    )
+    .bind(project_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
+/// 查询清空回收站时会被删除的资产。
+///
+/// 仍属于未删除相册的资产不会返回，保持和 `projects::purge_all` 一致。
+pub async fn orphaned_for_all_trashed_projects(pool: &SqlitePool) -> Result<Vec<Asset>> {
+    sqlx::query_as::<_, Asset>(
+        r#"
+        SELECT DISTINCT a.* FROM assets a
+        INNER JOIN project_assets aa ON aa.asset_id = a.id
+        INNER JOIN projects p ON p.id = aa.project_id
+        WHERE p.is_deleted = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM project_assets aa2
+            INNER JOIN projects p2 ON p2.id = aa2.project_id
+            WHERE aa2.asset_id = aa.asset_id AND p2.is_deleted = 0
+          )
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
 pub async fn list_for_project(pool: &SqlitePool, project_id: i64) -> Result<Vec<Asset>> {
     sqlx::query_as::<_, Asset>(
         "SELECT a.* FROM assets a \

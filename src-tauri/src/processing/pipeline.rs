@@ -346,7 +346,14 @@ pub fn process_image_cpu(
         let mut b = u16_to_f(px.0[2]);
 
         // [1] WB shift
-        let (nr, ng, nb) = color::apply_wb_shift(r, g, b, settings.wb_shift_r, settings.wb_shift_g, settings.wb_shift_b);
+        let (nr, ng, nb) = color::apply_wb_shift(
+            r,
+            g,
+            b,
+            settings.wb_shift_r,
+            settings.wb_shift_g,
+            settings.wb_shift_b,
+        );
         r = nr;
         g = ng;
         b = nb;

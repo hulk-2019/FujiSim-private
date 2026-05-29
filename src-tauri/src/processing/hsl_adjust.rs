@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn hue_shift_wrapping() {
         let mut buf = [1.0, 0.0, 0.0, 1.0]; // 纯红
-        // 全区间 +360° 偏移，归一化后 hue_delta = 360°，应绕回原色相
+                                            // 全区间 +360° 偏移，归一化后 hue_delta = 360°，应绕回原色相
         let params = HslParams {
             hue_shifts: [360.0; 8],
             ..Default::default()

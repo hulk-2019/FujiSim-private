@@ -4,12 +4,12 @@ use sqlx::{ConnectOptions, SqlitePool};
 use std::path::Path;
 use std::str::FromStr;
 
-pub mod projects;
 pub mod app_settings;
 pub mod asset_render_cache;
 pub mod assets;
 pub mod preset_categories;
 pub mod presets;
+pub mod projects;
 pub mod tasks;
 pub mod user_fonts;
 pub mod user_luts;

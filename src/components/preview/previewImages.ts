@@ -5,6 +5,7 @@ export type PreviewImage = {
   blobUrl: string;
   width: number;
   height: number;
+  orientation?: number | null;
   revoke?: boolean;
 };
 
@@ -26,6 +27,7 @@ export function previewResultToImage(result: PreviewResult): PreviewImage {
       blobUrl: URL.createObjectURL(blob),
       width: result.width,
       height: result.height,
+      orientation: result.orientation ?? null,
       revoke: true,
     };
   }
@@ -38,5 +40,6 @@ export function previewResultToImage(result: PreviewResult): PreviewImage {
     blobUrl: convertFileSrc(result.path),
     width: result.width,
     height: result.height,
+    orientation: result.orientation ?? null,
   };
 }

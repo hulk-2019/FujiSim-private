@@ -12,7 +12,11 @@ pub fn cache_scope_dir(base_dir: &Path, project_id: Option<i64>) -> PathBuf {
 }
 
 /// Returns the path to the disk-cached preview base TIFF for a given asset_id.
-pub fn preview_base_path(raw_original_dir: &Path, project_id: Option<i64>, asset_id: i64) -> PathBuf {
+pub fn preview_base_path(
+    raw_original_dir: &Path,
+    project_id: Option<i64>,
+    asset_id: i64,
+) -> PathBuf {
     // Lightroom-like app baseline develop. Embedded JPEGs are
     // placeholders only and are not used to tone-match the editing base.
     cache_scope_dir(raw_original_dir, project_id).join(format!("{asset_id}_baseline.tif"))
@@ -44,6 +48,28 @@ pub fn extract_raw_thumbnail(path: &Path) -> Result<Vec<u8>> {
         .unwrap_or(1);
 
     apply_jpeg_orientation(jpeg, orientation)
+}
+
+/// 提取 RAW/DNG 文件中嵌入的 JPEG，原样返回字节和应由前端显示层应用的方向。
+///
+/// 用于编辑画布首帧极速占位，避免解码、缩放、重编码。若 JPEG 自身已经带
+/// EXIF orientation，浏览器会处理，返回方向为 1；若方向只存在外层 RAW IFD0，
+/// 返回该方向给前端用 CSS 变换校正。
+pub fn extract_raw_thumbnail_fast(path: &Path) -> Result<(Vec<u8>, u32)> {
+    let data = std::fs::read(path)?;
+
+    let jpeg = if let Ok(j) = extract_thumb_rsraw(&data) {
+        j
+    } else {
+        extract_thumb_tiff(&data)?
+    };
+
+    if read_jpeg_orientation(&jpeg).is_some() {
+        return Ok((jpeg, 1));
+    }
+
+    let orientation = read_tiff_file_orientation(&data).unwrap_or(1);
+    Ok((jpeg, orientation))
 }
 
 /// 读取 JPEG 的 EXIF orientation，把像素旋转到正向后重新编码，orientation 标签置 1。

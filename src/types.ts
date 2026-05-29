@@ -210,6 +210,7 @@ export type PreviewResult = {
   mimeType?: string | null;
   width: number;
   height: number;
+  orientation?: number | null;
 };
 
 /** 批量导出进度事件，由后端通过 `export:progress` Tauri Event 推送 */

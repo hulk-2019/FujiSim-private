@@ -65,20 +65,14 @@ export function previewDisplayState({
 }) {
   const previewSrc = currentPreview?.blobUrl ?? null;
   const baselineSrc = currentBaselinePreview?.blobUrl ?? null;
-  // RAW 的“原图/占位”使用 baseline TIFF；普通图片直接使用原文件。
+  const displayOrientation =
+    currentPreview?.orientation ?? currentBaselinePreview?.orientation ?? null;
+  // RAW 的“原图/占位”使用当前内存预览；普通图片直接使用原文件。
   const fileSrc = focused.is_raw ? null : safeConvertFileSrc(focused.file_path);
   const originalSrc = focused.is_raw ? baselineSrc : fileSrc;
   const showingOriginal = showOriginal && !!originalSrc;
   const placeholderSrc = focused.is_raw ? null : fileSrc;
   const displaySrc = previewSrc ?? baselineSrc ?? placeholderSrc;
-  const hasImageSource = !!displaySrc || !!originalSrc;
-  const showSkeleton =
-    !!focused.width &&
-    !!focused.height &&
-    !!containerW &&
-    !!containerH &&
-    initializingBase &&
-    !hasImageSource;
   const showGpuInteractiveLayer =
     imgVisible &&
     !showOriginal &&
@@ -90,11 +84,11 @@ export function previewDisplayState({
   return {
     baselineSrc,
     displaySrc,
+    displayOrientation,
     originalSrc,
     previewSrc,
     showingOriginal,
     showGpuInteractiveLayer,
-    showSkeleton,
   };
 }
 
@@ -107,14 +101,10 @@ export function previewDisplayState({
 export function watermarkDimensions({
   baselinePreview,
   focused,
-  imageNaturalHeight,
-  imageNaturalWidth,
   preview,
 }: {
   baselinePreview: PreviewImage | null;
   focused: Asset;
-  imageNaturalHeight?: number;
-  imageNaturalWidth?: number;
   preview: AssetPreviewImage | null;
 }) {
   if (focused.width && focused.height) {
@@ -125,9 +115,6 @@ export function watermarkDimensions({
   }
   if (baselinePreview?.width && baselinePreview.height) {
     return { width: baselinePreview.width, height: baselinePreview.height };
-  }
-  if (imageNaturalWidth && imageNaturalHeight) {
-    return { width: imageNaturalWidth, height: imageNaturalHeight };
   }
   return null;
 }

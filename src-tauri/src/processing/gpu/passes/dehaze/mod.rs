@@ -48,7 +48,8 @@ pub fn dispatch(
     let t_raw = phase3_transmission(gpu, p, &dark_ia, w, h, omega, &mut enc);
 
     // Phase 4: guided filter
-    let t_filtered = phase4_guided_filter(gpu, p, src, &t_raw, w, h, &dummy_in, &dummy_out, &mut enc);
+    let t_filtered =
+        phase4_guided_filter(gpu, p, src, &t_raw, w, h, &dummy_in, &dummy_out, &mut enc);
 
     // Phase 5: apply
     let dst = phase5_apply(gpu, p, src, &t_filtered, w, h, amount, ar, ag, ab, &mut enc);

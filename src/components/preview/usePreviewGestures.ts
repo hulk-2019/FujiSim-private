@@ -7,8 +7,7 @@ const MAX_SCALE_ABSOLUTE = 4;
 
 export function usePreviewGestures({
   viewportRef,
-  loadingRef,
-  fitScaleRef,
+  fitScale,
   markZooming,
   resetToFit,
   setScale,
@@ -16,8 +15,7 @@ export function usePreviewGestures({
   setTy,
 }: {
   viewportRef: RefObject<HTMLDivElement>;
-  loadingRef: RefObject<boolean>;
-  fitScaleRef: RefObject<number>;
+  fitScale: number;
   markZooming: () => void;
   resetToFit: () => void;
   setScale: Dispatch<SetStateAction<number>>;
@@ -28,7 +26,6 @@ export function usePreviewGestures({
     {
       onWheel: ({ delta: [, dy], event }) => {
         event.preventDefault();
-        if (loadingRef.current) return;
         const vp = viewportRef.current;
         if (!vp) return;
         markZooming();
@@ -38,7 +35,7 @@ export function usePreviewGestures({
 
         setScale((prevScale) => {
           const factor = Math.pow(0.999, dy);
-          const maxScale = Math.max((fitScaleRef.current ?? 1) * MAX_SCALE_FACTOR, MAX_SCALE_ABSOLUTE);
+          const maxScale = Math.max(fitScale * MAX_SCALE_FACTOR, MAX_SCALE_ABSOLUTE);
           const next = Math.max(MIN_SCALE, Math.min(maxScale, prevScale * factor));
           const ratio = next / prevScale;
           setTx((prevTx) => mouseX - ratio * (mouseX - prevTx));
@@ -52,7 +49,6 @@ export function usePreviewGestures({
         setTy((prev) => prev + dy);
       },
       onDoubleClick: () => {
-        if (loadingRef.current) return;
         markZooming();
         resetToFit();
       },
@@ -66,21 +62,18 @@ export function usePreviewGestures({
 
 export function useZoomToLevel({
   viewportRef,
-  loadingRef,
   markZooming,
   setScale,
   setTx,
   setTy,
 }: {
   viewportRef: RefObject<HTMLDivElement>;
-  loadingRef: RefObject<boolean>;
   markZooming: () => void;
   setScale: Dispatch<SetStateAction<number>>;
   setTx: Dispatch<SetStateAction<number>>;
   setTy: Dispatch<SetStateAction<number>>;
 }) {
   return useCallback((next: number) => {
-    if (loadingRef.current) return;
     const vp = viewportRef.current;
     if (!vp) return;
     markZooming();
@@ -93,5 +86,5 @@ export function useZoomToLevel({
       setTy((prevTy) => vpH / 2 - ratio * (vpH / 2 - prevTy));
       return next;
     });
-  }, [loadingRef, markZooming, setScale, setTx, setTy, viewportRef]);
+  }, [markZooming, setScale, setTx, setTy, viewportRef]);
 }

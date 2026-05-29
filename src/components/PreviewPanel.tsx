@@ -5,6 +5,8 @@ import {
   useCallback,
   useImperativeHandle,
   forwardRef,
+  type CSSProperties,
+  type ReactEventHandler,
 } from "react";
 import { ImageIcon } from "lucide-react";
 import { useStore } from "@/store";
@@ -47,6 +49,109 @@ interface PreviewPanelProps {
   onScaleChange?: (scale: number, fitScale: number) => void;
 }
 
+function orientationStyle(
+  orientation: number | null | undefined,
+  containerW: number,
+  containerH: number,
+): CSSProperties {
+  const swapped =
+    orientation === 5 || orientation === 6 || orientation === 7 || orientation === 8;
+  const base: CSSProperties = swapped
+    ? {
+        position: "absolute",
+        left: (containerW - containerH) / 2,
+        top: (containerH - containerW) / 2,
+        width: containerH,
+        height: containerW,
+        transformOrigin: "center center",
+      }
+    : {
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        transformOrigin: "center center",
+      };
+
+  switch (orientation) {
+    case 2:
+      return { ...base, transform: "scaleX(-1)" };
+    case 3:
+      return { ...base, transform: "rotate(180deg)" };
+    case 4:
+      return { ...base, transform: "scaleY(-1)" };
+    case 5:
+      return { ...base, transform: "rotate(90deg) scaleX(-1)" };
+    case 6:
+      return { ...base, transform: "rotate(90deg)" };
+    case 7:
+      return { ...base, transform: "rotate(270deg) scaleX(-1)" };
+    case 8:
+      return { ...base, transform: "rotate(270deg)" };
+    default:
+      return base;
+  }
+}
+
+function OrientedImage({
+  alt,
+  className,
+  containerH,
+  containerW,
+  draggable = false,
+  objectFit,
+  onError,
+  onLoad,
+  opacity,
+  orientation,
+  src,
+  style,
+}: {
+  alt: string;
+  className?: string;
+  containerH: number;
+  containerW: number;
+  draggable?: boolean;
+  objectFit: CSSProperties["objectFit"];
+  onError?: ReactEventHandler<HTMLImageElement>;
+  onLoad?: ReactEventHandler<HTMLImageElement>;
+  opacity: number;
+  orientation?: number | null;
+  src: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <div
+      className={className}
+      style={{
+        ...orientationStyle(orientation, containerW, containerH),
+        opacity,
+        pointerEvents: "none",
+        transition: "none",
+      }}
+    >
+      <img
+        src={src}
+        alt={alt}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          objectFit,
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+          ...style,
+          filter: "none",
+          transition: "none",
+        }}
+        draggable={draggable}
+        onLoad={onLoad}
+        onError={onError}
+      />
+    </div>
+  );
+}
+
 export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
   function PreviewPanel({ showOriginal, onScaleChange }, ref) {
     const { t } = useTranslation();
@@ -72,24 +177,22 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     });
 
     const viewportRef = useRef<HTMLDivElement>(null);
-    const imgRef = useRef<HTMLImageElement>(null);
     const viewportSize = useElementSize(viewportRef);
     const {
       containerH,
       containerW,
-      fitScaleRef,
-      hasFitRef,
+      fitScale,
       imgVisible,
       resetToFit,
       scale,
-      setImgVisible,
       setScale,
       setTx,
       setTy,
       tx,
       ty,
-    } = usePreviewFit({ focused, imgRef, onScaleChange, viewportRef });
+    } = usePreviewFit({ focused, onScaleChange, viewportRef });
     const [gpuInteractiveReady, setGpuInteractiveReady] = useState(false);
+    const [loadedMainSrc, setLoadedMainSrc] = useState<string | null>(null);
     const currentFilterIsIdentity = isIdentityFilter(filter);
     const canApproximateCurrentFilter = canApproximateWithGpu(filter);
     // GPU 近似只覆盖交互阶段；后端 settled 图仍然是最终权威结果。
@@ -106,7 +209,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     });
     const useTileDetailPreview = useFullResolutionPreview && !showOriginal;
 
-    const { preview, baselinePreviews, loading, loadingMode, loadingRef, initializingBase, error } =
+    const { preview, baselinePreviews, placeholders, initializingBase, error } =
       usePreviewLoader({
         focused,
         filter,
@@ -127,6 +230,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const focusedBaselinePreview = focused
       ? (baselinePreviews[focused.id] ?? null)
       : null;
+    const focusedPlaceholder = focused ? (placeholders[focused.id] ?? null) : null;
     const currentPreviewImage = focusedPreviewImage({
       focused,
       preview,
@@ -170,7 +274,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     const setZoomLevel = useZoomToLevel({
       viewportRef,
-      loadingRef,
       markZooming,
       setScale,
       setTx,
@@ -181,7 +284,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       ref,
       () => ({
         fitToView: () => {
-          if (!loadingRef.current) resetToFit();
+          resetToFit();
         },
         setZoomLevel,
       }),
@@ -197,6 +300,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const shouldApproximateWithGpu = canUseGpuInteractivePreview && approximateFilterWithGpu;
 
     useEffect(() => {
+      setLoadedMainSrc(null);
+    }, [focusedId]);
+
+    useEffect(() => {
       // 预设/白平衡这类一次性操作先展示 GPU 近似效果，再延迟进入后端 settled 渲染。
       if (filterInteraction !== "preset_applied") return;
       const handle = setTimeout(() => setFilterInteraction("settling"), 450);
@@ -205,8 +312,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     const bind = usePreviewGestures({
       viewportRef,
-      loadingRef,
-      fitScaleRef,
+      fitScale,
       markZooming,
       resetToFit,
       setScale,
@@ -240,11 +346,11 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const {
       baselineSrc,
       displaySrc,
+      displayOrientation,
       originalSrc,
       previewSrc,
       showingOriginal,
       showGpuInteractiveLayer,
-      showSkeleton,
     } = previewDisplayState({
       focused,
       currentPreview,
@@ -264,16 +370,14 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const wmDims = watermarkDimensions({
       baselinePreview: currentBaselinePreview,
       focused,
-      imageNaturalHeight: imgRef.current?.naturalHeight,
-      imageNaturalWidth: imgRef.current?.naturalWidth,
       preview: currentPreview,
     });
-    const showRenderingBadge =
-      loading &&
-      loadingMode !== "interactive" &&
-      !!displaySrc &&
+    const showPlaceholder =
+      !showingOriginal &&
       !showGpuInteractiveLayer &&
-      !isAdjustingFilter;
+      (!displaySrc || loadedMainSrc !== displaySrc) &&
+      !!focusedPlaceholder?.blobUrl;
+    const showMainImage = !!displaySrc && imgVisible && !showingOriginal;
 
     return (
       <main className="w-full h-full flex flex-col bg-transparent min-w-0">
@@ -295,7 +399,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                     {error}
                   </div>
                 </div>
-              ) : displaySrc || originalSrc || showSkeleton ? (
+              ) : displaySrc || originalSrc || showPlaceholder ? (
                 <div
                   style={{
                     transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
@@ -308,40 +412,29 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                     lineHeight: 0,
                   }}
                 >
-                  {showSkeleton && (
-                    <div
-                      aria-hidden="true"
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        overflow: "hidden",
-                        background: "rgba(24, 24, 27, 0.7)",
-                      }}
-                    >
-                      <div className="h-full w-full animate-pulse bg-gradient-to-br from-zinc-800 via-zinc-700/70 to-zinc-900" />
-                    </div>
+                  {showPlaceholder && (
+                    <OrientedImage
+                      src={focusedPlaceholder.blobUrl}
+                      alt=""
+                      containerW={containerW}
+                      containerH={containerH}
+                      orientation={focusedPlaceholder.orientation}
+                      objectFit="cover"
+                      opacity={displaySrc && loadedMainSrc === displaySrc ? 0 : 0.72}
+                    />
                   )}
                   {displaySrc && (
-                    <img
-                      ref={imgRef}
+                    <OrientedImage
                       src={displaySrc}
                       alt="preview"
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        height: "100%",
-                        opacity:
-                          imgVisible &&
-                          !showingOriginal &&
-                          !showGpuInteractiveLayer
-                            ? 1
-                            : 0,
-                        WebkitUserSelect: "none",
-                        WebkitTouchCallout: "none",
-                      }}
-                      draggable={false}
+                      containerW={containerW}
+                      containerH={containerH}
+                      orientation={displayOrientation}
+                      objectFit="contain"
+                      opacity={showMainImage ? 1 : 0}
                       onLoad={(e) => {
                         const el = e.currentTarget as HTMLImageElement;
+                        setLoadedMainSrc(displaySrc);
                         // 后端权威预览真正加载进 <img> 后，才释放 GPU 接管层。
                         if (
                           gpuHandoffActive &&
@@ -353,16 +446,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                         } else if (previewSrc && el.src === previewSrc) {
                           setFilterInteraction("idle");
                         }
-                        if (previewSrc || baselineSrc) {
-                          if (!hasFitRef.current) {
-                            hasFitRef.current = true;
-                            resetToFit();
-                          } else {
-                            setImgVisible(true);
-                          }
-                        } else {
-                          setImgVisible(true);
-                        }
                       }}
                       onError={(e) => {
                         // asset:// 协议加载失败时浏览器默认静默；这里把错误冒出来，
@@ -373,7 +456,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                           "[PreviewPanel] image load failed:",
                           failedSrc,
                         );
-                        setImgVisible(true);
                       }}
                     />
                   )}
@@ -386,6 +468,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                         inset: 0,
                         width: "100%",
                         height: "100%",
+                        objectFit: "contain",
+                        filter: "none",
+                        opacity: 1,
+                        transition: "none",
                       }}
                       draggable={false}
                     />
@@ -409,11 +495,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
                 </div>
               ) : null}
             </>
-          )}
-          {showRenderingBadge && (
-            <div className="absolute top-3 left-3 text-xs text-zinc-400 bg-zinc-950/60 px-2 py-1 rounded">
-              {t("previewPanel.rendering")}
-            </div>
           )}
           {!!focused.width && !!focused.height && displaySrc && (
             <div className="absolute bottom-3 right-3 text-[10px] text-zinc-500 bg-zinc-950/60 px-2 py-1 rounded">

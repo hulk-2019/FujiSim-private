@@ -58,7 +58,6 @@ pub async fn compute_histogram(
                 &path,
                 Some(512),
                 native_max_edge,
-                false,
                 None,
             )?;
 

@@ -22,13 +22,17 @@ pub async fn list_projects(state: State<'_, SharedState>) -> Result<Vec<projects
 }
 
 #[tauri::command]
-pub async fn create_project(state: State<'_, SharedState>, name: String) -> Result<projects::Project> {
+pub async fn create_project(
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<projects::Project> {
     projects::create(&state.pool, &name).await
 }
 
 #[tauri::command]
 pub async fn delete_project(state: State<'_, SharedState>, id: i64) -> Result<()> {
-    projects::delete(&state.pool, id).await
+    projects::delete(&state.pool, id)
+        .await
         .map(|_| crate::cache_cleanup::delete_project_cache_dirs(&state, id))
 }
 
@@ -101,10 +105,11 @@ async fn build_project_summaries(
     }
 
     // 一次查询所有相册的资产数量
-    let totals: Vec<(i64, i64)> =
-        sqlx::query_as("SELECT project_id, COUNT(*) as cnt FROM project_assets GROUP BY project_id")
-            .fetch_all(pool)
-            .await?;
+    let totals: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT project_id, COUNT(*) as cnt FROM project_assets GROUP BY project_id",
+    )
+    .fetch_all(pool)
+    .await?;
     let total_map: std::collections::HashMap<i64, i64> = totals.into_iter().collect();
 
     // 一次查询所有相册的前4张封面（用 ROW_NUMBER 窗口函数）
@@ -158,26 +163,24 @@ pub async fn restore_project(state: State<'_, SharedState>, id: i64) -> Result<(
 #[tauri::command]
 pub async fn purge_project(state: State<'_, SharedState>, id: i64) -> Result<()> {
     let assets_to_purge = assets::orphaned_for_trashed_project(&state.pool, id).await?;
-    projects::purge(&state.pool, id).await
-        .map(|_| {
-            for asset in &assets_to_purge {
-                crate::cache_cleanup::delete_asset_cache_files(&state, asset);
-            }
-            crate::cache_cleanup::delete_project_cache_dirs(&state, id);
-        })
+    projects::purge(&state.pool, id).await.map(|_| {
+        for asset in &assets_to_purge {
+            crate::cache_cleanup::delete_asset_cache_files(&state, asset);
+        }
+        crate::cache_cleanup::delete_project_cache_dirs(&state, id);
+    })
 }
 
 #[tauri::command]
 pub async fn purge_all_trash(state: State<'_, SharedState>) -> Result<()> {
     let assets_to_purge = assets::orphaned_for_all_trashed_projects(&state.pool).await?;
     let trashed_projects = projects::list_trash(&state.pool).await?;
-    projects::purge_all(&state.pool).await
-        .map(|_| {
-            for asset in &assets_to_purge {
-                crate::cache_cleanup::delete_asset_cache_files(&state, asset);
-            }
-            for project in &trashed_projects {
-                crate::cache_cleanup::delete_project_cache_dirs(&state, project.id);
-            }
-        })
+    projects::purge_all(&state.pool).await.map(|_| {
+        for asset in &assets_to_purge {
+            crate::cache_cleanup::delete_asset_cache_files(&state, asset);
+        }
+        for project in &trashed_projects {
+            crate::cache_cleanup::delete_project_cache_dirs(&state, project.id);
+        }
+    })
 }
