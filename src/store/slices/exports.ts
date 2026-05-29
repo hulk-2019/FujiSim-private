@@ -66,10 +66,10 @@ export const createExportSlice: StateCreator<AppState, [], [], ExportSlice> = (s
     await api.deleteAllExportTasks(allIds).catch(() => {});
     set({ dismissedTaskIds: new Set([...dismissedTaskIds, ...allIds]) });
   },
-  // 重试：复用原 task_id，后端从 DB 恢复水印层，无需前端重新渲染
+  // 重试：复用原 task_id，后端从 DB 恢复水印设置，无需前端重新渲染
   retryExportTask: async (taskId) => {
     try {
-      await api.retryExportTask(taskId, null);
+      await api.retryExportTask(taskId);
 
       const next = new Set(get().dismissedTaskIds);
       next.delete(taskId);

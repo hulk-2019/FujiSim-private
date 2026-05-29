@@ -24,7 +24,6 @@ import type {
   ExportSettings,
   ResizeSpec,
 } from "@/types";
-import { renderWatermarkLayer } from "@/lib/watermarkCanvas";
 import { useTranslation } from "react-i18next";
 
 interface ExportDialogProps {
@@ -88,64 +87,10 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
       filename_template: null,
     };
 
-    // 根据 resize 设置计算实际导出尺寸
-    function exportDims(assetW: number, assetH: number): { w: number; h: number } {
-      if (!resize) return { w: assetW, h: assetH };
-      if ("long_edge" in resize) {
-        const s = resize.long_edge / Math.max(assetW, assetH);
-        return { w: Math.round(assetW * s), h: Math.round(assetH * s) };
-      }
-      const s = (resize as { percent: number }).percent / 100;
-      return { w: Math.round(assetW * s), h: Math.round(assetH * s) };
-    }
-
-    // 没有 EXIF 尺寸的图片用 HTMLImageElement 异步读 naturalWidth/Height 兜底
-    async function resolveDims(asset: { id: number; file_path: string; width: number | null; height: number | null; is_raw?: boolean }): Promise<{ w: number; h: number } | null> {
-      if (asset.width && asset.height) return { w: asset.width, h: asset.height };
-      if (asset.is_raw) return null;
-      try {
-        const url = (await import("@tauri-apps/api/core")).convertFileSrc(asset.file_path);
-        return await new Promise((resolve) => {
-          const im = new Image();
-          im.onload = () => resolve(im.naturalWidth && im.naturalHeight ? { w: im.naturalWidth, h: im.naturalHeight } : null);
-          im.onerror = () => resolve(null);
-          im.src = url;
-        });
-      } catch {
-        return null;
-      }
-    }
-
-    // 为每个 asset 按其实际显示尺寸独立渲染水印，避免不同宽高比时水印被拉伸压缩
-    type WatermarkEntry = { asset_id: number; layer: { data: string; width: number; height: number; opacity: number } };
-    let perAssetWatermark: WatermarkEntry[] | null = null;
-    if (watermark.enabled && watermark.text.trim()) {
-      perAssetWatermark = [];
-      for (const id of targetIds) {
-        const asset = assets.find((a) => a?.id === id);
-        if (!asset) continue;
-        const dims = await resolveDims(asset as any);
-        if (!dims) continue;
-        const aw = dims.w;
-        const ah = dims.h;
-        const { w: exportW } = exportDims(aw, ah);
-        // 预览 canvas 基准尺寸（与 PreviewPanel 里的 MAX 保持一致）
-        const PREVIEW_MAX = 1280;
-        const previewS = Math.min(1, PREVIEW_MAX / Math.max(aw, ah));
-        const previewCanvasW = Math.round(aw * previewS);
-        const previewCanvasH = Math.round(ah * previewS);
-        // 导出 scale = 导出尺寸 / 预览 canvas 尺寸，保持 fontSize 比例一致
-        const wmScale = exportW / previewCanvasW;
-        const layer = await renderWatermarkLayer(watermark, previewCanvasW, previewCanvasH, wmScale);
-        perAssetWatermark.push({ asset_id: id, layer: { ...layer, opacity: watermark.opacity } });
-      }
-    }
-
     await api.startBatchExport({
       asset_ids: targetIds,
       filter,
       export: settings,
-      per_asset_watermark: perAssetWatermark,
       watermark_settings: watermark.enabled ? watermark : null,
     });
     onOpenChange(false);

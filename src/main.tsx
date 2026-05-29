@@ -19,6 +19,7 @@ if (typeof requestIdleCallback !== "undefined") {
 }
 
 useStore.getState().refreshWatermarkPresets();
+useStore.getState().refreshUserWatermarkSvgs();
 
 // 启动时从 SQLite 加载 pending / processing / cancelled / error 任务，
 // 并通过任务队列恢复 pending 任务的执行。

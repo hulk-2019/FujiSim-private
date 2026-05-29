@@ -19,6 +19,7 @@ import type {
   PreviewResult,
   UserLut,
   UserFont,
+  UserWatermarkSvg,
   WatermarkPreset,
 } from "./types";
 
@@ -180,15 +181,14 @@ export const api = {
     asset_ids: number[];
     filter: FilterSettings;
     export: ExportSettings;
-    per_asset_watermark: { asset_id: number; layer: { data: string; width: number; height: number; opacity: number } }[] | null;
     watermark_settings: object | null;
   }) => invoke<number[]>("start_batch_export", { request }),
 
   getTask: (id: number) => invoke<BatchTask | null>("get_task", { id }),
   listActiveTasksOnStartup: () => invoke<BatchTask[]>("list_active_tasks_on_startup"),
   cancelExportTask: (taskId: number) => invoke<void>("cancel_export_task", { taskId }),
-  retryExportTask: (taskId: number, watermarkLayer: { data: string; width: number; height: number; opacity: number } | null) =>
-    invoke<void>("retry_export_task", { taskId, watermarkLayer }),
+  retryExportTask: (taskId: number) =>
+    invoke<void>("retry_export_task", { taskId }),
   deleteExportTask: (taskId: number) => invoke<void>("delete_export_task", { taskId }),
   deleteAllExportTasks: (taskIds: number[]) => invoke<void>("delete_all_export_tasks", { taskIds }),
   clearAllData: () => invoke<void>("clear_all_data"),
@@ -222,6 +222,12 @@ export const api = {
     invoke<WatermarkPreset>("update_watermark_preset", { id, name, settingsJson }),
   deleteWatermarkPreset: (id: number) =>
     invoke<void>("delete_watermark_preset", { id }),
+  importWatermarkSvgs: (paths: string[]) =>
+    invoke<UserWatermarkSvg[]>("import_watermark_svgs", { paths }),
+  listWatermarkSvgs: () =>
+    invoke<UserWatermarkSvg[]>("list_watermark_svgs"),
+  deleteWatermarkSvg: (id: number) =>
+    invoke<void>("delete_watermark_svg", { id }),
 
   // ===== 应用设置 =====
   /** 取单个设置值，未设置返回 null */

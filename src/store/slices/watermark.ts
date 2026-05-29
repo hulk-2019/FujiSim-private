@@ -17,13 +17,18 @@ export const createWatermarkSlice: StateCreator<AppState, [], [], WatermarkSlice
     const presets = await api.listWatermarkPresets().catch(() => []);
     set({ watermarkPresets: presets });
   },
-  refreshUserWatermarkSvgs: async () => {},
+  refreshUserWatermarkSvgs: async () => {
+    const svgs = await api.listWatermarkSvgs().catch(() => []);
+    set({ userWatermarkSvgs: svgs });
+  },
   importWatermarkSvgs: async (paths) => {
-    void paths;
-    return [];
+    const imported = await api.importWatermarkSvgs(paths);
+    set({ userWatermarkSvgs: [...get().userWatermarkSvgs, ...imported] });
+    return imported;
   },
   removeUserWatermarkSvg: async (id) => {
-    void id;
+    await api.deleteWatermarkSvg(id);
+    set({ userWatermarkSvgs: get().userWatermarkSvgs.filter((s) => s.id !== id) });
   },
   applyImportedWatermarkSvg: (svg) => {
     set({
