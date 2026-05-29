@@ -36,6 +36,77 @@ pub fn rasterize_svg(svg: &str, out_w: u32, out_h: u32) -> Result<RgbaImage> {
         .ok_or_else(|| AppError::other("svg rgba buffer mismatch"))
 }
 
+pub fn build_watermark_svg_from_json(
+    settings: &serde_json::Value,
+    out_w: u32,
+    out_h: u32,
+) -> Result<String> {
+    let kind = settings
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("text");
+    if kind == "svg" {
+        if let Some(markup) = settings.get("svgMarkup").and_then(|v| v.as_str()) {
+            let body = apply_svg_overrides(markup, settings)?;
+            return Ok(format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}">{body}</svg>"#
+            ));
+        }
+    }
+
+    let text = settings.get("text").and_then(|v| v.as_str()).unwrap_or("");
+    let color = settings
+        .get("color")
+        .and_then(|v| v.as_str())
+        .unwrap_or("#ffffff");
+    let opacity = settings
+        .get("opacity")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0)
+        .clamp(0.0, 1.0);
+    let font_size = settings
+        .get("fontSize")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(32.0);
+    let x = out_w as f64 / 2.0;
+    let y = out_h as f64 - 16.0;
+    Ok(format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}"><g opacity="{opacity}"><text x="{x}" y="{y}" text-anchor="middle" font-size="{font_size}" fill="{color}">{}</text></g></svg>"#,
+        xml_escape(text)
+    ))
+}
+
+fn apply_svg_overrides(markup: &str, settings: &serde_json::Value) -> Result<String> {
+    let mut next = sanitize_svg(markup)?;
+    if let Some(text) = settings.get("svgTextOverride").and_then(|v| v.as_str()) {
+        let re = regex::Regex::new(r"(?is)<text([^>]*)>.*?</text>").unwrap();
+        next = re
+            .replace_all(&next, format!("<text$1>{}</text>", xml_escape(text)))
+            .into_owned();
+    }
+    if let Some(fill) = settings.get("svgFillOverride").and_then(|v| v.as_str()) {
+        let re = regex::Regex::new(r#"\sfill=(["'])(?!none\b)[^"']*\1"#).unwrap();
+        next = re.replace_all(&next, format!(r#" fill="{fill}""#)).into_owned();
+        next = next.replace("currentColor", fill);
+    }
+    if let Some(stroke) = settings.get("svgStrokeOverride").and_then(|v| v.as_str()) {
+        let re = regex::Regex::new(r#"\sstroke=(["'])(?!none\b)[^"']*\1"#).unwrap();
+        next = re
+            .replace_all(&next, format!(r#" stroke="{stroke}""#))
+            .into_owned();
+    }
+    Ok(next)
+}
+
+fn xml_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,5 +132,29 @@ mod tests {
         assert_eq!(img.width(), 20);
         assert_eq!(img.height(), 10);
         assert!(img.pixels().any(|p| p[3] > 0));
+    }
+
+    #[test]
+    fn build_text_watermark_svg_uses_output_size() {
+        let settings = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 32,
+            "fontFamily": "Arial, sans-serif",
+            "color": "#ffffff",
+            "opacity": 0.7,
+            "position": "bottom-center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 0,
+            "flipH": false,
+            "flipV": false
+        });
+        let svg = build_watermark_svg_from_json(&settings, 600, 400).unwrap();
+        assert!(svg.contains(r#"width="600""#));
+        assert!(svg.contains("FujiSim"));
     }
 }

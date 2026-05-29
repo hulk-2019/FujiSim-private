@@ -6,16 +6,9 @@ use crate::export::{self, ExportSettings};
 use crate::processing::{lut::Lut3D, FilterSettings};
 use crate::state::SharedState;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Emitter, State};
-
-/// 每个资产对应的水印层。
-#[derive(Debug, Deserialize)]
-pub struct PerAssetWatermark {
-    pub asset_id: i64,
-    pub layer: export::WatermarkLayer,
-}
 
 /// 批量导出请求体。每个 asset_id 将创建一条独立的 batch_tasks 记录。
 #[derive(Debug, Deserialize)]
@@ -23,9 +16,7 @@ pub struct BatchExportRequest {
     pub asset_ids: Vec<i64>,
     pub filter: FilterSettings,
     pub export: ExportSettings,
-    /// 每个资产对应的水印层（按资产实际尺寸预渲染），None 表示不叠加水印。
-    pub per_asset_watermark: Option<Vec<PerAssetWatermark>>,
-    /// 水印设置（不含 base64 图像），用于持久化到 batch_tasks 表。
+    /// 水印设置，用于持久化到 batch_tasks 表并在导出最终尺寸上渲染 SVG。
     pub watermark_settings: Option<serde_json::Value>,
 }
 
@@ -63,7 +54,6 @@ pub async fn start_batch_export(
         .as_ref()
         .and_then(|w| serde_json::to_string(w).ok());
 
-    // 每个资产按自己的水印层单独创建任务，各自保存水印文件
     let mut task_ids: Vec<i64> = Vec::with_capacity(request.asset_ids.len());
     for &asset_id in &request.asset_ids {
         let task_id = tasks::create(
@@ -75,21 +65,6 @@ pub async fn start_batch_export(
             None,
         )
         .await?;
-
-        // 查找该 asset 对应的水印层并保存到磁盘
-        let watermark_layer = request
-            .per_asset_watermark
-            .as_ref()
-            .and_then(|list| list.iter().find(|e| e.asset_id == asset_id))
-            .map(|e| &e.layer);
-        if let Some(path) = save_watermark_layer(watermark_layer, &state.watermark_dir, task_id)? {
-            let path_str = path.to_string_lossy().to_string();
-            sqlx::query("UPDATE batch_tasks SET watermark_layer_path = ? WHERE id = ?")
-                .bind(&path_str)
-                .bind(task_id)
-                .execute(&state.pool)
-                .await?;
-        }
 
         task_ids.push(task_id);
     }
@@ -163,8 +138,10 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
                 continue;
             }
         };
-        let watermark_path: Option<PathBuf> =
-            task.watermark_layer_path.as_deref().map(PathBuf::from);
+        let watermark_settings: Option<serde_json::Value> = task
+            .watermark_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok());
 
         // try_acquire 已经递增了计数器，无需再调用 on_task_start
         run_export_task(
@@ -175,7 +152,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             filter,
             export_settings,
             lut,
-            watermark_path,
+            watermark_settings,
         );
     }
 }
@@ -197,7 +174,7 @@ fn run_export_task(
     filter: FilterSettings,
     export_settings: ExportSettings,
     lut: Option<Arc<Lut3D>>,
-    watermark_path: Option<PathBuf>,
+    watermark_settings: Option<serde_json::Value>,
 ) {
     tokio::task::spawn_blocking(move || {
         let pool = state.pool.clone();
@@ -231,7 +208,6 @@ fn run_export_task(
             Err(e) => {
                 tracing::error!(task_id, asset_id, error = %e, "run_export_task: asset not found");
                 let _ = rt.block_on(crate::db::tasks::finish(&pool, task_id));
-                cleanup_watermark_file(&state.watermark_dir, task_id);
                 state.task_queue.on_task_finish(task_id);
                 rt.spawn(async move {
                     dispatch_pending(state, app).await;
@@ -280,7 +256,7 @@ fn run_export_task(
                         &filter,
                         &export_settings,
                         lut.as_deref(),
-                        watermark_path.as_deref(),
+                        watermark_settings.as_ref(),
                     )
                 },
             )
@@ -342,7 +318,6 @@ fn run_export_task(
         }
 
         let _ = rt.block_on(crate::db::tasks::finish(&pool, task_id));
-        cleanup_watermark_file(&state.watermark_dir, task_id);
         let _ = app.emit(
             "export:progress",
             &BatchProgress {
@@ -364,34 +339,6 @@ fn run_export_task(
     });
 }
 
-/// 把前端传来的水印层 base64 解码后写到 `<watermark_dir>/<task_id>.png`。
-/// 返回写入的文件路径；无水印层时返回 None。
-fn save_watermark_layer(
-    layer: Option<&export::WatermarkLayer>,
-    watermark_dir: &Path,
-    task_id: i64,
-) -> Result<Option<PathBuf>> {
-    let layer = match layer {
-        Some(l) => l,
-        None => return Ok(None),
-    };
-    use base64::{engine::general_purpose, Engine as _};
-    let bytes = general_purpose::STANDARD
-        .decode(&layer.data)
-        .map_err(|e| AppError::other(format!("watermark base64 decode: {e}")))?;
-    let path = watermark_dir.join(format!("{task_id}.png"));
-    std::fs::write(&path, &bytes)?;
-    Ok(Some(path))
-}
-
-/// 删除水印文件（任务软删除时清理），文件不存在时静默忽略。
-fn cleanup_watermark_file(watermark_dir: &Path, task_id: i64) {
-    let path = watermark_dir.join(format!("{task_id}.png"));
-    if path.exists() {
-        let _ = std::fs::remove_file(&path);
-    }
-}
-
 #[tauri::command]
 pub async fn get_task(state: State<'_, SharedState>, id: i64) -> Result<Option<tasks::BatchTask>> {
     tasks::get(&state.pool, id).await
@@ -410,7 +357,6 @@ pub async fn retry_export_task(
     state: State<'_, SharedState>,
     app: tauri::AppHandle,
     task_id: i64,
-    watermark_layer: Option<export::WatermarkLayer>,
 ) -> Result<()> {
     state.task_queue.uncancel(task_id);
     tasks::reset_for_retry(&state.pool, task_id).await?;
@@ -422,11 +368,10 @@ pub async fn retry_export_task(
     let filter: FilterSettings = serde_json::from_str(&task.filter_settings_json)?;
     let export_settings: ExportSettings = serde_json::from_str(&task.export_settings_json)?;
 
-    let resolved_path: Option<PathBuf> = if let Some(layer) = watermark_layer {
-        save_watermark_layer(Some(&layer), &state.watermark_dir, task_id)?
-    } else {
-        task.watermark_layer_path.as_deref().map(PathBuf::from)
-    };
+    let watermark_settings: Option<serde_json::Value> = task
+        .watermark_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok());
 
     let _ = app.emit(
         "export:progress",
@@ -458,7 +403,7 @@ pub async fn retry_export_task(
             filter,
             export_settings,
             lut,
-            resolved_path,
+            watermark_settings,
         );
     }
 
@@ -473,10 +418,9 @@ pub async fn cancel_export_task(state: State<'_, SharedState>, task_id: i64) -> 
     tasks::mark_cancelled(&state.pool, task_id).await
 }
 
-/// 软删除单个任务（从列表中永久移除，不影响 status），同时清理水印文件。
+/// 软删除单个任务（从列表中永久移除，不影响 status）。
 #[tauri::command]
 pub async fn delete_export_task(state: State<'_, SharedState>, task_id: i64) -> Result<()> {
-    cleanup_watermark_file(&state.watermark_dir, task_id);
     tasks::soft_delete(&state.pool, task_id).await
 }
 
@@ -488,7 +432,6 @@ pub async fn delete_all_export_tasks(
 ) -> Result<()> {
     for &id in &task_ids {
         state.task_queue.cancel(id);
-        cleanup_watermark_file(&state.watermark_dir, id);
     }
     tasks::cancel_and_delete_batch(&state.pool, &task_ids).await
 }

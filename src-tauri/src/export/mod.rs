@@ -19,19 +19,6 @@ pub struct ExportSettings {
     pub filename_template: Option<String>,
 }
 
-/// 前端 Canvas 渲染好的水印层，base64 PNG + 原始尺寸 + 全局不透明度乘数。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WatermarkLayer {
-    /// base64 编码的 PNG（不含 data: 前缀）
-    pub data: String,
-    /// 渲染水印时预览图的宽度（用于等比缩放到导出尺寸）
-    pub width: u32,
-    /// 渲染水印时预览图的高度
-    pub height: u32,
-    /// 全局不透明度（0-1），与 PNG 像素 alpha 相乘
-    pub opacity: f32,
-}
-
 /// 支持的输出格式。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -105,14 +92,14 @@ fn composite_watermark(base: &mut RgbImage, overlay: &image::RgbaImage) {
     }
 }
 
-/// 导出单张图片到 `out_dir`。`watermark_path` 指向预先保存的水印 PNG 文件。
+/// 导出单张图片到 `out_dir`。水印由持久化的 SVG 设置在最终尺寸上渲染。
 pub fn export_one(
     src_path: &Path,
     out_dir: &Path,
     filter: &FilterSettings,
     export: &ExportSettings,
     lut: Option<&Lut3D>,
-    watermark_path: Option<&Path>,
+    watermark_settings: Option<&serde_json::Value>,
 ) -> Result<PathBuf> {
     let src = processing::load_image_rgb16(src_path)?;
     let processed = processing::process_image(&src, filter, lut)?;
@@ -148,9 +135,10 @@ pub fn export_one(
     let out_w = final_image.width();
     let out_h = final_image.height();
 
-    // watermark composite
-    let final_image = if let Some(wm_path) = watermark_path {
-        match crate::vips_io::load_watermark(wm_path, out_w, out_h) {
+    let final_image = if let Some(wm) = watermark_settings {
+        match crate::export::watermark_svg::build_watermark_svg_from_json(wm, out_w, out_h)
+            .and_then(|svg| crate::export::watermark_svg::rasterize_svg(&svg, out_w, out_h))
+        {
             Ok(overlay) => {
                 let mut rgb8 = to_rgb8(&final_image);
                 composite_watermark(&mut rgb8, &overlay);
@@ -167,7 +155,7 @@ pub fn export_one(
                 image::ImageBuffer::from_raw(out_w, out_h, pixels).unwrap_or(final_image)
             }
             Err(e) => {
-                tracing::warn!("watermark composite skipped: {e}");
+                tracing::warn!("svg watermark composite skipped: {e}");
                 final_image
             }
         }
