@@ -2213,6 +2213,7 @@ dependencies = [
  "byteorder-lite",
  "moxcms",
  "num-traits",
+ "png 0.18.1",
  "zune-core 0.5.1",
  "zune-jpeg 0.5.15",
 ]

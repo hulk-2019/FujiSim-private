@@ -17,7 +17,7 @@ const PRESET_STYLES_DATA: { text: string; fontSize: number; color: string; opaci
   { text: "© 2025",   fontSize: 18, color: "#ffffff", opacity: 0.8,  italic: false, position: "bottom-center" },
 ];
 const CARD_PREVIEW_W = 220;
-const CARD_PREVIEW_H = 92;
+const CARD_PREVIEW_H = 84;
 
 export function WatermarkPresetPanel() {
   const { t } = useTranslation();
@@ -229,7 +229,7 @@ function watermarkPreviewSettings(patch: Partial<WatermarkSettings>): WatermarkS
 }
 
 function previewFontSize(fontSize: number) {
-  return Math.max(14, Math.min(28, fontSize * 0.62));
+  return Math.max(18, Math.min(34, fontSize * 0.78));
 }
 
 function WatermarkStyleCard({
@@ -254,13 +254,13 @@ function WatermarkStyleCard({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={cn(
-        "relative h-24 min-w-0 rounded border bg-zinc-950 overflow-hidden text-left transition-colors",
+        "relative h-20 min-w-0 rounded border bg-zinc-950 overflow-hidden text-left transition-colors",
         active
           ? "border-blue-400 bg-blue-500/10 shadow-[inset_0_0_0_1px_rgba(96,165,250,0.85)]"
           : "border-zinc-800 hover:border-zinc-600",
       )}
     >
-      <img src={preview} alt="" className={cn("h-16 w-full object-contain bg-zinc-900", active && "bg-blue-950/25")} />
+      <img src={preview} alt="" className={cn("h-12 w-full object-contain bg-zinc-900", active && "bg-blue-950/25")} />
       <span className={cn("block px-2 py-1 text-[11px] truncate", active ? "text-blue-100" : "text-zinc-300")}>{label}</span>
       {onDelete && (
         <span
@@ -312,7 +312,7 @@ function WatermarkPresetCard({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={cn(
-        "relative h-20 min-w-0 rounded border bg-zinc-950 hover:border-zinc-600 overflow-hidden text-left",
+        "relative h-16 min-w-0 rounded border bg-zinc-950 hover:border-zinc-600 overflow-hidden text-left",
         active ? "border-blue-400 bg-blue-500/10" : "border-zinc-800",
       )}
     >

@@ -100,6 +100,7 @@ pub fn export_one(
     export: &ExportSettings,
     lut: Option<&Lut3D>,
     watermark_settings: Option<&serde_json::Value>,
+    watermark_layer_path: Option<&str>,
 ) -> Result<PathBuf> {
     let src = processing::load_image_rgb16(src_path)?;
     let processed = processing::process_image(&src, filter, lut)?;
@@ -135,32 +136,23 @@ pub fn export_one(
     let out_w = final_image.width();
     let out_h = final_image.height();
 
-    let final_image = if let Some(wm) = watermark_settings {
-        match crate::export::watermark_svg::build_watermark_svg_from_json(wm, out_w, out_h)
-            .and_then(|svg| crate::export::watermark_svg::rasterize_svg(&svg, out_w, out_h))
-        {
-            Ok(overlay) => {
-                let mut rgb8 = to_rgb8(&final_image);
-                composite_watermark(&mut rgb8, &overlay);
-                let pixels: Vec<u16> = rgb8
-                    .pixels()
-                    .flat_map(|p| {
-                        [
-                            p.0[0] as u16 * 257,
-                            p.0[1] as u16 * 257,
-                            p.0[2] as u16 * 257,
-                        ]
-                    })
-                    .collect();
-                image::ImageBuffer::from_raw(out_w, out_h, pixels).unwrap_or(final_image)
-            }
-            Err(e) => {
-                tracing::warn!("svg watermark composite skipped: {e}");
-                final_image
-            }
+    let final_image = match load_watermark_overlay(watermark_layer_path, watermark_settings, out_w, out_h) {
+        Some(overlay) => {
+            let mut rgb8 = to_rgb8(&final_image);
+            composite_watermark(&mut rgb8, &overlay);
+            let pixels: Vec<u16> = rgb8
+                .pixels()
+                .flat_map(|p| {
+                    [
+                        p.0[0] as u16 * 257,
+                        p.0[1] as u16 * 257,
+                        p.0[2] as u16 * 257,
+                    ]
+                })
+                .collect();
+            image::ImageBuffer::from_raw(out_w, out_h, pixels).unwrap_or(final_image)
         }
-    } else {
-        final_image
+        None => final_image,
     };
 
     let stem = src_path
@@ -185,6 +177,31 @@ pub fn export_one(
 
     crate::vips_io::encode_rgb16_to_file(&final_image, &out, export.format, export.quality)?;
     Ok(out)
+}
+
+fn load_watermark_overlay(
+    watermark_layer_path: Option<&str>,
+    watermark_settings: Option<&serde_json::Value>,
+    out_w: u32,
+    out_h: u32,
+) -> Option<image::RgbaImage> {
+    if let Some(path) = watermark_layer_path {
+        match image::open(path).map(|img| img.to_rgba8()) {
+            Ok(overlay) => return Some(overlay),
+            Err(e) => tracing::warn!("png watermark layer load failed: {e}"),
+        }
+    }
+
+    let wm = watermark_settings?;
+    match crate::export::watermark_svg::build_watermark_svg_from_json(wm, out_w, out_h)
+        .and_then(|svg| crate::export::watermark_svg::rasterize_svg(&svg, out_w, out_h))
+    {
+        Ok(overlay) => Some(overlay),
+        Err(e) => {
+            tracing::warn!("svg watermark composite skipped: {e}");
+            None
+        }
+    }
 }
 
 fn to_rgb8(img: &ImageBuffer<Rgb<u16>, Vec<u16>>) -> RgbImage {

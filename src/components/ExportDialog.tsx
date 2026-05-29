@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { dataDir, join } from "@tauri-apps/api/path";
+import { mkdir, writeFile } from "@tauri-apps/plugin-fs";
 import { Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -18,7 +20,9 @@ import {
 } from "@/components/ui/select";
 import { useStore } from "@/store";
 import { api } from "@/api";
+import { renderWatermarkPngBytes } from "@/lib/watermarkSvg";
 import type {
+  Asset,
   Destination,
   ExportFormat,
   ExportSettings,
@@ -32,6 +36,27 @@ interface ExportDialogProps {
 }
 
 const LOSSY_FORMATS: ExportFormat[] = ["jpeg", "webp"];
+
+function exportDimensions(asset: Asset, resize: ResizeSpec | null) {
+  const width = asset.width ?? 0;
+  const height = asset.height ?? 0;
+  if (width <= 0 || height <= 0) return null;
+  if (!resize) return { width, height };
+  if ("long_edge" in resize) {
+    const longEdge = resize.long_edge;
+    const scale = longEdge / Math.max(width, height);
+    if (scale >= 1) return { width, height };
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+    };
+  }
+  const scale = resize.percent / 100;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
 
 export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const { t } = useTranslation();
@@ -98,12 +123,29 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
             previewHeight: currentWatermarkPreviewSize.height,
           }
         : watermark;
+    const watermarkLayers: Record<number, string> = {};
+    if (watermark.enabled) {
+      const systemDataDir = await dataDir();
+      const layerDir = await join(systemDataDir, "FujiSim", "watermarks");
+      await mkdir(layerDir, { recursive: true });
+      await Promise.all(targetIds.map(async (assetId) => {
+        const asset = assets.find((a) => a?.id === assetId);
+        if (!asset) return;
+        const dims = exportDimensions(asset, resize);
+        if (!dims) return;
+        const bytes = await renderWatermarkPngBytes(previewSizedWatermark, dims.width, dims.height);
+        const path = await join(layerDir, `export_${Date.now()}_${assetId}.png`);
+        await writeFile(path, bytes);
+        watermarkLayers[assetId] = path;
+      }));
+    }
 
     await api.startBatchExport({
       asset_ids: targetIds,
       filter,
       export: settings,
       watermark_settings: watermark.enabled ? previewSizedWatermark : null,
+      watermark_layers: watermark.enabled ? watermarkLayers : undefined,
     });
     onOpenChange(false);
     } finally {

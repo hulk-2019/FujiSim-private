@@ -11,8 +11,8 @@ export function escapeXml(input: string): string {
     .replaceAll("'", "&apos;");
 }
 
-export function watermarkAnchor(position: WatermarkPosition, width: number, height: number) {
-  const pad = PADDING;
+export function watermarkAnchor(position: WatermarkPosition, width: number, height: number, padding = PADDING) {
+  const pad = padding;
   switch (position) {
     case "top-left":
       return { x: pad, y: 0, dy: pad, textAnchor: "start", dominantBaseline: "hanging" };
@@ -52,6 +52,7 @@ export function normalizeWatermark(wm: WatermarkSettings): WatermarkSettings {
     scale: wm.scale ?? DEFAULT_WATERMARK.scale,
     source: wm.source ?? DEFAULT_WATERMARK.source,
     text: wm.text ?? DEFAULT_WATERMARK.text,
+    padding: wm.padding ?? DEFAULT_WATERMARK.padding ?? PADDING,
   };
 }
 
@@ -82,20 +83,76 @@ function overrideImportedSvg(svg: string, wm: WatermarkSettings): string {
 
 export function buildWatermarkSvg(wm: WatermarkSettings, width: number, height: number): string {
   const normalized = normalizeWatermark(wm);
-  const pos = watermarkAnchor(normalized.position, width, height);
+  const pos = watermarkAnchor(normalized.position, width, height, normalized.padding);
   const x = pos.x;
   const y = pos.y;
+  const skewY = y + pos.dy;
   const transform = transformFor(normalized, x, y);
   const opacity = Math.max(0, Math.min(1, normalized.opacity));
+  const italicDegree = Math.max(0, normalized.italicDegree ?? 0);
 
+  const textBody = `<text x="${x}" y="${y}" dy="${pos.dy}" text-anchor="${pos.textAnchor}" dominant-baseline="${pos.dominantBaseline}" font-family="${escapeXml(normalized.fontFamily)}" font-size="${normalized.fontSize}" font-weight="${normalized.bold ? 700 : 400}" font-style="${normalized.italic ? "italic" : "normal"}" fill="${normalized.color}">${escapeXml(normalized.text)}</text>`;
   const body =
     normalized.kind === "svg" && normalized.svgMarkup
       ? overrideImportedSvg(normalized.svgMarkup, normalized)
-      : `<text x="${x}" y="${y}" dy="${pos.dy}" text-anchor="${pos.textAnchor}" dominant-baseline="${pos.dominantBaseline}" font-family="${escapeXml(normalized.fontFamily)}" font-size="${normalized.fontSize}" font-weight="${normalized.bold ? 700 : 400}" font-style="${normalized.italic ? "italic" : "normal"}" fill="${normalized.color}">${escapeXml(normalized.text)}</text>`;
+      : italicDegree > 0
+        ? `<g transform="translate(${x} ${skewY}) skewX(${-italicDegree}) translate(${-x} ${-skewY})">${textBody}</g>`
+        : textBody;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g opacity="${opacity}" transform="${transform}">${body}</g></svg>`;
 }
 
 export function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+export function scaleWatermarkForExport(
+  wm: WatermarkSettings,
+  exportWidth: number,
+  exportHeight: number,
+): WatermarkSettings {
+  const previewWidth = wm.previewWidth && wm.previewWidth > 0 ? wm.previewWidth : exportWidth;
+  const previewHeight = wm.previewHeight && wm.previewHeight > 0 ? wm.previewHeight : exportHeight;
+  const exportScale = (exportWidth / previewWidth + exportHeight / previewHeight) / 2;
+
+  return {
+    ...wm,
+    fontSize: wm.fontSize * exportScale,
+    offsetX: wm.offsetX * exportScale,
+    offsetY: wm.offsetY * exportScale,
+    shadowBlur: wm.shadowBlur * exportScale,
+    shadowOffsetX: wm.shadowOffsetX * exportScale,
+    shadowOffsetY: wm.shadowOffsetY * exportScale,
+    strokeWidth: wm.strokeWidth * exportScale,
+    padding: (wm.padding ?? PADDING) * exportScale,
+  };
+}
+
+export async function renderWatermarkPngBytes(
+  wm: WatermarkSettings,
+  exportWidth: number,
+  exportHeight: number,
+): Promise<Uint8Array> {
+  const canvas = document.createElement("canvas");
+  canvas.width = exportWidth;
+  canvas.height = exportHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("watermark canvas context unavailable");
+
+  const scaled = scaleWatermarkForExport(wm, exportWidth, exportHeight);
+  const svg = buildWatermarkSvg(scaled, exportWidth, exportHeight);
+  const image = new Image();
+  image.decoding = "sync";
+  image.src = svgToDataUrl(svg);
+  await image.decode();
+  ctx.clearRect(0, 0, exportWidth, exportHeight);
+  ctx.drawImage(image, 0, 0, exportWidth, exportHeight);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((next) => {
+      if (next) resolve(next);
+      else reject(new Error("watermark png encode failed"));
+    }, "image/png");
+  });
+  return new Uint8Array(await blob.arrayBuffer());
 }

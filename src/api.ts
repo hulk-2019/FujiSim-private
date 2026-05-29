@@ -182,6 +182,7 @@ export const api = {
     filter: FilterSettings;
     export: ExportSettings;
     watermark_settings: object | null;
+    watermark_layers?: Record<number, string>;
   }) => invoke<number[]>("start_batch_export", { request }),
 
   getTask: (id: number) => invoke<BatchTask | null>("get_task", { id }),

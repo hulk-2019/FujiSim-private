@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWatermarkSvg, normalizeWatermark, svgToDataUrl, watermarkAnchor } from "@/lib/watermarkSvg";
+import { buildWatermarkSvg, normalizeWatermark, scaleWatermarkForExport, svgToDataUrl, watermarkAnchor } from "@/lib/watermarkSvg";
 import { DEFAULT_WATERMARK } from "@/types";
 
 describe("buildWatermarkSvg", () => {
@@ -120,8 +120,87 @@ describe("buildWatermarkSvg", () => {
     expect(svg).not.toContain(">Old<");
   });
 
+  it("applies the configured italic angle to text watermarks", () => {
+    const svg = buildWatermarkSvg(
+      {
+        ...DEFAULT_WATERMARK,
+        enabled: true,
+        italic: true,
+        italicDegree: 22,
+      },
+      400,
+      300,
+    );
+
+    expect(svg).toContain('skewX(-22)');
+    expect(svg).toContain('translate(200 284) skewX(-22) translate(-200 -284)');
+  });
+
+  it("applies the italic angle even when font italic styling is disabled", () => {
+    const svg = buildWatermarkSvg(
+      {
+        ...DEFAULT_WATERMARK,
+        enabled: true,
+        italic: false,
+        italicDegree: 22,
+      },
+      400,
+      300,
+    );
+
+    expect(svg).toContain('font-style="normal"');
+    expect(svg).toContain('skewX(-22)');
+  });
+
   it("encodes svg as a data url", () => {
     expect(svgToDataUrl('<svg width="1" height="1"></svg>')).toMatch(/^data:image\/svg\+xml,/);
+  });
+
+  it("scales preview-sized watermark values for export overlays", () => {
+    const wm = scaleWatermarkForExport(
+      {
+        ...DEFAULT_WATERMARK,
+        previewWidth: 600,
+        previewHeight: 400,
+        fontSize: 32,
+        offsetX: 3,
+        offsetY: -4,
+        shadowBlur: 2,
+        shadowOffsetX: 1,
+        shadowOffsetY: -1,
+        strokeWidth: 1.5,
+        padding: 16,
+      },
+      6000,
+      4000,
+    );
+
+    expect(wm.fontSize).toBe(320);
+    expect(wm.offsetX).toBe(30);
+    expect(wm.offsetY).toBe(-40);
+    expect(wm.shadowBlur).toBe(20);
+    expect(wm.shadowOffsetX).toBe(10);
+    expect(wm.shadowOffsetY).toBe(-10);
+    expect(wm.strokeWidth).toBe(15);
+    expect(wm.padding).toBe(160);
+  });
+
+  it("uses scaled padding when building export-sized watermarks", () => {
+    const wm = scaleWatermarkForExport(
+      {
+        ...DEFAULT_WATERMARK,
+        previewWidth: 600,
+        previewHeight: 400,
+        padding: 16,
+        position: "bottom-left",
+      },
+      6000,
+      4000,
+    );
+    const svg = buildWatermarkSvg(wm, 6000, 4000);
+
+    expect(svg).toContain('x="160"');
+    expect(svg).toContain('dy="-160"');
   });
 
   it("exports shared anchor and defaults for backend parity", () => {

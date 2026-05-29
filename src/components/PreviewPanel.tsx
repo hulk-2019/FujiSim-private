@@ -17,7 +17,7 @@ import { isIdentityFilter } from "@/lib/filterIdentity";
 import { useHistogramSync } from "@/hooks/useHistogramSync";
 import { canApproximateWithGpu } from "@/components/preview/filterApproximation";
 import { GpuInteractivePreviewCanvas } from "@/components/preview/GpuInteractivePreviewCanvas";
-import { WatermarkOverlay } from "@/components/preview/WatermarkOverlay";
+import { containedImageRect, WatermarkOverlay } from "@/components/preview/WatermarkOverlay";
 import { useEyedropper } from "@/components/preview/useEyedropper";
 import {
   usePreviewGestures,
@@ -353,11 +353,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     }, [focusedId]);
 
     useEffect(() => {
-      if (!focusedId || !containerW || !containerH) return;
-      setWatermarkPreviewSize({ width: containerW, height: containerH }, focusedId);
-    }, [containerH, containerW, focusedId, setWatermarkPreviewSize]);
-
-    useEffect(() => {
       // 预设/白平衡这类一次性操作先展示 GPU 近似效果，再延迟进入后端 settled 渲染。
       if (filterInteraction !== "preset_applied") return;
       const handle = setTimeout(() => setFilterInteraction("settling"), 450);
@@ -384,6 +379,25 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       setFilter,
       setEyedropperMode,
     });
+
+    const wmDims = focused
+      ? watermarkDimensions({
+          baselinePreview: focusedBaselinePreview,
+          focused,
+          preview: currentPreviewImage,
+        })
+      : null;
+
+    useEffect(() => {
+      if (!focusedId || !containerW || !containerH) return;
+      const rect = containedImageRect({
+        displayH: containerH,
+        displayW: containerW,
+        imgH: wmDims?.height,
+        imgW: wmDims?.width,
+      });
+      setWatermarkPreviewSize({ width: rect.width, height: rect.height }, focusedId);
+    }, [containerH, containerW, focusedId, setWatermarkPreviewSize, wmDims?.height, wmDims?.width]);
 
     if (!focused) {
       return (
@@ -422,11 +436,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
       showOriginal,
     });
 
-    const wmDims = watermarkDimensions({
-      baselinePreview: currentBaselinePreview,
-      focused,
-      preview: currentPreview,
-    });
     const showPlaceholder =
       !showingOriginal &&
       !showGpuInteractiveLayer &&

@@ -16,9 +16,19 @@
     "fs:default",
     "fs:allow-read-file",
     "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-write-file",
     {
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "$DATA/FujiSim/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "$DATA/FujiSim/watermarks/**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "$DATA/FujiSim/watermarks" }]
     },
     "shell:default",
     "updater:default"

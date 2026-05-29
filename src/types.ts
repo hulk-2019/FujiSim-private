@@ -357,6 +357,7 @@ export type WatermarkSettings = {
   svgOriginalViewBox?: string;
   previewWidth?: number;
   previewHeight?: number;
+  padding?: number;
   scale: number;
 };
 

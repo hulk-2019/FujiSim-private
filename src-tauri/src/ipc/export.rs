@@ -6,6 +6,7 @@ use crate::export::{self, ExportSettings};
 use crate::processing::{lut::Lut3D, FilterSettings};
 use crate::state::SharedState;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Emitter, State};
@@ -18,6 +19,8 @@ pub struct BatchExportRequest {
     pub export: ExportSettings,
     /// 水印设置，用于持久化到 batch_tasks 表并在导出最终尺寸上渲染 SVG。
     pub watermark_settings: Option<serde_json::Value>,
+    /// 前端按每张导出图最终尺寸渲染好的透明水印 PNG 图层。
+    pub watermark_layers: Option<HashMap<i64, String>>,
 }
 
 /// 批量任务进度事件。通过 `app.emit("export:progress", &progress)` 推送给前端。
@@ -56,13 +59,18 @@ pub async fn start_batch_export(
 
     let mut task_ids: Vec<i64> = Vec::with_capacity(request.asset_ids.len());
     for &asset_id in &request.asset_ids {
+        let watermark_layer_path = request
+            .watermark_layers
+            .as_ref()
+            .and_then(|layers| layers.get(&asset_id))
+            .map(String::as_str);
         let task_id = tasks::create(
             &state.pool,
             asset_id,
             &export_json,
             &filter_json,
             watermark_json.as_deref(),
-            None,
+            watermark_layer_path,
         )
         .await?;
 
@@ -142,6 +150,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             .watermark_json
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok());
+        let watermark_layer_path = task.watermark_layer_path.clone();
 
         // try_acquire 已经递增了计数器，无需再调用 on_task_start
         run_export_task(
@@ -153,6 +162,7 @@ async fn dispatch_pending(state: SharedState, app: tauri::AppHandle) {
             export_settings,
             lut,
             watermark_settings,
+            watermark_layer_path,
         );
     }
 }
@@ -175,6 +185,7 @@ fn run_export_task(
     export_settings: ExportSettings,
     lut: Option<Arc<Lut3D>>,
     watermark_settings: Option<serde_json::Value>,
+    watermark_layer_path: Option<String>,
 ) {
     tokio::task::spawn_blocking(move || {
         let pool = state.pool.clone();
@@ -257,6 +268,7 @@ fn run_export_task(
                         &export_settings,
                         lut.as_deref(),
                         watermark_settings.as_ref(),
+                        watermark_layer_path.as_deref(),
                     )
                 },
             )
@@ -372,6 +384,7 @@ pub async fn retry_export_task(
         .watermark_json
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
+    let watermark_layer_path = task.watermark_layer_path.clone();
 
     let _ = app.emit(
         "export:progress",
@@ -404,6 +417,7 @@ pub async fn retry_export_task(
             export_settings,
             lut,
             watermark_settings,
+            watermark_layer_path,
         );
     }
 

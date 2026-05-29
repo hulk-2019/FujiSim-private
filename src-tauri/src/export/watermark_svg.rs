@@ -27,6 +27,7 @@ pub fn rasterize_svg(svg: &str, out_w: u32, out_h: u32) -> Result<RgbaImage> {
     fontdb.set_sans_serif_family("Arial");
     fontdb.set_serif_family("Times New Roman");
     fontdb.set_monospace_family("Courier New");
+    fontdb.set_cursive_family("Comic Sans MS");
 
     let mut opt = usvg::Options::default();
     opt.fontdb = Arc::new(fontdb);
@@ -123,7 +124,8 @@ pub fn build_watermark_svg_from_json(
     let font_family = settings
         .get("fontFamily")
         .and_then(|v| v.as_str())
-        .unwrap_or("Arial, sans-serif");
+        .map(normalize_font_family)
+        .unwrap_or_else(|| "Arial".to_string());
     let opacity = settings
         .get("opacity")
         .and_then(|v| v.as_f64())
@@ -175,6 +177,12 @@ pub fn build_watermark_svg_from_json(
     } else {
         400
     };
+    let italic_degree = settings
+        .get("italicDegree")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(15.0)
+        .abs();
+    let synthetic_italic = italic_degree > 0.0;
     let font_style = if settings
         .get("italic")
         .and_then(|v| v.as_bool())
@@ -190,11 +198,40 @@ pub fn build_watermark_svg_from_json(
         "translate({offset_x} {offset_y}) translate({x} {y}) rotate({rotation}) scale({sx} {sy}) translate({} {})",
         -x, -y
     );
-    Ok(format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}"><g opacity="{opacity}" transform="{transform}"><text x="{x}" y="{y}" dy="{dy}" text-anchor="{text_anchor}" dominant-baseline="{dominant_baseline}" font-family="{}" font-size="{font_size}" font-weight="{font_weight}" font-style="{font_style}" fill="{color}">{}</text></g></svg>"#,
-        xml_escape(font_family),
+    let text = format!(
+        r#"<text x="{x}" y="{y}" dy="{dy}" text-anchor="{text_anchor}" dominant-baseline="{dominant_baseline}" font-family="{}" font-size="{font_size}" font-weight="{font_weight}" font-style="{font_style}" fill="{color}">{}</text>"#,
+        xml_escape(&font_family),
         xml_escape(text)
+    );
+    let skew_y = y + dy;
+    let body = if synthetic_italic {
+        format!(
+            r#"<g transform="translate({x} {skew_y}) skewX(-{italic_degree}) translate({} {})">{text}</g>"#,
+            -x, -skew_y
+        )
+    } else {
+        text
+    };
+    Ok(format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{out_w}" height="{out_h}" viewBox="0 0 {out_w} {out_h}"><g opacity="{opacity}" transform="{transform}">{body}</g></svg>"#
     ))
+}
+
+fn normalize_font_family(input: &str) -> String {
+    input
+        .split(',')
+        .map(|part| part.trim().trim_matches('"').trim_matches('\''))
+        .find(|part| {
+            let lower = part.to_ascii_lowercase();
+            !part.is_empty()
+                && lower != "serif"
+                && lower != "sans-serif"
+                && lower != "monospace"
+                && lower != "cursive"
+                && lower != "fantasy"
+        })
+        .unwrap_or("Arial")
+        .to_string()
 }
 
 fn export_scale(settings: &serde_json::Value, out_w: u32, out_h: u32) -> f64 {
@@ -332,6 +369,7 @@ mod tests {
             "opacity": 0.7,
             "bold": true,
             "italic": true,
+            "italicDegree": 22,
             "position": "bottom-center",
             "offsetX": 0,
             "offsetY": 0,
@@ -344,11 +382,74 @@ mod tests {
         });
         let svg = build_watermark_svg_from_json(&settings, 6000, 4000).unwrap();
         assert!(svg.contains(r#"font-size="320""#));
-        assert!(svg.contains(r#"font-family="Arial, sans-serif""#));
+        assert!(svg.contains(r#"font-family="Arial""#));
         assert!(svg.contains(r#"font-weight="700""#));
         assert!(svg.contains(r#"font-style="italic""#));
+        assert!(svg.contains(r#"skewX(-22)"#));
+        assert!(svg.contains(r#"translate(3000 3840) skewX(-22) translate(-3000 -3840)"#));
         assert!(svg.contains(r#"dy="-160""#));
         assert!(svg.contains(r#"y="4000""#));
+    }
+
+    #[test]
+    fn build_text_watermark_svg_normalizes_css_font_stack_for_export() {
+        let settings = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 32,
+            "fontFamily": "'Comic Sans MS', cursive",
+            "color": "#ffffff",
+            "opacity": 0.7,
+            "italic": true,
+            "italicDegree": 22,
+            "position": "center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 0,
+            "flipH": false,
+            "flipV": false
+        });
+        let svg = build_watermark_svg_from_json(&settings, 600, 400).unwrap();
+        assert!(svg.contains(r#"font-family="Comic Sans MS""#));
+        assert!(svg.contains(r#"skewX(-22)"#));
+    }
+
+    #[test]
+    fn build_text_watermark_svg_applies_italic_degree_without_font_italic_flag() {
+        let settings = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 32,
+            "fontFamily": "'Comic Sans MS', cursive",
+            "color": "#ffffff",
+            "opacity": 0.7,
+            "italic": false,
+            "italicDegree": 22,
+            "position": "center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 0,
+            "flipH": false,
+            "flipV": false
+        });
+        let svg = build_watermark_svg_from_json(&settings, 600, 400).unwrap();
+        assert!(svg.contains(r#"font-style="normal""#));
+        assert!(svg.contains(r#"skewX(-22)"#));
+    }
+
+    #[test]
+    fn normalize_font_family_prefers_first_real_family() {
+        assert_eq!(
+            normalize_font_family("'Comic Sans MS', cursive"),
+            "Comic Sans MS"
+        );
+        assert_eq!(normalize_font_family("sans-serif"), "Arial");
     }
 
     #[test]
@@ -373,5 +474,73 @@ mod tests {
         let svg = build_watermark_svg_from_json(&settings, 300, 200).unwrap();
         let img = rasterize_svg(&svg, 300, 200).unwrap();
         assert!(img.pixels().any(|p| p[3] > 0));
+    }
+
+    #[test]
+    fn rasterized_italic_degree_changes_comic_sans_pixels() {
+        let base = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 54,
+            "fontFamily": "'Comic Sans MS', cursive",
+            "color": "#ffffff",
+            "opacity": 1.0,
+            "bold": false,
+            "italic": true,
+            "position": "center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 0,
+            "flipH": false,
+            "flipV": false
+        });
+        let mut mild = base.clone();
+        mild["italicDegree"] = serde_json::json!(1);
+        let mut strong = base;
+        strong["italicDegree"] = serde_json::json!(35);
+
+        let mild_svg = build_watermark_svg_from_json(&mild, 420, 220).unwrap();
+        let strong_svg = build_watermark_svg_from_json(&strong, 420, 220).unwrap();
+        let mild_img = rasterize_svg(&mild_svg, 420, 220).unwrap();
+        let strong_img = rasterize_svg(&strong_svg, 420, 220).unwrap();
+
+        assert_ne!(mild_img.as_raw(), strong_img.as_raw());
+    }
+
+    #[test]
+    fn rasterized_italic_degree_changes_comic_sans_pixels_with_rotation() {
+        let base = serde_json::json!({
+            "enabled": true,
+            "kind": "text",
+            "source": "builtin",
+            "text": "FujiSim",
+            "fontSize": 54,
+            "fontFamily": "'Comic Sans MS', cursive",
+            "color": "#ffffff",
+            "opacity": 1.0,
+            "bold": false,
+            "italic": false,
+            "position": "center",
+            "offsetX": 0,
+            "offsetY": 0,
+            "scale": 1,
+            "rotation": 28,
+            "flipH": false,
+            "flipV": false
+        });
+        let mut mild = base.clone();
+        mild["italicDegree"] = serde_json::json!(1);
+        let mut strong = base;
+        strong["italicDegree"] = serde_json::json!(35);
+
+        let mild_svg = build_watermark_svg_from_json(&mild, 420, 220).unwrap();
+        let strong_svg = build_watermark_svg_from_json(&strong, 420, 220).unwrap();
+        let mild_img = rasterize_svg(&mild_svg, 420, 220).unwrap();
+        let strong_img = rasterize_svg(&strong_svg, 420, 220).unwrap();
+
+        assert_ne!(mild_img.as_raw(), strong_img.as_raw());
     }
 }
