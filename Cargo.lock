@@ -1282,6 +1282,7 @@ dependencies = [
  "once_cell",
  "pollster",
  "rayon",
+ "regex",
  "rsraw",
  "serde",
  "serde_json",

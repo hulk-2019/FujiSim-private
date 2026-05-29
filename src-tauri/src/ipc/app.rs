@@ -1,6 +1,6 @@
 //! 应用级杂项：清缓存、重置数据、内置富士模拟列表。
 
-use crate::db::user_fonts;
+use crate::db::{user_fonts, watermark_svgs};
 use crate::error::Result;
 use crate::processing;
 use crate::state::SharedState;
@@ -55,6 +55,12 @@ pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
     if state.watermark_dir.exists() {
         let _ = std::fs::remove_dir_all(&state.watermark_dir);
         let _ = std::fs::create_dir_all(&state.watermark_dir);
+    }
+    // 导入的 SVG 水印整体清空
+    watermark_svgs::delete_all(&state.pool).await?;
+    if state.watermark_svg_dir.exists() {
+        let _ = std::fs::remove_dir_all(&state.watermark_svg_dir);
+        let _ = std::fs::create_dir_all(&state.watermark_svg_dir);
     }
     // 项目封面缓存整体清空
     if state.project_cover_dir.exists() {

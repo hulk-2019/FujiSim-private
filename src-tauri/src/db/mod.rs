@@ -14,6 +14,7 @@ pub mod tasks;
 pub mod user_fonts;
 pub mod user_luts;
 pub mod watermark_presets;
+pub mod watermark_svgs;
 
 /// 创建（或打开）SQLite 数据库连接池。
 ///
@@ -334,6 +335,17 @@ CREATE TABLE IF NOT EXISTS watermark_presets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     settings_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT
+);
+
+-- 用户导入的 SVG 水印。file_path 指向应用数据目录 watermark_svgs/ 下的副本
+CREATE TABLE IF NOT EXISTS user_watermark_svgs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    file_path TEXT NOT NULL UNIQUE,
+    preview_svg TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     is_deleted INTEGER NOT NULL DEFAULT 0,
     deleted_at TEXT

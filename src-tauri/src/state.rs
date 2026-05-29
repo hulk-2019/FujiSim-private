@@ -86,6 +86,8 @@ pub struct AppState {
     pub lut_dir: PathBuf,
     /// 水印层 PNG 文件目录：<data_dir>/watermarks/<task_id>.png
     pub watermark_dir: PathBuf,
+    /// 用户导入的 SVG 水印文件目录：<data_dir>/watermark_svgs/
+    pub watermark_svg_dir: PathBuf,
     /// 项目汇总页封面缓存目录：<data_dir>/project_covers/<asset_id>.jpg
     pub project_cover_dir: PathBuf,
     pub font_dir: PathBuf,
@@ -143,6 +145,8 @@ impl AppState {
         std::fs::create_dir_all(&lut_dir)?;
         let watermark_dir = data_dir.join("watermarks");
         std::fs::create_dir_all(&watermark_dir)?;
+        let watermark_svg_dir = data_dir.join("watermark_svgs");
+        std::fs::create_dir_all(&watermark_svg_dir)?;
         let project_cover_dir = data_dir.join("project_covers");
         std::fs::create_dir_all(&project_cover_dir)?;
         let font_dir = data_dir.join("fonts");
@@ -183,6 +187,7 @@ impl AppState {
             data_dir,
             lut_dir,
             watermark_dir,
+            watermark_svg_dir,
             project_cover_dir,
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),

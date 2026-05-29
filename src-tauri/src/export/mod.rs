@@ -6,6 +6,8 @@ use image::{ImageBuffer, Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+pub mod watermark_svg;
+
 /// 导出参数。前端 [`ExportSettings`](../../../src/types.ts) 类型与此字段一一对应。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportSettings {

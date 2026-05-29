@@ -48,6 +48,7 @@ pollster = "0.3"
 splines = "5.0.0"
 trash = "5"
 indexmap = "2"
+regex = "1"
 
 [features]
 default = ["custom-protocol"]
