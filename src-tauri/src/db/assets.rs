@@ -92,8 +92,8 @@ pub enum SortBy {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDir {
-    Asc,
     #[default]
+    Asc,
     Desc,
 }
 

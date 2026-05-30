@@ -2,13 +2,14 @@ import type { StateCreator } from "zustand";
 import type { Asset } from "../../types";
 import { api } from "../../api";
 import type { AppState, AssetSlice } from "../types";
+import { DEFAULT_ASSET_QUERY } from "../defaults";
 
 export const createAssetSlice: StateCreator<AppState, [], [], AssetSlice> = (set, get) => ({
   assets: [],
   totalCount: 0,
   isLoadingPage: new Set<number>(),
   loading: false,
-  query: { sort_by: "date_taken", sort_dir: "desc" },
+  query: { ...DEFAULT_ASSET_QUERY },
   selectedIds: new Set<number>(),
   focusedId: null,
 

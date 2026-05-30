@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   ImageIcon,
@@ -13,6 +12,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "@/store";
 import { api } from "@/api";
 import { orientationCss } from "@/lib/orientation";
+import { useAssetThumbnail } from "@/hooks/useAssetThumbnail";
+import { DEFAULT_ASSET_QUERY } from "@/store/defaults";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +39,6 @@ type ThumbImage = {
   orientation?: number | null;
   src: string;
 };
-const rawThumbCache = new Map<number, ThumbImage>();
 
 const IMAGE_EXT = [
   "jpg", "jpeg", "png", "tif", "tiff", "webp", "heic", "heif",
@@ -249,8 +249,8 @@ export function AssetStrip() {
 
         {/* 排序 */}
         <SortMenu
-          sortBy={query.sort_by ?? "date_taken"}
-          sortDir={query.sort_dir ?? "desc"}
+          sortBy={query.sort_by ?? DEFAULT_ASSET_QUERY.sort_by!}
+          sortDir={query.sort_dir ?? DEFAULT_ASSET_QUERY.sort_dir!}
           onChange={(patch) => setQuery(patch)}
         />
 
@@ -262,8 +262,7 @@ export function AssetStrip() {
               search: null,
               min_rating: null,
               camera_model: null,
-              sort_by: "date_taken",
-              sort_dir: "desc",
+              ...DEFAULT_ASSET_QUERY,
             })
           }
           className="h-7 w-7 inline-flex items-center justify-center rounded text-zinc-400 hover:bg-zinc-800/60"
@@ -413,61 +412,5 @@ function Thumb({
 }
 
 function useThumbImage(asset: Asset) {
-  const [image, setImage] = useState<ThumbImage | null>(() => {
-    if (asset.is_raw) return rawThumbCache.get(asset.id) ?? null;
-    try {
-      return { src: convertFileSrc(asset.file_path) };
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!asset.is_raw) {
-      try {
-        setImage({ src: convertFileSrc(asset.file_path) });
-      } catch {
-        setImage(null);
-      }
-      return;
-    }
-
-    const cached = rawThumbCache.get(asset.id);
-    if (cached) {
-      setImage(cached);
-      return;
-    }
-
-    setImage(null);
-    api.getAssetThumbnail(asset.id)
-      .then((result) => {
-        if (cancelled) return;
-        if (result.data?.length) {
-          const blob = new Blob([new Uint8Array(result.data)], {
-            type: result.mimeType ?? "image/jpeg",
-          });
-          const url = URL.createObjectURL(blob);
-          const next = { src: url, orientation: result.orientation ?? null };
-          rawThumbCache.set(asset.id, next);
-          setImage(next);
-          return;
-        }
-        if (result.path) {
-          const url = convertFileSrc(result.path);
-          const next = { src: url, orientation: result.orientation ?? null };
-          rawThumbCache.set(asset.id, next);
-          setImage(next);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setImage(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [asset.file_path, asset.id, asset.is_raw]);
-
-  return image;
+  return useAssetThumbnail(asset) as ThumbImage | null;
 }

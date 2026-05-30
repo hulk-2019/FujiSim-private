@@ -1,4 +1,3 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   Info,
   Camera,
@@ -15,12 +14,15 @@ import {
 import { useTranslation } from "react-i18next";
 import { useStore } from "@/store";
 import { formatBytes, shortDate } from "@/lib/utils";
+import { orientationCss } from "@/lib/orientation";
+import { useAssetThumbnail } from "@/hooks/useAssetThumbnail";
 
 export function InfoTab() {
   const { t } = useTranslation();
   const assets = useStore((s) => s.assets);
   const focusedId = useStore((s) => s.focusedId);
   const focused = assets.find((a) => a?.id === focusedId) ?? null;
+  const thumbnail = useAssetThumbnail(focused);
 
   if (!focused) {
     return (
@@ -31,14 +33,18 @@ export function InfoTab() {
     );
   }
 
-  const thumbSrc = focused.cover_path ?? (!focused.is_raw ? focused.file_path : null);
-
   return (
     <div className="space-y-4 text-xs pt-3">
       <div className="rounded-md border border-zinc-800/80 bg-zinc-900/40 p-3 flex gap-3">
         <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden bg-zinc-900 border border-zinc-800/60 flex items-center justify-center">
-          {thumbSrc ? (
-            <img src={convertFileSrc(thumbSrc)} alt="" className="w-full h-full object-cover" draggable={false} />
+          {thumbnail ? (
+            <img
+              src={thumbnail.src}
+              alt=""
+              className="w-full h-full object-cover"
+              style={orientationCss(thumbnail.orientation)}
+              draggable={false}
+            />
           ) : (
             <ImageIcon size={20} className="text-zinc-700" />
           )}

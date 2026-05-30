@@ -1,5 +1,5 @@
 import type { EyedropperMode } from "./types";
-import type { FilterSettings } from "../types";
+import type { AssetQuery, FilterSettings } from "../types";
 
 /**
  * 默认的"出厂"滤镜参数。
@@ -55,3 +55,8 @@ export const DEFAULT_FILTER: FilterSettings = {
 };
 
 export const DEFAULT_EYEDROPPER_MODE: EyedropperMode = 'none';
+
+export const DEFAULT_ASSET_QUERY: AssetQuery = {
+  sort_by: "date_taken",
+  sort_dir: "asc",
+};
