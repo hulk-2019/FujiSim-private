@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Section } from "@/components/ui/section";
 import { fontFamilyName } from "@/lib/fontManager";
 import { Label, SliderRow, ToggleSwitch } from "@/components/ui/form";
 import type { UserFont, WatermarkPosition } from "@/types";
@@ -42,6 +43,11 @@ import {
   RotateCcw,
   Trash2,
   Plus,
+  Type,
+  PaintBucket,
+  Move,
+  Maximize,
+  Wand2,
 } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
@@ -163,75 +169,145 @@ export function WatermarkTab() {
   return (
     <div className="h-full flex flex-col">
       <ScrollArea className="flex-1">
-        <div className="px-3 pt-3 pb-4 space-y-3">
-          <PanelSection>
+        <div className="pb-4">
+          <div className="px-3 pt-3 pb-2 border-b border-zinc-800/60 mb-2">
             <ToggleRow label={t("watermark.enable")} checked={wm.enabled} onChange={(v) => setWatermark({ enabled: v })} strong />
-            <div>
-              <Label>{t("watermark.text")}</Label>
-              <Input value={wm.text} onChange={(e) => setWatermark({ text: e.target.value })} placeholder={t("watermark.textPlaceholder")} className="h-7 text-xs" />
-            </div>
-          </PanelSection>
+          </div>
 
-          <PanelSection>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label>{t("watermark.font")}</Label>
-                <button type="button" onClick={importFont}
-                  className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-200">
-                  <Plus size={10} /> {t("watermark.importFont")}
-                </button>
+          <Section title={t("watermark.sections.content")} icon={<Type size={14} />}>
+            <div className="space-y-4">
+              <div>
+                <Label>{t("watermark.text")}</Label>
+                <Input value={wm.text} onChange={(e) => setWatermark({ text: e.target.value })} placeholder={t("watermark.textPlaceholder")} className="h-7 text-xs bg-zinc-900/50" />
               </div>
-              <Select value={wm.fontFamily} onValueChange={(v) => setWatermark({ fontFamily: v })}>
-                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>{t("watermark.builtin")}</SelectLabel>
-                    {builtinFonts.map((f) => (
-                      <SelectItem key={f.value} value={f.value}>{f.displayLabel}</SelectItem>
-                    ))}
-                  </SelectGroup>
-                  {userFonts.length > 0 && (
-                    <>
-                      <SelectSeparator />
-                      <SelectGroup>
-                        <SelectLabel>{t("watermark.imported")}</SelectLabel>
-                        {userFonts.map((f) => (
-                          <UserFontItem key={f.id} font={f} onDelete={() => handleRemoveFont(f)} />
-                        ))}
-                      </SelectGroup>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
 
-            <SliderRow label={t("watermark.fontSize")} value={wm.fontSize} min={8} max={120} step={1} onChange={(v) => setWatermark({ fontSize: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
-            <div className="grid grid-cols-2 gap-2">
-              <ToggleRow label={t("watermark.bold")} checked={wm.bold} onChange={(v) => setWatermark({ bold: v })} boxed />
-              <ToggleRow label={t("watermark.italic")} checked={wm.italic} onChange={(v) => setWatermark({ italic: v })} boxed />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label>{t("watermark.font")}</Label>
+                  <button type="button" onClick={importFont}
+                    className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-200">
+                    <Plus size={10} /> {t("watermark.importFont")}
+                  </button>
+                </div>
+                <Select value={wm.fontFamily} onValueChange={(v) => setWatermark({ fontFamily: v })}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>{t("watermark.builtin")}</SelectLabel>
+                      {builtinFonts.map((f) => (
+                        <SelectItem key={f.value} value={f.value}>{f.displayLabel}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    {userFonts.length > 0 && (
+                      <>
+                        <SelectSeparator />
+                        <SelectGroup>
+                          <SelectLabel>{t("watermark.imported")}</SelectLabel>
+                          {userFonts.map((f) => (
+                            <UserFontItem key={f.id} font={f} onDelete={() => handleRemoveFont(f)} />
+                          ))}
+                        </SelectGroup>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="h-px w-full bg-zinc-800/60" />
+
+              <div className="space-y-3">
+                <SliderRow label={t("watermark.fontSize")} value={wm.fontSize} min={8} max={120} step={1} onChange={(v) => setWatermark({ fontSize: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setWatermark({ bold: !wm.bold })} className={cn("flex items-center justify-center h-7 rounded border text-xs transition-colors font-bold", wm.bold ? "border-blue-600 text-blue-400 bg-blue-500/10" : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 bg-zinc-950/40")}>
+                    {t("watermark.bold")}
+                  </button>
+                  <button type="button" onClick={() => setWatermark({ italic: !wm.italic })} className={cn("flex items-center justify-center h-7 rounded border text-xs transition-colors italic", wm.italic ? "border-blue-600 text-blue-400 bg-blue-500/10" : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 bg-zinc-950/40")}>
+                    {t("watermark.italic")}
+                  </button>
+                </div>
+                
+                {wm.italic && (
+                  <SliderRow label={t("watermark.italicAngle")} value={wm.italicDegree} min={0} max={45} step={1} onChange={(v) => setWatermark({ italicDegree: v })} display={(v) => `${v}°`} marksFilterInteraction={false} />
+                )}
+              </div>
+              
+              <div className="h-px w-full bg-zinc-800/60" />
+
+              <div className="space-y-3">
+                <ColorInputRow label={t("watermark.color")} value={wm.color} onChange={(v) => setWatermark({ color: v })} />
+                <SliderRow label={t("watermark.opacity")} value={wm.opacity} min={0} max={1} step={0.01} onChange={(v) => setWatermark({ opacity: v })} display={(v) => `${Math.round(v * 100)}%`} marksFilterInteraction={false} />
+              </div>
             </div>
-            {wm.italic && (
-              <SliderRow label={t("watermark.italicAngle")} value={wm.italicDegree} min={0} max={45} step={1} onChange={(v) => setWatermark({ italicDegree: v })} display={(v) => `${v}°`} marksFilterInteraction={false} />
-            )}
-            <ColorInputRow label={t("watermark.color")} value={wm.color} onChange={(v) => setWatermark({ color: v })} />
-            <SliderRow label={t("watermark.opacity")} value={wm.opacity} min={0} max={1} step={0.01} onChange={(v) => setWatermark({ opacity: v })} display={(v) => `${Math.round(v * 100)}%`} marksFilterInteraction={false} />
-          </PanelSection>
+          </Section>
 
           {wm.kind === "svg" && (
-            <PanelSection>
+            <Section title={t("watermark.sections.svgOverride")} icon={<PaintBucket size={14} />}>
               <div>
                 <Label>{t("watermark.svgText")}</Label>
                 <Input value={wm.svgTextOverride ?? ""} onChange={(e) => setWatermark({ svgTextOverride: e.target.value })} className="h-7 text-xs" />
               </div>
               <ColorInputRow label={t("watermark.svgFill")} value={wm.svgFillOverride ?? wm.color} onChange={(v) => setWatermark({ svgFillOverride: v })} />
               <ColorInputRow label={t("watermark.svgStroke")} value={wm.svgStrokeOverride ?? wm.strokeColor} onChange={(v) => setWatermark({ svgStrokeOverride: v })} />
-            </PanelSection>
+            </Section>
           )}
 
-          <PanelSection>
+          <Section title={t("watermark.sections.position")} icon={<Move size={14} />}>
+            <div className="grid grid-cols-3 gap-1">
+              {POSITION_BUTTON_KEYS.map((btn) => (
+                <button key={btn.value} type="button" title={t(btn.titleKey as any)}
+                  onClick={() => setWatermark({ position: btn.value, offsetX: 0, offsetY: 0 })}
+                  className={cn("flex items-center justify-center h-7 rounded border text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors", wm.position === btn.value ? "border-blue-600 text-blue-400 bg-blue-500/10" : "border-zinc-700")}>
+                  <btn.Icon size={14} />
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-2 mt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{t("watermark.pixelAdjust")}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-zinc-500">{t("watermark.stepSize")}</span>
+                  <Input type="number" value={wm.nudgeStep} min={1} max={100} onChange={(e) => setWatermark({ nudgeStep: Math.max(1, Number(e.target.value)) })} className="h-5 w-12 text-[10px] px-1 text-center" />
+                  <span className="text-[10px] text-zinc-500">px</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1 w-24 mx-auto">
+                {(() => {
+                  const maxX = previewSize ? Math.floor(previewSize.width / 2) : 9999;
+                  const maxY = previewSize ? Math.floor(previewSize.height / 2) : 9999;
+                  const cx = (dx: number) => Math.max(-maxX, Math.min(maxX, wm.offsetX + dx));
+                  const cy = (dy: number) => Math.max(-maxY, Math.min(maxY, wm.offsetY + dy));
+                  const s = wm.nudgeStep;
+                  return [
+                    { onClick: () => setWatermark({ offsetX: cx(-s), offsetY: cy(-s) }), Icon: ArrowUpLeft },
+                    { onClick: () => setWatermark({ offsetY: cy(-s) }),                  Icon: ChevronUp },
+                    { onClick: () => setWatermark({ offsetX: cx(+s), offsetY: cy(-s) }), Icon: ArrowUpRight },
+                    { onClick: () => setWatermark({ offsetX: cx(-s) }),                  Icon: ChevronLeft },
+                    { onClick: () => setWatermark({ offsetX: 0, offsetY: 0 }), Icon: null, title: t("watermark.resetOffset") },
+                    { onClick: () => setWatermark({ offsetX: cx(+s) }),                  Icon: ChevronRight },
+                    { onClick: () => setWatermark({ offsetX: cx(-s), offsetY: cy(+s) }), Icon: ArrowDownLeft },
+                    { onClick: () => setWatermark({ offsetY: cy(+s) }),                  Icon: ChevronDown },
+                    { onClick: () => setWatermark({ offsetX: cx(+s), offsetY: cy(+s) }), Icon: ArrowDownRight },
+                  ];
+                })().map((btn, i) => (
+                  <button key={i} type="button" title={"title" in btn ? btn.title : undefined} onClick={btn.onClick}
+                    className="flex items-center justify-center h-6 rounded border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 text-[9px]">
+                    {btn.Icon ? <btn.Icon size={12} /> : "⊙"}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-center gap-3 text-[10px] text-zinc-500 tabular-nums">
+                <span>X: {wm.offsetX > 0 ? "+" : ""}{wm.offsetX}px</span>
+                <span>Y: {wm.offsetY > 0 ? "+" : ""}{wm.offsetY}px</span>
+              </div>
+            </div>
+          </Section>
+
+          <Section title={t("watermark.sections.transform")} icon={<Maximize size={14} />}>
             <SliderRow label={t("watermark.scale")} value={wm.scale} min={0.1} max={4} step={0.05} onChange={(v) => setWatermark({ scale: v })} display={(v) => `${Math.round(v * 100)}%`} marksFilterInteraction={false} />
             <SliderRow label={t("watermark.rotation")} value={wm.rotation} min={-180} max={180} step={1} onChange={(v) => setWatermark({ rotation: v })} display={(v) => `${v}°`} marksFilterInteraction={false} />
-            <div className="grid grid-cols-[1fr_1fr_28px] gap-1.5">
+            <div className="grid grid-cols-[1fr_1fr_28px] gap-1.5 mt-2">
               <button type="button" title={t("watermark.flipH")} onClick={() => setWatermark({ flipH: !wm.flipH })}
                 className={cn("flex items-center gap-1.5 justify-center h-7 rounded border text-xs transition-colors", wm.flipH ? "border-blue-600 text-blue-400 bg-blue-500/10" : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200")}>
                 <FlipHorizontal size={13} /> {t("watermark.flipH")}
@@ -245,21 +321,19 @@ export function WatermarkTab() {
                 <RotateCcw size={12} />
               </button>
             </div>
-          </PanelSection>
+          </Section>
 
-          <PanelSection>
+          <Section title={t("watermark.sections.effects")} icon={<Wand2 size={14} />}>
             <ToggleRow label={t("watermark.shadow")} checked={wm.shadowEnabled} onChange={(v) => setWatermark({ shadowEnabled: v })} />
             {wm.shadowEnabled && (
-              <div className="space-y-2 pl-2 border-l border-zinc-800/80">
+              <div className="space-y-2 pl-2 border-l border-zinc-800/80 mb-4">
                 <ColorInputRow label={t("watermark.shadowColor")} value={wm.shadowColor} onChange={(v) => setWatermark({ shadowColor: v })} compact />
                 <SliderRow label={t("watermark.shadowBlur")} value={wm.shadowBlur} min={0} max={40} step={1} onChange={(v) => setWatermark({ shadowBlur: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
                 <SliderRow label={t("watermark.offsetX")} value={wm.shadowOffsetX} min={-30} max={30} step={1} onChange={(v) => setWatermark({ shadowOffsetX: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
                 <SliderRow label={t("watermark.offsetY")} value={wm.shadowOffsetY} min={-30} max={30} step={1} onChange={(v) => setWatermark({ shadowOffsetY: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
               </div>
             )}
-          </PanelSection>
-
-          <PanelSection>
+            
             <ToggleRow label={t("watermark.stroke")} checked={wm.strokeEnabled} onChange={(v) => setWatermark({ strokeEnabled: v })} />
             {wm.strokeEnabled && (
               <div className="space-y-2 pl-2 border-l border-zinc-800/80">
@@ -267,59 +341,7 @@ export function WatermarkTab() {
                 <SliderRow label={t("watermark.strokeWidth")} value={wm.strokeWidth} min={0} max={24} step={0.5} onChange={(v) => setWatermark({ strokeWidth: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
               </div>
             )}
-          </PanelSection>
-
-          <PanelSection>
-            <div className="grid grid-cols-3 gap-1">
-          {POSITION_BUTTON_KEYS.map((btn) => (
-            <button key={btn.value} type="button" title={t(btn.titleKey as any)}
-              onClick={() => setWatermark({ position: btn.value, offsetX: 0, offsetY: 0 })}
-              className={cn("flex items-center justify-center h-7 rounded border text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors", wm.position === btn.value ? "border-blue-600 text-blue-400 bg-blue-500/10" : "border-zinc-700")}>
-              <btn.Icon size={14} />
-            </button>
-          ))}
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{t("watermark.pixelAdjust")}</span>
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-zinc-500">{t("watermark.stepSize")}</span>
-              <Input type="number" value={wm.nudgeStep} min={1} max={100} onChange={(e) => setWatermark({ nudgeStep: Math.max(1, Number(e.target.value)) })} className="h-5 w-12 text-[10px] px-1 text-center" />
-              <span className="text-[10px] text-zinc-500">px</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-1 w-24 mx-auto">
-            {(() => {
-              const maxX = previewSize ? Math.floor(previewSize.width / 2) : 9999;
-              const maxY = previewSize ? Math.floor(previewSize.height / 2) : 9999;
-              const cx = (dx: number) => Math.max(-maxX, Math.min(maxX, wm.offsetX + dx));
-              const cy = (dy: number) => Math.max(-maxY, Math.min(maxY, wm.offsetY + dy));
-              const s = wm.nudgeStep;
-              return [
-                { onClick: () => setWatermark({ offsetX: cx(-s), offsetY: cy(-s) }), Icon: ArrowUpLeft },
-                { onClick: () => setWatermark({ offsetY: cy(-s) }),                  Icon: ChevronUp },
-                { onClick: () => setWatermark({ offsetX: cx(+s), offsetY: cy(-s) }), Icon: ArrowUpRight },
-                { onClick: () => setWatermark({ offsetX: cx(-s) }),                  Icon: ChevronLeft },
-                { onClick: () => setWatermark({ offsetX: 0, offsetY: 0 }), Icon: null, title: t("watermark.resetOffset") },
-                { onClick: () => setWatermark({ offsetX: cx(+s) }),                  Icon: ChevronRight },
-                { onClick: () => setWatermark({ offsetX: cx(-s), offsetY: cy(+s) }), Icon: ArrowDownLeft },
-                { onClick: () => setWatermark({ offsetY: cy(+s) }),                  Icon: ChevronDown },
-                { onClick: () => setWatermark({ offsetX: cx(+s), offsetY: cy(+s) }), Icon: ArrowDownRight },
-              ];
-            })().map((btn, i) => (
-              <button key={i} type="button" title={"title" in btn ? btn.title : undefined} onClick={btn.onClick}
-                className="flex items-center justify-center h-6 rounded border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 text-[9px]">
-                {btn.Icon ? <btn.Icon size={12} /> : "⊙"}
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-center gap-3 text-[10px] text-zinc-500 tabular-nums">
-            <span>X: {wm.offsetX > 0 ? "+" : ""}{wm.offsetX}px</span>
-            <span>Y: {wm.offsetY > 0 ? "+" : ""}{wm.offsetY}px</span>
-          </div>
-        </div>
-          </PanelSection>
+          </Section>
         </div>
       </ScrollArea>
 
@@ -405,20 +427,6 @@ function UserFontItem({ font, onDelete }: { font: UserFont; onDelete: () => void
   );
 }
 
-function PanelSection({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn("space-y-3 py-1", className)}>
-      {children}
-    </section>
-  );
-}
-
 function ToggleRow({
   boxed,
   checked,
@@ -455,19 +463,19 @@ function ColorInputRow({
   value: string;
 }) {
   return (
-    <div>
-      <Label>{label}</Label>
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs text-zinc-300">{label}</span>
+      <div className="flex items-center gap-1.5 w-[110px]">
         <input
           type="color"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={cn("rounded border border-zinc-700 bg-transparent cursor-pointer", compact ? "h-6 w-8" : "h-7 w-10")}
+          className={cn("shrink-0 rounded border border-zinc-700 bg-transparent cursor-pointer p-0", compact ? "h-6 w-8" : "h-7 w-9")}
         />
         <Input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={cn("text-xs flex-1 font-mono", compact ? "h-6" : "h-7")}
+          className={cn("text-xs flex-1 font-mono uppercase px-2", compact ? "h-6" : "h-7")}
           maxLength={7}
         />
       </div>

@@ -229,6 +229,13 @@ const zh = {
     newPresetTitle: "新建水印预设",
     newPresetDesc: "为当前水印设置取个名字，保存到自定义预设。",
     newPresetPlaceholder: "例如：右下白字",
+    sections: {
+      content: "内容与字体",
+      svgOverride: "SVG 专属",
+      position: "位置与对齐",
+      transform: "变换",
+      effects: "效果",
+    },
     builtinFonts: {
       sansSerif: "无衬线",
       serif: "衬线",

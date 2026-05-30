@@ -229,6 +229,13 @@ const en = {
     newPresetTitle: "New watermark preset",
     newPresetDesc: "Give this watermark configuration a name and save it as a custom preset.",
     newPresetPlaceholder: "e.g. White bottom-right",
+    sections: {
+      content: "Content & Font",
+      svgOverride: "SVG Overrides",
+      position: "Position & Align",
+      transform: "Transform",
+      effects: "Effects",
+    },
     builtinFonts: {
       sansSerif: "Sans-serif",
       serif: "Serif",

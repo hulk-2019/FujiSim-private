@@ -67,11 +67,12 @@ export function previewDisplayState({
   const baselineSrc = currentBaselinePreview?.blobUrl ?? null;
   const displayOrientation =
     currentPreview?.orientation ?? currentBaselinePreview?.orientation ?? null;
-  // RAW 的“原图/占位”使用当前内存预览；普通图片直接使用原文件。
+  // RAW 的“原图/占位”使用当前内存预览；普通图片优先使用后端
+  // baseline blob，避免 asset:// 在部分导入路径下加载失败导致画布空白。
   const fileSrc = focused.is_raw ? null : safeConvertFileSrc(focused.file_path);
-  const originalSrc = focused.is_raw ? baselineSrc : fileSrc;
+  const originalSrc = focused.is_raw ? baselineSrc : (baselineSrc ?? fileSrc);
   const showingOriginal = showOriginal && !!originalSrc;
-  const placeholderSrc = focused.is_raw ? null : fileSrc;
+  const placeholderSrc = focused.is_raw ? null : (baselineSrc ?? fileSrc);
   const displaySrc = previewSrc ?? baselineSrc ?? placeholderSrc;
   const showGpuInteractiveLayer =
     imgVisible &&
