@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "FujiSim",
+  "productName": "FotoForge",
   "version": "1.0.1",
-  "identifier": "com.fujisim.app",
+  "identifier": "com.fotoforge.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "FujiSim",
+        "title": "FotoForge",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
@@ -52,7 +52,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://static.ai520.wiki/fujisim/latest.json"
+        "https://static.ai520.wiki/fotoforge/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0MjE1OTE4QzE1QTA2NUEKUldSYUJsckJHRmtoUk9TZ05MbU1RQzBvMmFPQjJtbEUxWnhYWXhsVkREZS9NdEdmcTBSdkY3Z2YK",
       "windows": { "installMode": "passive" }

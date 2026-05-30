@@ -61,14 +61,14 @@ async function findArtifacts(version) {
   for (const target of candidates) {
     const dir = bundleDir(target);
     if (!existsSync(dir)) continue;
-    const tarGz = path.join(dir, `FujiSim_${version}_${suffixFor(target)}.app.tar.gz`);
+    const tarGz = path.join(dir, `FotoForge_${version}_${suffixFor(target)}.app.tar.gz`);
     const sig = `${tarGz}.sig`;
     const dmg = path.join(
       ROOT,
       "src-tauri/target",
       target,
       "release/bundle/dmg",
-      `FujiSim_${version}_${suffixFor(target)}.dmg`
+      `FotoForge_${version}_${suffixFor(target)}.dmg`
     );
     if (existsSync(tarGz) && existsSync(sig)) {
       found[target] = { tarGz, sig, dmg: existsSync(dmg) ? dmg : null };
@@ -99,7 +99,7 @@ async function main() {
     bucket: process.env.ALIYUN_OSS_BUCKET,
   });
 
-  const prefix = process.env.ALIYUN_OSS_PATH_PREFIX || "fujisim";
+  const prefix = process.env.ALIYUN_OSS_PATH_PREFIX || "fotoforge";
   const platforms = {};
 
   for (const [target, files] of Object.entries(artifacts)) {

@@ -71,7 +71,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>("jpeg");
   const [quality, setQuality] = useState(92);
   const [destKind, setDestKind] = useState<"subfolder" | "path">("subfolder");
-  const [subfolder, setSubfolder] = useState("FujiSim_Export");
+  const [subfolder, setSubfolder] = useState("FotoForge_Export");
   const [destPath, setDestPath] = useState("");
   const [resizeMode, setResizeMode] = useState<"none" | "long_edge" | "percent">("none");
   const [longEdge, setLongEdge] = useState(2048);
@@ -97,7 +97,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
     try {
     const destination: Destination =
       destKind === "subfolder"
-        ? { kind: "subfolder", name: subfolder || "FujiSim_Export" }
+        ? { kind: "subfolder", name: subfolder || "FotoForge_Export" }
         : { kind: "path", path: destPath };
     const resize: ResizeSpec | null =
       resizeMode === "long_edge"
@@ -126,7 +126,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
     const watermarkLayers: Record<number, string> = {};
     if (watermark.enabled) {
       const systemDataDir = await dataDir();
-      const layerDir = await join(systemDataDir, "FujiSim", "watermarks");
+      const layerDir = await join(systemDataDir, "FotoForge", "watermarks");
       await mkdir(layerDir, { recursive: true });
       await Promise.all(targetIds.map(async (assetId) => {
         const asset = assets.find((a) => a?.id === assetId);
@@ -200,7 +200,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps) {
                   </SelectContent>
                 </Select>
                 {destKind === "subfolder" ? (
-                  <Input value={subfolder} onChange={(e) => setSubfolder(e.target.value)} placeholder="FujiSim_Export" />
+                  <Input value={subfolder} onChange={(e) => setSubfolder(e.target.value)} placeholder="FotoForge_Export" />
                 ) : (
                   <div className="flex flex-1 gap-1 items-center">
                     <Input value={destPath} onChange={(e) => setDestPath(e.target.value)} placeholder="/path" />

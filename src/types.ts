@@ -365,7 +365,7 @@ export const DEFAULT_WATERMARK: WatermarkSettings = {
   enabled: false,
   kind: "text",
   source: "builtin",
-  text: "© FujiSim",
+  text: "© FotoForge",
   fontSize: 32,
   fontFamily: "Arial, sans-serif",
   color: "#ffffff",

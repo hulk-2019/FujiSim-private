@@ -1,6 +1,6 @@
 {
-  "name": "fujisim",
-  "description": "A cross-platform desktop application for high-fidelity Fujifilm film simulation, built with Tauri 2, Rust, React 18, and TypeScript.",
+  "name": "fotoforge",
+  "description": "A cross-platform desktop application for high-fidelity Fotofilm film simulation, built with Tauri 2, Rust, React 18, and TypeScript.",
   "private": true,
   "version": "1.0.1",
   "type": "module",
@@ -15,7 +15,7 @@
     "build:mac-arm": "rm -rf src-tauri/target/aarch64-apple-darwin/release/bundle && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build --target aarch64-apple-darwin --bundles app,dmg",
     "build:mac-x64": "rm -rf src-tauri/target/x86_64-apple-darwin/release/bundle && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build --target x86_64-apple-darwin --bundles app,dmg",
     "build:win": "rm -rf src-tauri/target/x86_64-pc-windows-msvc/release/bundle && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build --target x86_64-pc-windows-msvc",
-    "gen:keypair": "echo '⚠️  此命令将覆盖现有密钥！老用户将无法收到新更新。' && pnpm tauri signer generate -w ~/.tauri/fujisim.key && echo '✅ 已生成。请立即将 ~/.tauri/fujisim.key{,.pub} 备份到离线介质（U 盘 / 1Password）'",
+    "gen:keypair": "echo '⚠️  此命令将覆盖现有密钥！老用户将无法收到新更新。' && pnpm tauri signer generate -w ~/.tauri/fotoforge.key && echo '✅ 已生成。请立即将 ~/.tauri/fotoforge.key{,.pub} 备份到离线介质（U 盘 / 1Password）'",
     "version:sync": "node scripts/bump-version.mjs",
     "prebuild:mac": "pnpm version:sync",
     "prebuild:mac-arm": "pnpm version:sync",

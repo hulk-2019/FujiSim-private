@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "FujiSim default capabilities",
+  "description": "FotoForge default capabilities",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -20,15 +20,15 @@
     "fs:allow-write-file",
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "$DATA/FujiSim/**" }]
+      "allow": [{ "path": "$DATA/FotoForge/**" }]
     },
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "$DATA/FujiSim/watermarks/**" }]
+      "allow": [{ "path": "$DATA/FotoForge/watermarks/**" }]
     },
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "$DATA/FujiSim/watermarks" }]
+      "allow": [{ "path": "$DATA/FotoForge/watermarks" }]
     },
     "shell:default",
     "updater:default"

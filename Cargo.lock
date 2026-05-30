@@ -1331,7 +1331,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fujisim"
+name = "fotoforge"
 version = "1.0.1"
 dependencies = [
  "anyhow",

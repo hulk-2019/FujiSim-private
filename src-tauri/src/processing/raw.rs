@@ -236,7 +236,7 @@ pub fn decode_raw_rgb16_for_preview(
     decode_raw_rgb16_from_bytes(&data, max_edge)
 }
 
-/// Decode a RAW preview base without FujiSim's display baseline tone.
+/// Decode a RAW preview base without FotoForge's display baseline tone.
 ///
 /// This is the authority source for interactive previews: callers resize this
 /// linear proxy first, then apply the app baseline tone and filter pipeline on

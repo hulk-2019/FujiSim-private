@@ -53,7 +53,7 @@ const en = {
     importLut: "Import LUT",
     importFiles: "Choose files (multi-select)",
     importDir: "Choose folder (recursive scan)",
-    lutAppliedNotice: "User LUT applied — Fuji recipe bypassed; sliders still active.",
+    lutAppliedNotice: "User LUT applied — Foto recipe bypassed; sliders still active.",
     exposure: "Exposure",
     contrast: "Contrast",
     brightness: "Brightness",

@@ -7,7 +7,7 @@
 //! so the shader only needs to sample rows 0–2 once each.
 
 use crate::processing::curves::{self, ToneCurve};
-use crate::processing::fuji;
+use crate::processing::foto;
 use crate::processing::pipeline::FilterSettings;
 
 pub const LUT_LEN: usize = 1024;
@@ -15,7 +15,7 @@ pub const LUT_LEN: usize = 1024;
 /// Returns 4 LUTs of length LUT_LEN, in order [R, G, B, reserved_zeros].
 /// Each of R/G/B encodes the full CPU composition: rc → user_rgb → user_per_ch.
 pub fn bake(settings: &FilterSettings) -> [Vec<f32>; 4] {
-    let profile = fuji::lookup(&settings.base_simulation);
+    let profile = foto::lookup(&settings.base_simulation);
     let base = ToneCurve::build(0.0, 0.0, profile.contrast);
     let (rc, gc, bc) =
         curves::build_per_channel_curves(&base, profile.r_tilt, profile.g_tilt, profile.b_tilt);

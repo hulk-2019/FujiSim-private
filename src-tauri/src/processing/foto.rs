@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// 这些数值不是从富士官方拿到的"科学解"，而是基于公开特征观察的近似配方，
 /// 调出来的视觉风格接近真机直出 JPEG，可作为后期"二次创作起点"。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct FujiProfile {
+pub struct FotoProfile {
     pub name: &'static str,
     pub r_tilt: f32,
     pub g_tilt: f32,
@@ -32,7 +32,7 @@ pub struct FujiProfile {
     pub split_shadow: (f32, f32, f32),
 }
 
-impl FujiProfile {
+impl FotoProfile {
     /// 一个"无操作"基线，所有偏移都为 0。其它预设通过 struct update syntax 在此之上覆盖关键字段。
     pub const fn neutral(name: &'static str) -> Self {
         Self {
@@ -59,13 +59,13 @@ impl FujiProfile {
 ///
 /// 这里硬编码 13 个内置预设的特征值，调色师可以直接在源码中调整某个预设的味道，
 /// 重启即可生效——种子写入逻辑会用 UPSERT 同步到 SQLite。
-pub fn lookup(name: &str) -> FujiProfile {
+pub fn lookup(name: &str) -> FotoProfile {
     match name {
         // "Pass-Through" 是为"用户自定义 LUT"分支准备的恒等配方：
         // 所有偏移都是 0，pipeline 中的曲线/Split Toning/饱和度等步骤天然变成 no-op，
         // 真正起作用的就只有用户滑块（高光/阴影等）和外挂 LUT。
-        "Pass-Through" => FujiProfile::neutral("Pass-Through"),
-        "Provia" => FujiProfile {
+        "Pass-Through" => FotoProfile::neutral("Pass-Through"),
+        "Provia" => FotoProfile {
             name: "Provia",
             contrast: 0.15,
             saturation: 0.10,
@@ -74,9 +74,9 @@ pub fn lookup(name: &str) -> FujiProfile {
             b_tilt: -0.02,
             split_highlight: (1.02, 1.0, 0.98),
             split_shadow: (0.98, 1.0, 1.02),
-            ..FujiProfile::neutral("Provia")
+            ..FotoProfile::neutral("Provia")
         },
-        "Velvia" => FujiProfile {
+        "Velvia" => FotoProfile {
             name: "Velvia",
             contrast: 0.35,
             saturation: 0.55,
@@ -88,9 +88,9 @@ pub fn lookup(name: &str) -> FujiProfile {
             blue_shift: -0.04,
             split_highlight: (1.06, 1.02, 0.96),
             split_shadow: (1.02, 1.0, 0.94),
-            ..FujiProfile::neutral("Velvia")
+            ..FotoProfile::neutral("Velvia")
         },
-        "Astia" => FujiProfile {
+        "Astia" => FotoProfile {
             name: "Astia",
             contrast: 0.05,
             saturation: -0.05,
@@ -100,9 +100,9 @@ pub fn lookup(name: &str) -> FujiProfile {
             red_shift: 0.02,
             split_highlight: (1.03, 1.0, 0.97),
             split_shadow: (1.0, 1.0, 1.02),
-            ..FujiProfile::neutral("Astia")
+            ..FotoProfile::neutral("Astia")
         },
-        "Classic Chrome" => FujiProfile {
+        "Classic Chrome" => FotoProfile {
             name: "Classic Chrome",
             contrast: 0.25,
             saturation: -0.20,
@@ -114,23 +114,23 @@ pub fn lookup(name: &str) -> FujiProfile {
             fade: 0.12,
             split_highlight: (0.96, 0.98, 1.04),
             split_shadow: (0.94, 0.96, 1.06),
-            ..FujiProfile::neutral("Classic Chrome")
+            ..FotoProfile::neutral("Classic Chrome")
         },
-        "Pro Neg Std" => FujiProfile {
+        "Pro Neg Std" => FotoProfile {
             name: "Pro Neg Std",
             contrast: -0.10,
             saturation: -0.15,
             r_tilt: 0.01,
-            ..FujiProfile::neutral("Pro Neg Std")
+            ..FotoProfile::neutral("Pro Neg Std")
         },
-        "Pro Neg Hi" => FujiProfile {
+        "Pro Neg Hi" => FotoProfile {
             name: "Pro Neg Hi",
             contrast: 0.10,
             saturation: -0.05,
             r_tilt: 0.02,
-            ..FujiProfile::neutral("Pro Neg Hi")
+            ..FotoProfile::neutral("Pro Neg Hi")
         },
-        "Eterna" => FujiProfile {
+        "Eterna" => FotoProfile {
             name: "Eterna",
             contrast: -0.20,
             saturation: -0.30,
@@ -140,9 +140,9 @@ pub fn lookup(name: &str) -> FujiProfile {
             fade: 0.18,
             split_highlight: (0.96, 1.0, 1.04),
             split_shadow: (1.02, 1.0, 0.96),
-            ..FujiProfile::neutral("Eterna")
+            ..FotoProfile::neutral("Eterna")
         },
-        "Classic Neg" => FujiProfile {
+        "Classic Neg" => FotoProfile {
             name: "Classic Neg",
             contrast: 0.30,
             saturation: 0.05,
@@ -155,9 +155,9 @@ pub fn lookup(name: &str) -> FujiProfile {
             fade: 0.08,
             split_highlight: (1.04, 0.96, 0.98),
             split_shadow: (0.92, 0.96, 1.05),
-            ..FujiProfile::neutral("Classic Neg")
+            ..FotoProfile::neutral("Classic Neg")
         },
-        "Nostalgic Neg" => FujiProfile {
+        "Nostalgic Neg" => FotoProfile {
             name: "Nostalgic Neg",
             contrast: 0.10,
             saturation: 0.0,
@@ -169,37 +169,37 @@ pub fn lookup(name: &str) -> FujiProfile {
             fade: 0.16,
             split_highlight: (1.05, 1.0, 0.94),
             split_shadow: (1.02, 0.98, 0.92),
-            ..FujiProfile::neutral("Nostalgic Neg")
+            ..FotoProfile::neutral("Nostalgic Neg")
         },
-        "Acros" => FujiProfile {
+        "Acros" => FotoProfile {
             name: "Acros",
             contrast: 0.30,
             saturation: 0.0,
             monochrome: true,
             mono_tint: (1.0, 1.0, 1.0),
-            ..FujiProfile::neutral("Acros")
+            ..FotoProfile::neutral("Acros")
         },
-        "Acros + Y" => FujiProfile {
+        "Acros + Y" => FotoProfile {
             name: "Acros + Y",
             contrast: 0.30,
             monochrome: true,
             mono_tint: (1.10, 1.0, 0.85),
-            ..FujiProfile::neutral("Acros + Y")
+            ..FotoProfile::neutral("Acros + Y")
         },
-        "Acros + R" => FujiProfile {
+        "Acros + R" => FotoProfile {
             name: "Acros + R",
             contrast: 0.35,
             monochrome: true,
             mono_tint: (1.30, 0.9, 0.7),
-            ..FujiProfile::neutral("Acros + R")
+            ..FotoProfile::neutral("Acros + R")
         },
-        "Monochrome" => FujiProfile {
+        "Monochrome" => FotoProfile {
             name: "Monochrome",
             contrast: 0.15,
             monochrome: true,
-            ..FujiProfile::neutral("Monochrome")
+            ..FotoProfile::neutral("Monochrome")
         },
-        _ => FujiProfile::neutral("Provia"),
+        _ => FotoProfile::neutral("Provia"),
     }
 }
 

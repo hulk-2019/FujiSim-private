@@ -3,7 +3,7 @@ use thiserror::Error;
 /// 全局 `Result` 别名，模块内默认使用，省去到处写 `std::result::Result`。
 pub type Result<T> = std::result::Result<T, AppError>;
 
-/// FujiSim 后端的统一错误类型。
+/// FotoForge 后端的统一错误类型。
 ///
 /// 设计原则：
 /// - **按底层来源分桶**：IO、SQL、图像、Exif 等各占一个 variant，便于 `match` 时分别处理；

@@ -4,7 +4,7 @@ import type { AppState, FacetSlice } from "../types";
 
 export const createFacetSlice: StateCreator<AppState, [], [], FacetSlice> = (set) => ({
   cameras: [],
-  fujiSimulations: [
+  fotoSimulations: [
     "Provia", "Velvia", "Astia", "Classic Chrome",
     "Pro Neg Std", "Pro Neg Hi", "Eterna", "Classic Neg",
     "Nostalgic Neg", "Acros", "Acros + Y", "Acros + R", "Monochrome",
@@ -13,8 +13,8 @@ export const createFacetSlice: StateCreator<AppState, [], [], FacetSlice> = (set
   refreshFacets: async () => {
     const [cams, sims] = await Promise.all([
       api.distinctCameras().catch(() => []),
-      api.listFujiSimulations().catch(() => []),
+      api.listFotoSimulations().catch(() => []),
     ]);
-    set({ cameras: cams, fujiSimulations: sims });
+    set({ cameras: cams, fotoSimulations: sims });
   },
 });

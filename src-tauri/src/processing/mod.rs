@@ -8,7 +8,7 @@
 //! 模块划分：
 //! - [`color`]：基础颜色数学（HSL 转换、归一化、Saturation/WB Shift）
 //! - [`curves`]：色调曲线 LUT
-//! - [`fuji`]：13 个内置富士预设的"配方"
+//! - [`foto`]：13 个内置富士预设的"配方"
 //! - [`grain`]：胶片颗粒合成
 //! - [`lut`]：3D LUT (`.cube`) 加载与三线性插值
 //! - [`pipeline`]：把上述组件组装起来的主流程
@@ -21,7 +21,7 @@ use std::path::Path;
 pub mod color;
 pub mod curves;
 pub mod dehaze;
-pub mod fuji;
+pub mod foto;
 pub mod gpu;
 pub mod grain;
 pub mod histogram;

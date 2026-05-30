@@ -20,7 +20,7 @@ export function AboutTab() {
         <div className="w-16 h-16 rounded-2xl bg-zinc-800/60 flex items-center justify-center">
           <img
             src="/icon.png"
-            alt="FujiSim"
+            alt="FotoForge"
             className="w-12 h-12"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
@@ -28,7 +28,7 @@ export function AboutTab() {
           />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-zinc-100">FujiSim</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">FotoForge</h2>
           <p className="text-sm text-zinc-400">
             {t("settings.about.version")} {version}
           </p>

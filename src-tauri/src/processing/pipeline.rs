@@ -7,7 +7,7 @@ use crate::processing::tone::{
 use crate::processing::{
     color::{self, f_to_u16, u16_to_f},
     curves::{self, ToneCurve},
-    fuji,
+    foto,
     grain::{self},
     hsl_adjust,
     lut::Lut3D,
@@ -278,7 +278,7 @@ impl Default for FilterSettings {
 /// 2.  **曝光**（Exposure）—— 线性增益，2^EV；
 /// 3.  **明亮度 + 对比度**（Brightness / Contrast）—— 在分段曲线之前先把整体亮度/对比拉到位；
 /// 4.  **四段色调**（Highlight / Shadow / White / Black）—— 高光、阴影、白阶、黑阶分段调整；
-/// 5.  **分通道色调曲线**（Fuji 预设）+ 用户自定义点曲线 —— 实现富士的色彩偏好；
+/// 5.  **分通道色调曲线**（Foto 预设）+ 用户自定义点曲线 —— 实现富士的色彩偏好；
 /// 6.  **Split Toning** —— 高光/阴影分别染色，模拟胶片的"暖高光冷阴影"；
 /// 7.  **Vibrance + Saturation**（含预设饱和度）—— 低饱和优先 + 全局饱和度叠加；
 /// 8.  **Color Chrome** —— 高饱和区进一步加饱和（富士机内同名功能）；
@@ -303,9 +303,9 @@ pub fn process_image_cpu(
     }
 
     let (w, h) = src.dimensions();
-    let profile = fuji::lookup(&settings.base_simulation);
+    let profile = foto::lookup(&settings.base_simulation);
 
-    // Fuji preset's contrast curve. User's highlight_tone/shadow_tone are now applied
+    // Foto preset's contrast curve. User's highlight_tone/shadow_tone are now applied
     // separately via apply_tone_segments_pixel; pass 0 here so the preset curve isn't
     // double-counted.
     let curve = ToneCurve::build(0.0, 0.0, profile.contrast);
@@ -388,12 +388,12 @@ pub fn process_image_cpu(
         g = ng;
         b = nb;
 
-        // [5] 分通道色调曲线 (Fuji preset)
+        // [5] 分通道色调曲线 (Foto preset)
         r = rc.apply(r);
         g = gc.apply(g);
         b = bc.apply(b);
 
-        // [5b] User point curves (applied on top of Fuji preset curves)
+        // [5b] User point curves (applied on top of Foto preset curves)
         if let Some(ref uc) = user_rgb_curve {
             r = uc.apply(r);
             g = uc.apply(g);
@@ -431,7 +431,7 @@ pub fn process_image_cpu(
         g = ng;
         b = nb;
 
-        // [7b] Saturation (global) + Fuji preset's saturation
+        // [7b] Saturation (global) + Foto preset's saturation
         // preset.saturation 范围是 -1..+1，折算到 -100..+100，与用户值合并
         #[allow(clippy::cast_possible_truncation)]
         let combined_sat = settings.color_saturation + (profile.saturation * 100.0) as i32;

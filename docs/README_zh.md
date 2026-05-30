@@ -1,4 +1,4 @@
-# <img src="../public/icon.png" width="32" align="absmiddle" /> FujiSim
+# <img src="../public/icon.png" width="32" align="absmiddle" /> FotoForge
 
 [English](../README.md) | [中文](README_zh.md)
 
@@ -13,19 +13,19 @@
 
 基于 **Tauri 2 + Rust + React 18 + TypeScript + Tailwind + SQLite** 的跨平台桌面应用，实现资产管理、富士胶片模拟、批量导出等功能。
 
-![FujiSim 预览图](../public/image.png)
+![FotoForge 预览图](../public/image.png)
 
 ---
 
 ## 最低系统要求
 
-FujiSim 的色彩管线通过 wgpu 在 GPU 上运行（macOS 使用 Metal，Windows 使用 DX12，Linux 使用 Vulkan）。最低支持配置：
+FotoForge 的色彩管线通过 wgpu 在 GPU 上运行（macOS 使用 Metal，Windows 使用 DX12，Linux 使用 Vulkan）。最低支持配置：
 
 - **macOS**: 10.13+（支持 Metal）
 - **Windows**: 10+（支持 DX12）
 - **Linux**: GPU 驱动需支持 Vulkan 或 OpenGL 4.0+
 
-如果你的系统没有兼容的 GPU，FujiSim 将以"未找到 GPU 适配器"错误拒绝启动——目前没有纯 CPU 兜底。
+如果你的系统没有兼容的 GPU，FotoForge 将以"未找到 GPU 适配器"错误拒绝启动——目前没有纯 CPU 兜底。
 
 ---
 
@@ -70,7 +70,7 @@ FujiSim 的色彩管线通过 wgpu 在 GPU 上运行（macOS 使用 Metal，Wind
 - **进程内 LUT 缓存**：每个 `.cube` 文件解析一次后由 `Arc` 共享，预览拖滑块、批量导出 1000 张共用同一份内存数据，永远不会重复读盘；删除用户 LUT 时同步清除缓存
 - **流式内存峰值**：预览流水线在每一阶段完成后立即 drop 上一阶段的中间缓冲（源图 / resize / 处理后）—— 渲染单张大图时内存不会同时驻留多份大缓冲
 - **事件监听器安全**：前端 `listen()` 注册采用 `cancelled` 标志兜底，处理"组件卸载早于 Promise resolve"的竞态，杜绝监听器泄漏与"对已卸载组件 setState"
-- **`reset_app_data` IPC**：单次调用关闭 SQLite 连接池（释放 `library.db-wal` / `-shm` 句柄）→ 清空内存 LUT 缓存 → 递归删除整个 `Application Support/FujiSim/` 目录。可用于"重置应用"按钮，或集成到卸载脚本中保证零残留
+- **`reset_app_data` IPC**：单次调用关闭 SQLite 连接池（释放 `library.db-wal` / `-shm` 句柄）→ 清空内存 LUT 缓存 → 递归删除整个 `Application Support/FotoForge/` 目录。可用于"重置应用"按钮，或集成到卸载脚本中保证零残留
 
 ---
 
@@ -103,7 +103,7 @@ FujiSim 的色彩管线通过 wgpu 在 GPU 上运行（macOS 使用 Metal，Wind
 │   │   ├── db/                    # SQLite 数据库持久层 (连接池 + Schema)
 │   │   │   └── user_luts.rs       # 用户 3D LUT 库 CRUD
 │   │   ├── asset/                 # 目录扫描、文件列表扫描、Exif 解析、文件系统操作
-│   │   ├── processing/            # 核心色彩引擎流水线 (fuji预设, 曲线, LUT)
+│   │   ├── processing/            # 核心色彩引擎流水线 (FotoForge预设, 曲线, LUT)
 │   │   └── export/                # 异步导出与水印压制模块
 │   └── Cargo.toml                 # Rust 依赖清单
 └── package.json                   # 前端依赖及启动脚本
@@ -114,10 +114,10 @@ FujiSim 的色彩管线通过 wgpu 在 GPU 上运行（macOS 使用 Metal，Wind
 ## 💾 数据库位置
 
 应用程序的 SQLite 数据库默认存储在：
-- **macOS**: `~/Library/Application Support/FujiSim/library.db`
+- **macOS**: `~/Library/Application Support/FotoForge/library.db`
 
 用户导入的 3D LUT 副本存储在：
-- **macOS**: `~/Library/Application Support/FujiSim/luts/`
+- **macOS**: `~/Library/Application Support/FotoForge/luts/`
 
 > ⚠️ 首次启动应用时，系统会自动建表并写入 13 个内置的富士胶片预设。
 
@@ -174,10 +174,10 @@ pnpm build:mac
 
 | 命令 | `.app` / 可执行文件 | 安装包 |
 |---|---|---|
-| `pnpm build:mac-arm` | `target/aarch64-apple-darwin/release/bundle/macos/FujiSim.app` | `target/aarch64-apple-darwin/release/bundle/dmg/FujiSim_<版本>_aarch64.dmg` |
-| `pnpm build:mac-x64` | `target/x86_64-apple-darwin/release/bundle/macos/FujiSim.app` | `target/x86_64-apple-darwin/release/bundle/dmg/FujiSim_<版本>_x64.dmg` |
-| `pnpm build:mac` | `target/universal-apple-darwin/release/bundle/macos/FujiSim.app` | `target/universal-apple-darwin/release/bundle/dmg/FujiSim_<版本>_universal.dmg` |
-| `pnpm build:win` | `target/x86_64-pc-windows-msvc/release/FujiSim.exe` | `target/x86_64-pc-windows-msvc/release/bundle/msi/FujiSim_<版本>_x64_en-US.msi`<br>`target/x86_64-pc-windows-msvc/release/bundle/nsis/FujiSim_<版本>_x64-setup.exe` |
+| `pnpm build:mac-arm` | `target/aarch64-apple-darwin/release/bundle/macos/FotoForge.app` | `target/aarch64-apple-darwin/release/bundle/dmg/FotoForge_<版本>_aarch64.dmg` |
+| `pnpm build:mac-x64` | `target/x86_64-apple-darwin/release/bundle/macos/FotoForge.app` | `target/x86_64-apple-darwin/release/bundle/dmg/FotoForge_<版本>_x64.dmg` |
+| `pnpm build:mac` | `target/universal-apple-darwin/release/bundle/macos/FotoForge.app` | `target/universal-apple-darwin/release/bundle/dmg/FotoForge_<版本>_universal.dmg` |
+| `pnpm build:win` | `target/x86_64-pc-windows-msvc/release/FotoForge.exe` | `target/x86_64-pc-windows-msvc/release/bundle/msi/FotoForge_<版本>_x64_en-US.msi`<br>`target/x86_64-pc-windows-msvc/release/bundle/nsis/FotoForge_<版本>_x64-setup.exe` |
 
 > 💡 文件名里的 `<版本>` 取自 [tauri.conf.json](../src-tauri/tauri.conf.json) 中的 `version` 字段，当前是 `1.0.1`。
 

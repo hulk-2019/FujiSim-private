@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    fujisim_lib::run()
+    fotoforge_lib::run()
 }

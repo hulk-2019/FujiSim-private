@@ -1,13 +1,13 @@
 [package]
-name = "fujisim"
+name = "fotoforge"
 version = "1.0.1"
-description = "High-fidelity Fujifilm film simulation desktop app"
-authors = ["FujiSim Team"]
+description = "High-fidelity Fotofilm film simulation desktop app"
+authors = ["FotoForge Team"]
 edition = "2021"
 rust-version = "1.75"
 
 [lib]
-name = "fujisim_lib"
+name = "fotoforge_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

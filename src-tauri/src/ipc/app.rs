@@ -7,8 +7,8 @@ use crate::state::SharedState;
 use tauri::State;
 
 #[tauri::command]
-pub async fn list_fuji_simulations() -> Result<Vec<String>> {
-    Ok(processing::fuji::BUILTIN_NAMES
+pub async fn list_foto_simulations() -> Result<Vec<String>> {
+    Ok(processing::foto::BUILTIN_NAMES
         .iter()
         .map(|s| s.to_string())
         .collect())

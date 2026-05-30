@@ -114,7 +114,7 @@ export const api = {
     invoke<void>("set_preset_category", { presetId, categoryId }),
   setUserLutCategory: (lutId: number, categoryId: number | null) =>
     invoke<void>("set_user_lut_category", { lutId, categoryId }),
-  listFujiSimulations: () => invoke<string[]>("list_fuji_simulations"),
+  listFotoSimulations: () => invoke<string[]>("list_foto_simulations"),
 
   // ===== 用户 3D LUT 库 =====
   /** 批量导入 .cube；后端会复制到数据目录、校验合法、入库，单条失败会被跳过 */

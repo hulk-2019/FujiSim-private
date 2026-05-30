@@ -1,7 +1,7 @@
 // 防止 release 构建下 Windows 出现额外的控制台窗口（不影响其它平台）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! FujiSim 后端库入口。
+//! FotoForge 后端库入口。
 //!
 //! 这里只做三件事：
 //! 1. 装配 `tracing` 日志；
@@ -36,7 +36,7 @@ pub fn run() {
     // 安装日志订阅器。`try_init` 而非 `init`：避免在测试环境多次初始化报错。
     // 过滤指令使用 `parse` 而不是 `unwrap`，解析失败则回退到默认 EnvFilter。
     let filter = tracing_subscriber::EnvFilter::from_default_env()
-        .add_directive("fujisim=info".parse().expect("内置日志指令必须可解析"));
+        .add_directive("fotoforge=info".parse().expect("内置日志指令必须可解析"));
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .try_init()
@@ -111,7 +111,7 @@ pub fn run() {
             ipc::compute_histogram,
             ipc::start_batch_export,
             ipc::get_task,
-            ipc::list_fuji_simulations,
+            ipc::list_foto_simulations,
             ipc::reset_app_data,
             // ===== 水印自定义预设 =====
             ipc::list_watermark_presets,
@@ -137,5 +137,5 @@ pub fn run() {
             ipc::get_all_settings,
         ])
         .run(tauri::generate_context!())
-        .expect("FujiSim 运行时启动失败");
+        .expect("FotoForge 运行时启动失败");
 }

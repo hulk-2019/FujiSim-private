@@ -2,7 +2,7 @@
 //!
 //! Field order MUST match the WGSL `Uniforms` struct in `shaders/color_fused.wgsl`.
 
-use crate::processing::fuji;
+use crate::processing::foto;
 use crate::processing::pipeline::FilterSettings;
 
 #[repr(C)]
@@ -82,7 +82,7 @@ pub struct FilterUniforms {
 
 impl FilterUniforms {
     pub fn from_settings(s: &FilterSettings, width: u32, height: u32) -> Self {
-        let p = fuji::lookup(&s.base_simulation);
+        let p = foto::lookup(&s.base_simulation);
         // preset.saturation is -1..1; user color_saturation is -100..100 (i32).
         // Combine here so the shader does a single multiply.
         let combined_sat = s.color_saturation as f32 + p.saturation * 100.0;

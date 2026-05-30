@@ -141,7 +141,7 @@ impl AppState {
     pub async fn init() -> Result<SharedState> {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("FujiSim");
+            .join("FotoForge");
         std::fs::create_dir_all(&data_dir)?;
         let lut_dir = data_dir.join("luts");
         std::fs::create_dir_all(&lut_dir)?;
@@ -256,11 +256,11 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// 把 [`crate::processing::fuji::BUILTIN_NAMES`] 中的每个名字写入 `filter_presets` 表，
+/// 把 [`crate::processing::foto::BUILTIN_NAMES`] 中的每个名字写入 `filter_presets` 表，
 /// `is_builtin=1` 标识它们不可被用户删除。
 async fn seed_builtin_presets(pool: &SqlitePool) -> Result<()> {
     use crate::db::presets::{upsert, NewFilterPreset};
-    for name in crate::processing::fuji::BUILTIN_NAMES {
+    for name in crate::processing::foto::BUILTIN_NAMES {
         let preset = NewFilterPreset {
             name: (*name).to_string(),
             base_simulation: (*name).to_string(),

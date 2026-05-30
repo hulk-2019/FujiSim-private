@@ -4,8 +4,8 @@ import type { Asset } from "@/types";
 
 const imageAsset: Asset = {
   id: 1,
-  file_path: "/tmp/fujisim-test.jpg",
-  file_name: "fujisim-test.jpg",
+  file_path: "/tmp/fotoforge-test.jpg",
+  file_name: "fotoforge-test.jpg",
   file_size: 100,
   star_rating: 0,
   width: 1000,

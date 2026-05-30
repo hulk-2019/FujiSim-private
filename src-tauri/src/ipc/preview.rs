@@ -397,7 +397,7 @@ pub async fn get_preview(
                     "edit"
                 };
                 let out_path = std::env::temp_dir()
-                    .join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
+                    .join(format!("fotoforge_preview_{asset_id}_{token}_{variant}.jpg"));
                 std::fs::write(&out_path, &jpeg)
                     .map_err(|e| AppError::other(format!("preview write: {e}")))?;
                 let path = out_path.to_string_lossy().to_string();

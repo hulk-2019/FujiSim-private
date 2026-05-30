@@ -47,7 +47,7 @@ export default {
           DEFAULT: "hsl(240 10% 4%)",
           foreground: "hsl(0 0% 98%)",
         },
-        fuji: {
+        foto: {
           provia: "#5a8fbe",
           velvia: "#d14a3a",
           astia: "#e6a979",

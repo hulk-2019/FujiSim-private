@@ -338,7 +338,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 32,
             "fontFamily": "Arial, sans-serif",
             "color": "#ffffff",
@@ -353,7 +353,7 @@ mod tests {
         });
         let svg = build_watermark_svg_from_json(&settings, 600, 400).unwrap();
         assert!(svg.contains(r#"width="600""#));
-        assert!(svg.contains("FujiSim"));
+        assert!(svg.contains("FotoForge"));
     }
 
     #[test]
@@ -362,7 +362,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 32,
             "fontFamily": "Arial, sans-serif",
             "color": "#ffffff",
@@ -397,7 +397,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 32,
             "fontFamily": "'Comic Sans MS', cursive",
             "color": "#ffffff",
@@ -423,7 +423,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 32,
             "fontFamily": "'Comic Sans MS', cursive",
             "color": "#ffffff",
@@ -458,7 +458,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 32,
             "fontFamily": "Arial, sans-serif",
             "color": "#ffffff",
@@ -482,7 +482,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 54,
             "fontFamily": "'Comic Sans MS', cursive",
             "color": "#ffffff",
@@ -516,7 +516,7 @@ mod tests {
             "enabled": true,
             "kind": "text",
             "source": "builtin",
-            "text": "FujiSim",
+            "text": "FotoForge",
             "fontSize": 54,
             "fontFamily": "'Comic Sans MS', cursive",
             "color": "#ffffff",

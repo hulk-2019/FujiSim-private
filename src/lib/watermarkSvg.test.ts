@@ -5,7 +5,7 @@ import { DEFAULT_WATERMARK } from "@/types";
 describe("buildWatermarkSvg", () => {
   it("builds a full-canvas svg for a text watermark", () => {
     const svg = buildWatermarkSvg(
-      { ...DEFAULT_WATERMARK, enabled: true, kind: "text", text: "FujiSim" },
+      { ...DEFAULT_WATERMARK, enabled: true, kind: "text", text: "FotoForge" },
       1200,
       800,
     );
@@ -13,7 +13,7 @@ describe("buildWatermarkSvg", () => {
     expect(svg).toContain("<svg");
     expect(svg).toContain('width="1200"');
     expect(svg).toContain('height="800"');
-    expect(svg).toContain("FujiSim");
+    expect(svg).toContain("FotoForge");
   });
 
   it("accepts imported svg watermark settings", () => {
@@ -83,7 +83,7 @@ describe("buildWatermarkSvg", () => {
         ...DEFAULT_WATERMARK,
         enabled: true,
         kind: "text",
-        text: '<Fuji & "Sim">',
+        text: '<Foto & "Forge">',
         position: "bottom-center",
         fontSize: 24,
       },
@@ -91,7 +91,7 @@ describe("buildWatermarkSvg", () => {
       500,
     );
 
-    expect(svg).toContain("&lt;Fuji &amp; &quot;Sim&quot;&gt;");
+    expect(svg).toContain("&lt;Foto &amp; &quot;Forge&quot;&gt;");
     expect(svg).toContain('text-anchor="middle"');
     expect(svg).toContain('y="500"');
     expect(svg).toContain('dy="-16"');

@@ -188,7 +188,7 @@ export interface FontSlice {
  */
 export interface FacetSlice {
   cameras: string[];
-  fujiSimulations: string[];
+  fotoSimulations: string[]
   /** 刷新筛选下拉里的"相机列表 / 富士预设名"等只读数据 */
   refreshFacets: () => Promise<void>;
 }

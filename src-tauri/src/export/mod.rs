@@ -31,7 +31,7 @@ pub enum ExportFormat {
     Bmp,
 }
 
-/// 输出目录：可以放在原文件旁的子文件夹（默认 `FujiSim_Export`），
+/// 输出目录：可以放在原文件旁的子文件夹（默认 `FotoForge_Export`），
 /// 也可以指定一个绝对路径（批量导出到统一仓库）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -54,7 +54,7 @@ impl Default for ExportSettings {
             format: ExportFormat::Jpeg,
             quality: 92,
             destination: Destination::Subfolder {
-                name: "FujiSim_Export".into(),
+                name: "FotoForge_Export".into(),
             },
             resize: None,
             strip_gps: false,

@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fujisim_lib::processing::gpu::context::GpuContext;
-use fujisim_lib::processing::gpu::process_image_gpu;
-use fujisim_lib::processing::pipeline::{process_image_cpu, FilterSettings};
+use fotoforge_lib::processing::gpu::context::GpuContext;
+use fotoforge_lib::processing::gpu::process_image_gpu;
+use fotoforge_lib::processing::pipeline::{process_image_cpu, FilterSettings};
 use image::{ImageBuffer, Rgb};
 use std::sync::Arc;
 
