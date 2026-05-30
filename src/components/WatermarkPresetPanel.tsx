@@ -9,12 +9,70 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const PRESET_STYLE_KEYS = ["whiteBottom", "blackBottom", "italicCenter", "smallBottomRight"] as const;
-const PRESET_STYLES_DATA: { text: string; fontSize: number; color: string; opacity: number; italic: boolean; position: WatermarkPosition }[] = [
-  { text: "© FujiSim", fontSize: 32, color: "#ffffff", opacity: 0.75, italic: false, position: "bottom-center" },
-  { text: "© FujiSim", fontSize: 32, color: "#000000", opacity: 0.6,  italic: false, position: "bottom-center" },
-  { text: "SAMPLE",    fontSize: 48, color: "#ffffff", opacity: 0.3,  italic: true,  position: "center" },
-  { text: "© 2025",   fontSize: 18, color: "#ffffff", opacity: 0.8,  italic: false, position: "bottom-center" },
+const PRESET_STYLE_KEYS = [
+  "cleanWhite",
+  "softBlack",
+  "goldSignature",
+  "filmStamp",
+  "rubyEditorial",
+  "cyanMinimal",
+  "monoArchive",
+  "limeProof",
+  "warmSerif",
+  "blueCorner",
+  "roseVertical",
+  "amberDate",
+  "silverLabel",
+  "mintCenter",
+  "noirBold",
+  "violetMark",
+  "tealScript",
+  "sandCaption",
+  "redProof",
+  "iceTiny",
+] as const;
+type RecommendedWatermarkStyle = Pick<
+  WatermarkSettings,
+  | "bold"
+  | "color"
+  | "fontFamily"
+  | "fontSize"
+  | "italic"
+  | "italicDegree"
+  | "opacity"
+  | "position"
+  | "rotation"
+  | "shadowBlur"
+  | "shadowColor"
+  | "shadowEnabled"
+  | "shadowOffsetX"
+  | "shadowOffsetY"
+  | "strokeColor"
+  | "strokeEnabled"
+  | "strokeWidth"
+  | "text"
+>;
+const PRESET_STYLES_DATA: RecommendedWatermarkStyle[] = [
+  { text: "© FujiSim", fontSize: 32, fontFamily: "Arial, sans-serif", color: "#ffffff", opacity: 0.76, bold: false, italic: false, italicDegree: 0, position: "bottom-center", rotation: 0, shadowEnabled: true, shadowColor: "#000000", shadowBlur: 4, shadowOffsetX: 1, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "© FujiSim", fontSize: 30, fontFamily: "Arial, sans-serif", color: "#111111", opacity: 0.55, bold: false, italic: false, italicDegree: 0, position: "bottom-center", rotation: 0, shadowEnabled: true, shadowColor: "#ffffff", shadowBlur: 3, shadowOffsetX: 0, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#ffffff", strokeWidth: 0 },
+  { text: "FujiSim", fontSize: 40, fontFamily: "'Brush Script MT', 'Comic Sans MS', cursive", color: "#d8b45a", opacity: 0.82, bold: false, italic: true, italicDegree: 12, position: "bottom-right", rotation: -6, shadowEnabled: true, shadowColor: "#1a1204", shadowBlur: 8, shadowOffsetX: 2, shadowOffsetY: 3, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "FILM 400", fontSize: 24, fontFamily: "'Courier New', Courier, monospace", color: "#f2eee3", opacity: 0.72, bold: true, italic: false, italicDegree: 0, position: "bottom-left", rotation: 0, shadowEnabled: false, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0, strokeEnabled: true, strokeColor: "#101010", strokeWidth: 1.5 },
+  { text: "SAMPLE", fontSize: 46, fontFamily: "Georgia, 'Times New Roman', serif", color: "#d94a72", opacity: 0.38, bold: true, italic: true, italicDegree: 18, position: "center", rotation: -18, shadowEnabled: false, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "© FujiSim", fontSize: 26, fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", color: "#57d8ff", opacity: 0.72, bold: false, italic: false, italicDegree: 0, position: "top-right", rotation: 0, shadowEnabled: true, shadowColor: "#05222d", shadowBlur: 5, shadowOffsetX: 1, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "ARCHIVE", fontSize: 28, fontFamily: "Menlo, Consolas, 'Courier New', monospace", color: "#d6d6d6", opacity: 0.55, bold: false, italic: false, italicDegree: 0, position: "top-left", rotation: 0, shadowEnabled: false, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0, strokeEnabled: true, strokeColor: "#242424", strokeWidth: 1 },
+  { text: "PROOF", fontSize: 52, fontFamily: "Arial, sans-serif", color: "#b7ff2a", opacity: 0.32, bold: true, italic: false, italicDegree: 0, position: "center", rotation: 16, shadowEnabled: false, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0, strokeEnabled: true, strokeColor: "#111111", strokeWidth: 1 },
+  { text: "FujiSim", fontSize: 34, fontFamily: "Palatino, 'Palatino Linotype', 'Book Antiqua', serif", color: "#f0c28b", opacity: 0.78, bold: false, italic: true, italicDegree: 10, position: "bottom-center", rotation: 0, shadowEnabled: true, shadowColor: "#241408", shadowBlur: 6, shadowOffsetX: 1, shadowOffsetY: 2, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "© 2026", fontSize: 22, fontFamily: "Verdana, Geneva, sans-serif", color: "#73a7ff", opacity: 0.86, bold: true, italic: false, italicDegree: 0, position: "bottom-right", rotation: 0, shadowEnabled: true, shadowColor: "#071326", shadowBlur: 4, shadowOffsetX: 1, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "FUJISIM", fontSize: 28, fontFamily: "Futura, 'Century Gothic', Tahoma, sans-serif", color: "#ff7fb0", opacity: 0.62, bold: true, italic: false, italicDegree: 0, position: "right-center", rotation: -90, shadowEnabled: true, shadowColor: "#2a0715", shadowBlur: 5, shadowOffsetX: 1, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "2026.05", fontSize: 24, fontFamily: "'Courier New', Courier, monospace", color: "#f5a524", opacity: 0.82, bold: false, italic: false, italicDegree: 0, position: "bottom-left", rotation: 0, shadowEnabled: true, shadowColor: "#1e1200", shadowBlur: 5, shadowOffsetX: 2, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "FujiSim", fontSize: 30, fontFamily: "Optima, Candara, 'Segoe UI', sans-serif", color: "#c9d1d9", opacity: 0.65, bold: false, italic: false, italicDegree: 0, position: "bottom-right", rotation: 0, shadowEnabled: true, shadowColor: "#000000", shadowBlur: 10, shadowOffsetX: 0, shadowOffsetY: 2, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "ORIGINAL", fontSize: 30, fontFamily: "'Gill Sans', 'Gill Sans MT', Calibri, sans-serif", color: "#7df2c4", opacity: 0.45, bold: true, italic: false, italicDegree: 0, position: "center", rotation: 0, shadowEnabled: false, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0, strokeEnabled: true, strokeColor: "#0d3328", strokeWidth: 1 },
+  { text: "NOIR", fontSize: 42, fontFamily: "Georgia, 'Times New Roman', serif", color: "#0b0b0b", opacity: 0.5, bold: true, italic: false, italicDegree: 0, position: "center", rotation: -10, shadowEnabled: true, shadowColor: "#ffffff", shadowBlur: 4, shadowOffsetX: 1, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#ffffff", strokeWidth: 0 },
+  { text: "SIGNATURE", fontSize: 24, fontFamily: "'Trebuchet MS', sans-serif", color: "#b48cff", opacity: 0.78, bold: true, italic: true, italicDegree: 8, position: "top-center", rotation: 0, shadowEnabled: true, shadowColor: "#180d2b", shadowBlur: 5, shadowOffsetX: 0, shadowOffsetY: 2, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "FujiSim", fontSize: 38, fontFamily: "Zapfino, 'Segoe Script', 'Comic Sans MS', cursive", color: "#2dd4bf", opacity: 0.82, bold: false, italic: true, italicDegree: 14, position: "bottom-left", rotation: -4, shadowEnabled: true, shadowColor: "#042f2e", shadowBlur: 7, shadowOffsetX: 2, shadowOffsetY: 2, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "CAPTION", fontSize: 24, fontFamily: "Baskerville, 'Baskerville Old Face', serif", color: "#dec89f", opacity: 0.7, bold: false, italic: false, italicDegree: 0, position: "bottom-center", rotation: 0, shadowEnabled: true, shadowColor: "#1a1207", shadowBlur: 4, shadowOffsetX: 0, shadowOffsetY: 2, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
+  { text: "DO NOT COPY", fontSize: 36, fontFamily: "Arial, sans-serif", color: "#ff4d4f", opacity: 0.34, bold: true, italic: false, italicDegree: 0, position: "center", rotation: -28, shadowEnabled: false, shadowColor: "#000000", shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0, strokeEnabled: true, strokeColor: "#ffffff", strokeWidth: 1.5 },
+  { text: "©", fontSize: 20, fontFamily: "Arial, sans-serif", color: "#dff7ff", opacity: 0.85, bold: true, italic: false, italicDegree: 0, position: "top-left", rotation: 0, shadowEnabled: true, shadowColor: "#00151c", shadowBlur: 3, shadowOffsetX: 1, shadowOffsetY: 1, strokeEnabled: false, strokeColor: "#000000", strokeWidth: 0 },
 ];
 const CARD_PREVIEW_W = 220;
 const CARD_PREVIEW_H = 84;
@@ -55,15 +113,63 @@ export function WatermarkPresetPanel() {
       name: id,
       text: p.text,
       fontSize: p.fontSize,
+      fontFamily: p.fontFamily,
       color: p.color,
       opacity: p.opacity,
-      bold: false,
+      bold: p.bold,
       italic: p.italic,
+      italicDegree: p.italicDegree,
       position: p.position,
+      rotation: p.rotation,
+      shadowEnabled: p.shadowEnabled,
+      shadowColor: p.shadowColor,
+      shadowBlur: p.shadowBlur,
+      shadowOffsetX: p.shadowOffsetX,
+      shadowOffsetY: p.shadowOffsetY,
+      strokeEnabled: p.strokeEnabled,
+      strokeColor: p.strokeColor,
+      strokeWidth: p.strokeWidth,
       offsetX: 0,
       offsetY: 0,
     });
     setSelectedId(null);
+  }
+
+  function isRecommendedActive(p: typeof presetStyles[number]) {
+    return isRecommendedWatermarkActive(wm, recommendedId(p));
+  }
+
+  function handleRecommendedClick(p: typeof presetStyles[number]) {
+    if (isRecommendedActive(p)) {
+      setWatermark({ enabled: false });
+      return;
+    }
+    applyPreset(p);
+  }
+
+  function isImportedActive(item: typeof userWatermarkSvgs[number]) {
+    return isImportedWatermarkActive(wm, item.id);
+  }
+
+  function handleImportedClick(item: typeof userWatermarkSvgs[number]) {
+    if (isImportedActive(item)) {
+      setWatermark({ enabled: false });
+      return;
+    }
+    applyImportedWatermarkSvg(item);
+  }
+
+  function isSavedPresetActive(preset: WatermarkPreset) {
+    return isSavedWatermarkPresetActive(wm, selectedId, preset.id);
+  }
+
+  function handleSavedPresetClick(preset: WatermarkPreset) {
+    if (isSavedPresetActive(preset)) {
+      setWatermark({ enabled: false });
+      setSelectedId(null);
+      return;
+    }
+    applyWatermarkPreset(preset);
   }
 
   async function importSvg() {
@@ -163,13 +269,10 @@ export function WatermarkPresetPanel() {
             {recommendedFiltered.map((p) => (
               <WatermarkStyleCard
                 key={p.label}
-                active={wm.source === "builtin" && wm.name === recommendedId(p)}
+                active={isRecommendedActive(p)}
                 label={p.label}
-                wm={watermarkPreviewSettings({ kind: "text", text: p.text, color: p.color, opacity: p.opacity, italic: p.italic })}
-                onClick={() => applyPreset(p)}
-                onDoubleClick={() => {
-                  if (wm.source === "builtin" && wm.name === recommendedId(p)) setWatermark({ enabled: false });
-                }}
+                wm={watermarkPreviewSettings({ kind: "text", ...p })}
+                onClick={() => handleRecommendedClick(p)}
               />
             ))}
           </div>
@@ -180,25 +283,19 @@ export function WatermarkPresetPanel() {
             {userSvgsFiltered.map((item) => (
               <WatermarkStyleCard
                 key={`svg-${item.id}`}
-                active={wm.kind === "svg" && wm.svgId === item.id}
+                active={isImportedActive(item)}
                 label={item.name}
                 wm={watermarkPreviewSettings({ kind: "svg", source: "imported", svgId: item.id, svgMarkup: item.preview_svg ?? "" })}
-                onClick={() => applyImportedWatermarkSvg(item)}
-                onDoubleClick={() => {
-                  if (wm.kind === "svg" && wm.svgId === item.id) setWatermark({ enabled: false });
-                }}
+                onClick={() => handleImportedClick(item)}
                 onDelete={() => removeUserWatermarkSvg(item.id)}
               />
             ))}
             {presetsFiltered.map((preset) => (
               <WatermarkPresetCard
                 key={`preset-${preset.id}`}
-                active={selectedId === preset.id}
+                active={isSavedPresetActive(preset)}
                 preset={preset}
-                onClick={() => applyWatermarkPreset(preset)}
-                onDoubleClick={() => {
-                  if (selectedId === preset.id) setWatermark({ enabled: false });
-                }}
+                onClick={() => handleSavedPresetClick(preset)}
                 onDelete={() => removeWatermarkPreset(preset.id)}
               />
             ))}
@@ -211,6 +308,22 @@ export function WatermarkPresetPanel() {
 
 function recommendedId(p: { label: string }) {
   return `builtin:${p.label}`;
+}
+
+export function isRecommendedWatermarkActive(wm: WatermarkSettings, id: string) {
+  return wm.enabled && wm.source === "builtin" && wm.name === id;
+}
+
+export function isImportedWatermarkActive(wm: WatermarkSettings, id: number) {
+  return wm.enabled && wm.kind === "svg" && wm.svgId === id;
+}
+
+export function isSavedWatermarkPresetActive(
+  wm: WatermarkSettings,
+  selectedId: number | null,
+  presetId: number,
+) {
+  return wm.enabled && selectedId === presetId;
 }
 
 function watermarkPreviewSettings(patch: Partial<WatermarkSettings>): WatermarkSettings {
@@ -235,14 +348,12 @@ function WatermarkStyleCard({
   label,
   active,
   onClick,
-  onDoubleClick,
   onDelete,
   wm,
 }: {
   label: string;
   active?: boolean;
   onClick: () => void;
-  onDoubleClick?: () => void;
   onDelete?: () => void;
   wm: WatermarkSettings;
 }) {
@@ -251,7 +362,6 @@ function WatermarkStyleCard({
     <button
       type="button"
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       className={cn(
         "relative h-20 min-w-0 rounded border bg-zinc-950 overflow-hidden text-left transition-colors",
         active
@@ -280,13 +390,11 @@ function WatermarkStyleCard({
 
 function WatermarkPresetCard({
   onClick,
-  onDoubleClick,
   onDelete,
   active,
   preset,
 }: {
   onClick: () => void;
-  onDoubleClick?: () => void;
   onDelete: () => void;
   active?: boolean;
   preset: WatermarkPreset;
@@ -304,14 +412,12 @@ function WatermarkPresetCard({
       label={preset.name}
       wm={wm}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onDelete={onDelete}
     />
   ) : (
     <button
       type="button"
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       className={cn(
         "relative h-16 min-w-0 rounded border bg-zinc-950 hover:border-zinc-600 overflow-hidden text-left",
         active ? "border-blue-400 bg-blue-500/10" : "border-zinc-800",
