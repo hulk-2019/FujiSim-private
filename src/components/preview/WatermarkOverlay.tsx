@@ -61,6 +61,56 @@ export function getWatermarkOverlayStyle({
   };
 }
 
+export function getWatermarkOverlayImageSize({
+  displayH,
+  displayW,
+  imgH,
+  imgW,
+}: {
+  displayH: number;
+  displayW: number;
+  imgH?: number;
+  imgW?: number;
+}) {
+  if (imgW && imgH && imgW > 0 && imgH > 0) {
+    return { width: imgW, height: imgH };
+  }
+  return { width: displayW, height: displayH };
+}
+
+export function getPreviewScaledWatermark({
+  displayH,
+  displayW,
+  imgH,
+  imgW,
+  wm,
+}: {
+  displayH: number;
+  displayW: number;
+  imgH?: number;
+  imgW?: number;
+  wm: WatermarkSettings;
+}): WatermarkSettings {
+  if (!imgW || !imgH || imgW <= 0 || imgH <= 0 || displayW <= 0 || displayH <= 0) {
+    return wm;
+  }
+  const rect = containedImageRect({ displayH, displayW, imgH, imgW });
+  if (rect.width <= 0 || rect.height <= 0) return wm;
+  const scale = (imgW / rect.width + imgH / rect.height) / 2;
+  return {
+    ...wm,
+    fontSize: wm.fontSize * scale,
+    offsetX: wm.offsetX * scale,
+    offsetY: wm.offsetY * scale,
+    shadowBlur: wm.shadowBlur * scale,
+    shadowOffsetX: wm.shadowOffsetX * scale,
+    shadowOffsetY: wm.shadowOffsetY * scale,
+    strokeWidth: wm.strokeWidth * scale,
+    padding: (wm.padding ?? 16) * scale,
+    scale: wm.scale * scale,
+  };
+}
+
 export function WatermarkOverlay({
   displayH,
   displayW,
@@ -76,8 +126,9 @@ export function WatermarkOverlay({
 }) {
   const dataUrl = useMemo(
     () => {
-      const rect = containedImageRect({ displayH, displayW, imgH, imgW });
-      return svgToDataUrl(buildWatermarkSvg(wm, rect.width, rect.height));
+      const size = getWatermarkOverlayImageSize({ displayH, displayW, imgH, imgW });
+      const scaled = getPreviewScaledWatermark({ displayH, displayW, imgH, imgW, wm });
+      return svgToDataUrl(buildWatermarkSvg(scaled, size.width, size.height));
     },
     [wm, displayW, displayH, imgW, imgH],
   );
@@ -92,6 +143,7 @@ export function WatermarkOverlay({
         imgH,
         imgW,
       })}
+      className="block h-full w-full"
       draggable={false}
     />
   );

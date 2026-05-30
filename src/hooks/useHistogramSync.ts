@@ -12,6 +12,34 @@ import type { FilterSettings } from "@/types";
  * - identity + RAW 也照常请求（修复历史 bug：之前会让直方图永远是 null）
  */
 let histogramTokenCounter = 0;
+const HISTOGRAM_MAX_RETRY = 6;
+
+export function histogramErrorAction({
+  currentToken,
+  focusedId,
+  message,
+  requestFocusedId,
+  requestToken,
+  retryCount,
+}: {
+  currentToken: number;
+  focusedId: number | null;
+  message: string;
+  requestFocusedId: number;
+  requestToken: number;
+  retryCount: number;
+}): "ignore" | "retry" | "warn" {
+  const currentRequest = currentToken === requestToken && focusedId === requestFocusedId;
+  if (!currentRequest) return "ignore";
+  if (
+    (message.includes("preview_cancelled") || message.includes("preview_busy")) &&
+    retryCount < HISTOGRAM_MAX_RETRY
+  ) {
+    return "retry";
+  }
+  if (message.includes("preview_cancelled") || message.includes("preview_busy")) return "ignore";
+  return "warn";
+}
 
 export function useHistogramSync(
   focusedId: number | null,
@@ -61,13 +89,19 @@ export function useHistogramSync(
           setHistogram(data);
         } catch (e) {
           const msg = String(e);
-          if (msg.includes("preview_cancelled")) return;
-          if (msg.includes("preview_busy")) {
-            if (focusedIdRef.current === focusedId && retryCount < 4) {
-              schedule(220, retryCount + 1);
-            }
+          const action = histogramErrorAction({
+            currentToken: currentTokenRef.current,
+            focusedId: focusedIdRef.current,
+            message: msg,
+            requestFocusedId: focusedId,
+            requestToken: token,
+            retryCount,
+          });
+          if (action === "retry") {
+            schedule(220 + retryCount * 80, retryCount + 1);
             return;
           }
+          if (action === "ignore") return;
           console.warn("[useHistogramSync] failed:", msg);
         }
       }, delay);
