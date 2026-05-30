@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { previewDisplayState } from "@/components/preview/previewDisplayState";
+import { shouldShowTransitionFrame, previewDisplayState } from "@/components/preview/previewDisplayState";
 import type { Asset } from "@/types";
 
 const imageAsset: Asset = {
@@ -68,5 +68,35 @@ describe("previewDisplayState", () => {
 
     expect(state.displaySrc).toBe("blob:preview");
     expect(state.originalSrc).toBe("blob:baseline");
+  });
+});
+
+describe("shouldShowTransitionFrame", () => {
+  it("does not show the previous frame after switching to another asset", () => {
+    expect(
+      shouldShowTransitionFrame({
+        currentFocusedId: 2,
+        lastFrameAssetId: 1,
+        waitingForCurrentImage: true,
+        hasDisplaySrc: true,
+        hasOriginalSrc: false,
+        hasPlaceholder: false,
+        showingOriginal: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the previous frame while the same asset is waiting for a refreshed preview", () => {
+    expect(
+      shouldShowTransitionFrame({
+        currentFocusedId: 1,
+        lastFrameAssetId: 1,
+        waitingForCurrentImage: true,
+        hasDisplaySrc: true,
+        hasOriginalSrc: false,
+        hasPlaceholder: false,
+        showingOriginal: false,
+      }),
+    ).toBe(true);
   });
 });

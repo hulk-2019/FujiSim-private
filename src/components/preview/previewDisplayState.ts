@@ -93,6 +93,28 @@ export function previewDisplayState({
   };
 }
 
+export function shouldShowTransitionFrame({
+  currentFocusedId,
+  hasDisplaySrc,
+  hasOriginalSrc,
+  hasPlaceholder,
+  lastFrameAssetId,
+  showingOriginal,
+  waitingForCurrentImage,
+}: {
+  currentFocusedId: number | null;
+  hasDisplaySrc: boolean;
+  hasOriginalSrc: boolean;
+  hasPlaceholder: boolean;
+  lastFrameAssetId: number | null;
+  showingOriginal: boolean;
+  waitingForCurrentImage: boolean;
+}) {
+  if (showingOriginal || hasPlaceholder) return false;
+  if (!currentFocusedId || lastFrameAssetId !== currentFocusedId) return false;
+  return waitingForCurrentImage || (!hasDisplaySrc && !hasOriginalSrc);
+}
+
 /**
  * 水印需要基于原始图像坐标定位。
  *

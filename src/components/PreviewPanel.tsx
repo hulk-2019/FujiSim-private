@@ -33,6 +33,7 @@ import { useGpuPreviewHandoff } from "@/components/preview/useGpuPreviewHandoff"
 import {
   focusedPreviewImage,
   previewDisplayState,
+  shouldShowTransitionFrame,
   watermarkDimensions,
 } from "@/components/preview/previewDisplayState";
 import { usePreviewFit } from "@/components/preview/usePreviewFit";
@@ -51,6 +52,7 @@ interface PreviewPanelProps {
 }
 
 type DisplayFrame = {
+  assetId: number;
   containerH: number;
   containerW: number;
   orientation?: number | null;
@@ -326,8 +328,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     const rememberDisplayFrame = useCallback(
       (src: string | null, orientation?: number | null) => {
-        if (!src || !containerW || !containerH || !scale) return;
+        if (!focusedId || !src || !containerW || !containerH || !scale) return;
         setLastDisplayFrame({
+          assetId: focusedId,
           containerH,
           containerW,
           orientation,
@@ -337,7 +340,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
           ty,
         });
       },
-      [containerH, containerW, scale, tx, ty],
+      [containerH, containerW, focusedId, scale, tx, ty],
     );
 
     useEffect(() => {
@@ -350,6 +353,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
 
     useEffect(() => {
       setLoadedMainSrc(null);
+      setLastDisplayFrame(null);
     }, [focusedId]);
 
     useEffect(() => {
@@ -445,10 +449,16 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(
     const waitingForCurrentImage =
       !showingOriginal && !!displaySrc && loadedMainSrc !== displaySrc;
     const showTransitionFrame =
-      !showingOriginal &&
       !!lastDisplayFrame &&
-      ((waitingForCurrentImage && !showPlaceholder) ||
-        (!displaySrc && !originalSrc && !showPlaceholder));
+      shouldShowTransitionFrame({
+        currentFocusedId: focusedId,
+        hasDisplaySrc: !!displaySrc,
+        hasOriginalSrc: !!originalSrc,
+        hasPlaceholder: showPlaceholder,
+        lastFrameAssetId: lastDisplayFrame.assetId,
+        showingOriginal,
+        waitingForCurrentImage,
+      });
     const showRenderingBadge = loading && !showOriginal;
     const blurPlaceholder =
       loading &&

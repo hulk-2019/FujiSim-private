@@ -90,6 +90,8 @@ pub struct AppState {
     pub watermark_svg_dir: PathBuf,
     /// 项目汇总页封面缓存目录：<data_dir>/project_covers/<asset_id>.jpg
     pub project_cover_dir: PathBuf,
+    /// 权威 baseline 预览磁盘缓存目录：<data_dir>/preview_baseline/<key>.jpg
+    pub preview_baseline_dir: PathBuf,
     pub font_dir: PathBuf,
     pub lut_cache: Mutex<HashMap<PathBuf, Arc<Lut3D>>>,
     pub preview_base_cache: Mutex<PreviewBaseCache>,
@@ -149,6 +151,8 @@ impl AppState {
         std::fs::create_dir_all(&watermark_svg_dir)?;
         let project_cover_dir = data_dir.join("project_covers");
         std::fs::create_dir_all(&project_cover_dir)?;
+        let preview_baseline_dir = data_dir.join("preview_baseline");
+        std::fs::create_dir_all(&preview_baseline_dir)?;
         let font_dir = data_dir.join("fonts");
         std::fs::create_dir_all(&font_dir)?;
         let db_path = data_dir.join("library.db");
@@ -189,6 +193,7 @@ impl AppState {
             watermark_dir,
             watermark_svg_dir,
             project_cover_dir,
+            preview_baseline_dir,
             font_dir,
             lut_cache: Mutex::new(HashMap::new()),
             preview_base_cache: Mutex::new(PreviewBaseCache::new(8)),

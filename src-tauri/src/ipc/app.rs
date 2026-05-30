@@ -67,6 +67,12 @@ pub async fn clear_all_data(state: State<'_, SharedState>) -> Result<()> {
         let _ = std::fs::remove_dir_all(&state.project_cover_dir);
         let _ = std::fs::create_dir_all(&state.project_cover_dir);
     }
+    // baseline 权威预览磁盘缓存整体清空
+    crate::db::asset_render_cache::delete_kind(&state.pool, "preview_baseline").await?;
+    if state.preview_baseline_dir.exists() {
+        let _ = std::fs::remove_dir_all(&state.preview_baseline_dir);
+        let _ = std::fs::create_dir_all(&state.preview_baseline_dir);
+    }
     // 软删除所有字体记录，清空 fonts 目录
     user_fonts::delete_all(&state.pool).await?;
     if state.font_dir.exists() {

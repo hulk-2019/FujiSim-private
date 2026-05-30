@@ -5,13 +5,15 @@ use crate::error::{AppError, Result};
 use crate::processing::{self, FilterSettings};
 use crate::state::{PreviewBaseCacheKey, PreviewBaseCacheKind, Rgb16Image, SharedState};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::State;
 
 const RAW_PREVIEW_PROXY_MAX_EDGE: u32 = 2048;
 const WHITE_BALANCE_SAMPLE_MAX_EDGE: u32 = 2048;
+const BASELINE_DISK_CACHE_KIND: &str = "preview_baseline";
+const BASELINE_DISK_CACHE_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +49,48 @@ pub struct PreviewResult {
     pub height: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub orientation: Option<u32>,
+}
+
+pub(crate) fn baseline_disk_cache_key(
+    asset_id: i64,
+    file_path: &Path,
+    file_size: Option<i64>,
+    max_edge: Option<u32>,
+    native_max_edge: Option<u32>,
+) -> String {
+    let path_hash = stable_hash(&file_path.to_string_lossy());
+    format!(
+        "v{BASELINE_DISK_CACHE_VERSION}:asset={asset_id}:path={path_hash}:size={}:max={}:native={}",
+        file_size.unwrap_or_default(),
+        max_edge.map(|v| v.to_string()).unwrap_or_else(|| "native".to_string()),
+        native_max_edge.map(|v| v.to_string()).unwrap_or_else(|| "unknown".to_string()),
+    )
+}
+
+pub(crate) fn baseline_disk_cache_path(cache_dir: &Path, asset_id: i64, cache_key: &str) -> PathBuf {
+    cache_dir.join(format!("{asset_id}_{}.jpg", stable_hash(cache_key)))
+}
+
+fn preview_result_from_baseline_cache_bytes(
+    bytes: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> PreviewResult {
+    PreviewResult {
+        path: None,
+        data: Some(bytes),
+        mime_type: Some("image/jpeg".to_string()),
+        width,
+        height,
+        orientation: None,
+    }
+}
+
+fn stable_hash(input: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    input.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 /// Frontend-only interaction marker. Used when WebGL handles immediate feedback
@@ -193,6 +237,43 @@ pub async fn get_preview(
         .zip(asset.height)
         .map(|(w, h)| w.max(h).max(1) as u32);
     let settings = settings.unwrap_or_default();
+    let can_use_baseline_disk_cache = matches!(mode, PreviewMode::Settled) && settings.is_identity();
+    let baseline_cache_key = can_use_baseline_disk_cache.then(|| {
+        baseline_disk_cache_key(
+            asset_id,
+            &path,
+            asset.file_size,
+            max_edge,
+            native_max_edge,
+        )
+    });
+    if let Some(cache_key) = baseline_cache_key.as_deref() {
+        if let Some(hit) = crate::db::asset_render_cache::get(
+            &state.pool,
+            asset_id,
+            BASELINE_DISK_CACHE_KIND,
+            cache_key,
+        )
+        .await?
+        {
+            let cache_path = PathBuf::from(&hit.path);
+            if cache_path.exists() {
+                let bytes = std::fs::read(&cache_path)
+                    .map_err(|e| AppError::other(format!("preview cache read: {e}")))?;
+                tracing::debug!(
+                    asset_id,
+                    ?max_edge,
+                    path = %cache_path.display(),
+                    "preview baseline disk cache hit"
+                );
+                return Ok(preview_result_from_baseline_cache_bytes(
+                    bytes,
+                    hit.width.or(asset.width).unwrap_or_default() as u32,
+                    hit.height.or(asset.height).unwrap_or_default() as u32,
+                ));
+            }
+        }
+    }
     let lut = super::cached_lut(&state, settings.lut_file_path.as_deref())?;
     let preview_pool = state.preview_pool.clone();
     let sem = if is_tile {
@@ -205,6 +286,7 @@ pub async fn get_preview(
     let preview_generation = preview_token.load(Ordering::SeqCst);
     let state_for_render = state.inner().clone();
     let project_id_for_render = project_id;
+    let baseline_cache_key_for_render = baseline_cache_key.clone();
 
     let permit = sem
         .try_acquire_owned()
@@ -221,7 +303,7 @@ pub async fn get_preview(
         return Err(AppError::other("preview_cancelled"));
     }
 
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         preview_pool.install(|| {
             let total_start = Instant::now();
@@ -295,6 +377,19 @@ pub async fn get_preview(
                 return Err(AppError::other("preview_cancelled"));
             }
             let transport_start = Instant::now();
+            let baseline_cache_path = baseline_cache_key_for_render.as_deref().map(|cache_key| {
+                baseline_disk_cache_path(
+                    &state_for_render.preview_baseline_dir,
+                    asset_id,
+                    cache_key,
+                )
+            });
+            if let Some(out_path) = baseline_cache_path {
+                std::fs::create_dir_all(&state_for_render.preview_baseline_dir)
+                    .map_err(|e| AppError::other(format!("preview cache mkdir: {e}")))?;
+                std::fs::write(&out_path, &jpeg)
+                    .map_err(|e| AppError::other(format!("preview cache write: {e}")))?;
+            }
             let (path, data) = if matches!(mode, PreviewMode::Full) {
                 let variant = if settings.is_identity() {
                     "base"
@@ -305,7 +400,8 @@ pub async fn get_preview(
                     .join(format!("fujisim_preview_{asset_id}_{token}_{variant}.jpg"));
                 std::fs::write(&out_path, &jpeg)
                     .map_err(|e| AppError::other(format!("preview write: {e}")))?;
-                (Some(out_path.to_string_lossy().to_string()), None)
+                let path = out_path.to_string_lossy().to_string();
+                (Some(path), None)
             } else {
                 (None, Some(jpeg))
             };
@@ -337,7 +433,26 @@ pub async fn get_preview(
         })
     })
     .await
-    .map_err(|e| AppError::other(e.to_string()))?
+    .map_err(|e| AppError::other(e.to_string()))??;
+
+    if let Some(cache_key) = baseline_cache_key.as_deref() {
+        let cache_path = baseline_disk_cache_path(&state.preview_baseline_dir, asset_id, cache_key);
+        let cache_path = cache_path.to_string_lossy().to_string();
+        crate::db::asset_render_cache::upsert(
+            &state.pool,
+            asset_id,
+            BASELINE_DISK_CACHE_KIND,
+            cache_key,
+            &cache_path,
+            Some(result.width as i64),
+            Some(result.height as i64),
+            BASELINE_DISK_CACHE_VERSION,
+            None,
+        )
+        .await?;
+    }
+
+    Ok(result)
 }
 
 fn request_cancelled(
@@ -591,6 +706,55 @@ mod tests {
     #[test]
     fn white_balance_sampling_uses_bounded_preview_edge() {
         assert_eq!(white_balance_sample_max_edge(), Some(2048));
+    }
+
+    #[test]
+    fn baseline_disk_cache_key_includes_file_and_size_inputs() {
+        let a = baseline_disk_cache_key(
+            7,
+            std::path::Path::new("/tmp/a.jpg"),
+            Some(100),
+            Some(1280),
+            Some(6000),
+        );
+        let b = baseline_disk_cache_key(
+            7,
+            std::path::Path::new("/tmp/a.jpg"),
+            Some(101),
+            Some(1280),
+            Some(6000),
+        );
+        let c = baseline_disk_cache_key(
+            7,
+            std::path::Path::new("/tmp/b.jpg"),
+            Some(100),
+            Some(1280),
+            Some(6000),
+        );
+
+        assert_ne!(a, b);
+        assert_ne!(a, c);
+        assert!(a.contains("max=1280"));
+        assert!(a.contains("native=6000"));
+    }
+
+    #[test]
+    fn baseline_disk_cache_path_is_a_jpeg_inside_cache_dir() {
+        let path = baseline_disk_cache_path(std::path::Path::new("/cache/baseline"), 7, "key");
+
+        assert_eq!(path.parent(), Some(std::path::Path::new("/cache/baseline")));
+        assert_eq!(path.extension().and_then(|v| v.to_str()), Some("jpg"));
+        assert!(path.file_name().and_then(|v| v.to_str()).unwrap().starts_with("7_"));
+    }
+
+    #[test]
+    fn baseline_cache_bytes_result_uses_blob_transport() {
+        let result = preview_result_from_baseline_cache_bytes(vec![1, 2, 3], 640, 480);
+
+        assert_eq!(result.path, None);
+        assert_eq!(result.data, Some(vec![1, 2, 3]));
+        assert_eq!(result.width, 640);
+        assert_eq!(result.height, 480);
     }
 
     const INTERACTIVE_TEST_EDGE: u32 = 960;

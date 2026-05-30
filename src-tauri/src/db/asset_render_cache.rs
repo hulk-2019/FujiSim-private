@@ -109,3 +109,12 @@ pub async fn delete_kind(pool: &SqlitePool, cache_kind: &str) -> Result<()> {
         .await?;
     Ok(())
 }
+
+pub async fn delete_asset(pool: &SqlitePool, asset_id: i64, cache_kind: &str) -> Result<()> {
+    sqlx::query("DELETE FROM asset_render_cache WHERE asset_id = ? AND cache_kind = ?")
+        .bind(asset_id)
+        .bind(cache_kind)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
