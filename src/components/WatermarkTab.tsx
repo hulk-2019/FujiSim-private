@@ -252,9 +252,9 @@ export function WatermarkTab() {
             {wm.shadowEnabled && (
               <div className="space-y-2 pl-2 border-l border-zinc-800/80">
                 <ColorInputRow label={t("watermark.shadowColor")} value={wm.shadowColor} onChange={(v) => setWatermark({ shadowColor: v })} compact />
-                <SliderRow label={t("watermark.shadowBlur")} value={wm.shadowBlur} min={0} max={20} step={1} onChange={(v) => setWatermark({ shadowBlur: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
-                <SliderRow label={t("watermark.offsetX")} value={wm.shadowOffsetX} min={-10} max={10} step={1} onChange={(v) => setWatermark({ shadowOffsetX: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
-                <SliderRow label={t("watermark.offsetY")} value={wm.shadowOffsetY} min={-10} max={10} step={1} onChange={(v) => setWatermark({ shadowOffsetY: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+                <SliderRow label={t("watermark.shadowBlur")} value={wm.shadowBlur} min={0} max={40} step={1} onChange={(v) => setWatermark({ shadowBlur: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+                <SliderRow label={t("watermark.offsetX")} value={wm.shadowOffsetX} min={-30} max={30} step={1} onChange={(v) => setWatermark({ shadowOffsetX: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+                <SliderRow label={t("watermark.offsetY")} value={wm.shadowOffsetY} min={-30} max={30} step={1} onChange={(v) => setWatermark({ shadowOffsetY: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
               </div>
             )}
           </PanelSection>
@@ -264,7 +264,7 @@ export function WatermarkTab() {
             {wm.strokeEnabled && (
               <div className="space-y-2 pl-2 border-l border-zinc-800/80">
                 <ColorInputRow label={t("watermark.strokeColor")} value={wm.strokeColor} onChange={(v) => setWatermark({ strokeColor: v })} compact />
-                <SliderRow label={t("watermark.strokeWidth")} value={wm.strokeWidth} min={1} max={10} step={0.5} onChange={(v) => setWatermark({ strokeWidth: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
+                <SliderRow label={t("watermark.strokeWidth")} value={wm.strokeWidth} min={0} max={24} step={0.5} onChange={(v) => setWatermark({ strokeWidth: v })} display={(v) => `${v}px`} marksFilterInteraction={false} />
               </div>
             )}
           </PanelSection>

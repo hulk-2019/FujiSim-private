@@ -171,6 +171,55 @@ describe("buildWatermarkSvg", () => {
     expect(svg).not.toContain('scale(-1.4 -1.4)');
   });
 
+  it("renders text stroke behind the fill when stroke is enabled", () => {
+    const svg = buildWatermarkSvg(
+      {
+        ...DEFAULT_WATERMARK,
+        enabled: true,
+        strokeEnabled: true,
+        strokeColor: "#123456",
+        strokeWidth: 3,
+      },
+      400,
+      300,
+    );
+
+    expect(svg).toContain('stroke="#123456"');
+    expect(svg).toContain('stroke-width="3"');
+    expect(svg).toContain('paint-order="stroke fill"');
+    expect(svg).toContain('stroke-linejoin="round"');
+    expect(svg).toContain('stroke-linecap="round"');
+  });
+
+  it("renders shadow as an svg drop-shadow filter", () => {
+    const svg = buildWatermarkSvg(
+      {
+        ...DEFAULT_WATERMARK,
+        enabled: true,
+        shadowEnabled: true,
+        shadowColor: "#010203",
+        shadowBlur: 6,
+        shadowOffsetX: 2,
+        shadowOffsetY: -3,
+      },
+      400,
+      300,
+    );
+
+    expect(svg).toContain("<defs>");
+    expect(svg).toContain('filter id="watermark-shadow"');
+    expect(svg).toContain("<feGaussianBlur");
+    expect(svg).toContain("<feOffset");
+    expect(svg).toContain("<feFlood");
+    expect(svg).toContain("<feComposite");
+    expect(svg).toContain("<feMerge>");
+    expect(svg).toContain('dx="2"');
+    expect(svg).toContain('dy="-3"');
+    expect(svg).toContain('stdDeviation="6"');
+    expect(svg).toContain('flood-color="#010203"');
+    expect(svg).toContain('filter="url(#watermark-shadow)"');
+  });
+
   it("encodes svg as a data url", () => {
     expect(svgToDataUrl('<svg width="1" height="1"></svg>')).toMatch(/^data:image\/svg\+xml,/);
   });

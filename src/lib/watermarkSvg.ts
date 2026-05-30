@@ -65,6 +65,15 @@ function wrapWithSelfCenteredFlip(body: string, wm: WatermarkSettings): string {
   return `<g style="transform-box: fill-box; transform-origin: center; transform: scale(${wm.flipH ? -1 : 1}, ${wm.flipV ? -1 : 1});">${body}</g>`;
 }
 
+function shadowDefs(wm: WatermarkSettings): string {
+  if (!wm.shadowEnabled) return "";
+  return `<defs><filter id="watermark-shadow" x="-75%" y="-75%" width="250%" height="250%"><feGaussianBlur in="SourceAlpha" stdDeviation="${wm.shadowBlur}" result="shadow-blur"/><feOffset in="shadow-blur" dx="${wm.shadowOffsetX}" dy="${wm.shadowOffsetY}" result="shadow-offset"/><feFlood flood-color="${wm.shadowColor}" flood-opacity="1" result="shadow-color"/><feComposite in="shadow-color" in2="shadow-offset" operator="in" result="shadow"/><feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+}
+
+function shadowFilterAttr(wm: WatermarkSettings): string {
+  return wm.shadowEnabled ? ' filter="url(#watermark-shadow)"' : "";
+}
+
 function overrideImportedSvg(svg: string, wm: WatermarkSettings): string {
   let next = svg;
   if (wm.svgTextOverride !== undefined) {
@@ -93,8 +102,11 @@ export function buildWatermarkSvg(wm: WatermarkSettings, width: number, height: 
   const transform = transformFor(normalized, x, y);
   const opacity = Math.max(0, Math.min(1, normalized.opacity));
   const italicDegree = Math.max(0, normalized.italicDegree ?? 0);
+  const strokeAttrs = normalized.strokeEnabled
+    ? ` stroke="${normalized.strokeColor}" stroke-width="${normalized.strokeWidth}" stroke-linejoin="round" stroke-linecap="round" paint-order="stroke fill"`
+    : "";
 
-  const textBody = `<text x="${x}" y="${y}" dy="${pos.dy}" text-anchor="${pos.textAnchor}" dominant-baseline="${pos.dominantBaseline}" font-family="${escapeXml(normalized.fontFamily)}" font-size="${normalized.fontSize}" font-weight="${normalized.bold ? 700 : 400}" font-style="${normalized.italic ? "italic" : "normal"}" fill="${normalized.color}">${escapeXml(normalized.text)}</text>`;
+  const textBody = `<text x="${x}" y="${y}" dy="${pos.dy}" text-anchor="${pos.textAnchor}" dominant-baseline="${pos.dominantBaseline}" font-family="${escapeXml(normalized.fontFamily)}" font-size="${normalized.fontSize}" font-weight="${normalized.bold ? 700 : 400}" font-style="${normalized.italic ? "italic" : "normal"}" fill="${normalized.color}"${strokeAttrs}>${escapeXml(normalized.text)}</text>`;
   const unflippedBody =
     normalized.kind === "svg" && normalized.svgMarkup
       ? overrideImportedSvg(normalized.svgMarkup, normalized)
@@ -102,8 +114,9 @@ export function buildWatermarkSvg(wm: WatermarkSettings, width: number, height: 
         ? `<g transform="translate(${x} ${skewY}) skewX(${-italicDegree}) translate(${-x} ${-skewY})">${textBody}</g>`
         : textBody;
   const body = wrapWithSelfCenteredFlip(unflippedBody, normalized);
+  const defs = shadowDefs(normalized);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g opacity="${opacity}" transform="${transform}">${body}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defs}<g opacity="${opacity}" transform="${transform}"${shadowFilterAttr(normalized)}>${body}</g></svg>`;
 }
 
 export function svgToDataUrl(svg: string): string {
